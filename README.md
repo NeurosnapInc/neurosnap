@@ -4,7 +4,6 @@ Collection of useful bioinformatic functions and tools for various computational
 This a package developed by Keaun Amani at [neurosnap.ai](https://neurosnap.ai/). You are welcome to use this code and contribute as you see fit. We are currently working on expanding this package as well to add support for more common functions.
 
 ## Installation
-# packages for core.py
 ```sh
 ## ensure you have openbabel installed for the python bindings
 # debian/ubuntu

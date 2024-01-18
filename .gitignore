@@ -1,0 +1,6 @@
+.vscode/
+.venv/
+**/__pycache__
+**/.venv
+**/.vscode
+neurosnap.egg-info

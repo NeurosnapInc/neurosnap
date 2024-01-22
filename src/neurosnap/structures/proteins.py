@@ -64,7 +64,7 @@ def calc_pdm(pdb_path, chain=None):
   return dm
 
 
-def pdb_to_AA(pdb_path):
+def pdb_to_aa(pdb_path):
   """
   -------------------------------------------------------
   Reads a PDB file to and gets its corresponding amino acid sequence.

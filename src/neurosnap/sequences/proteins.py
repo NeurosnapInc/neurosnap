@@ -11,7 +11,7 @@ STANDARD_AAs = "ARNDBCEQZGHILKMFPSTWYV"
 
 
 ### FUNCTIONS ###
-def generate_MSA(seq, output_path, mode="all", max_retries=10):
+def generate_msa(seq, output_path, mode="all", max_retries=10):
   """
   -------------------------------------------------------
   Generate an a3m MSA using the ColabFold API.
@@ -85,7 +85,7 @@ def generate_MSA(seq, output_path, mode="all", max_retries=10):
   os.remove(tar_path)
 
 
-def read_MSA(input_path, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True):
+def read_msa(input_path, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True):
   """
   -------------------------------------------------------
   Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
@@ -119,13 +119,15 @@ def read_MSA(input_path, size=float("inf"), allow_chars="", drop_chars="", remov
           if uppercase:
             line = line.upper()
           # remove whitespace and remove_chars
-          line = re.sub(f"[{remove_chars}\s]", "", line)
+          if remove_chars:
+            line = re.sub(f"[{remove_chars}\s]", "", line)
           # drop chars
-          match = re.search(f"[{drop_chars}]", line)
-          if match is not None:
-            names.pop()
-            seqs.pop()
-            continue
+          if drop_chars:
+            match = re.search(f"[{drop_chars}]", line)
+            if match is not None:
+              names.pop()
+              seqs.pop()
+              continue
           
           match = re.search(f"^[{STANDARD_AAs+allow_chars}]*$", line)
           if match is None:
@@ -136,7 +138,7 @@ def read_MSA(input_path, size=float("inf"), allow_chars="", drop_chars="", remov
   return names, seqs
 
 
-def write_MSA(output_path, names, seqs):
+def write_msa(output_path, names, seqs):
   """
   -------------------------------------------------------
   Writes an MSA, a3m, or fasta to a file.

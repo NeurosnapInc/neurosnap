@@ -22,6 +22,7 @@ def generate_msa(seq, output_path, mode="all", max_retries=10):
     mode.......: Supports modes like "all" or "env" (str)
     max_retries: Maximum number of retries (int)
   """
+  print("[*] This function uses ColabFold mmseqs2 API (https://colabfold.mmseqs.com/). This API is made freely available so consider citing the authors (https://doi.org/10.1038/s41592-022-01488-1).")
   def get_status(ID):
     r = requests.get(f'https://api.colabfold.com/ticket/{ID}')
     try:

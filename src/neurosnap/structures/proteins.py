@@ -2,6 +2,7 @@
 Provides functions and classes related to processing protein structure data.
 """
 ### IMPORTS ###
+import os
 import numpy as np
 import Bio.PDB
 from biotite.structure.io import pdb
@@ -126,7 +127,7 @@ def align_pdbs(ref_pdb, sample_pdb):
     sample_pdb: Sample protein to be modified and aligned to the reference (str)
   """
   # Start the parser
-  pdb_parser = Bio.PDB.PDBParser(QUIET = True)
+  pdb_parser = Bio.PDB.PDBParser(QUIET=True)
 
   # Get the structures
   ref_structure = pdb_parser.get_structure("reference", ref_pdb)

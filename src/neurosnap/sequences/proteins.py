@@ -110,11 +110,15 @@ def read_msa(input_path, size=float("inf"), allow_chars="", drop_chars="", remov
       line = line.strip()
       if line:
         if line.startswith(">"):
+          if seqs and seqs[-1] == "":
+            raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
           if len(seqs) >= size+1:
             break
           match = re.search(r">([\w\-_]*)", line)
           assert match is not None, ValueError(f"Invalid MSA/fasta. {line} is not a valid header.")
-          names.append(match.group(1))
+          name = match.group(1)
+          assert len(name), ValueError(f"Invalid MSA/fasta. line {i} has an empty header.")
+          names.append(name)
           seqs.append("")
         else:
           if uppercase:

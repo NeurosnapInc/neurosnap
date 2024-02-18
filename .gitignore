@@ -4,3 +4,4 @@
 **/.venv
 **/.vscode
 neurosnap.egg-info
+test_files/

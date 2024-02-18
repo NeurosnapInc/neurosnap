@@ -92,7 +92,7 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
   Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
   -------------------------------------------------------
   Parameters:
-    input_fasta.: Path to read input a3m file or a file-handle like object to read (str|io.TextIOBase)
+    input_fasta.: Path to read input a3m file, fasta as a raw string, or a file-handle like object to read (str|io.TextIOBase)
     size........: Number of rows to read (int)
     allow_chars.: Sequences that contain characters not included within STANDARD_AAs+allow_chars will throw an exception (str)
     drop_chars..: Drop sequences that contain these characters e.g., "-X" (str)
@@ -109,6 +109,8 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
   if isinstance(input_fasta, str):
     if os.path.exists(input_fasta):
       f = open(input_fasta)
+    else:
+      f = io.StringIO(input_fasta)
   elif isinstance(input_fasta, io.TextIOBase):
     f = input_fasta
   else:

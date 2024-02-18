@@ -2,7 +2,7 @@
 Provides functions and classes related to processing protein sequence data.
 """
 ### IMPORTS ###
-import os, shutil, requests, time, tarfile, re
+import os, requests, time, tarfile, re, io
 
 
 ### CONSTANTS ###
@@ -86,13 +86,13 @@ def generate_msa(seq, output_path, mode="all", max_retries=10):
   os.remove(tar_path)
 
 
-def read_msa(input_path, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True):
+def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True):
   """
   -------------------------------------------------------
   Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
   -------------------------------------------------------
   Parameters:
-    input_path..: Path to read input a3m file (str)
+    input_fasta.: Path to read input a3m file or a file-handle like object to read (str|io.TextIOBase)
     size........: Number of rows to read (int)
     allow_chars.: Sequences that contain characters not included within STANDARD_AAs+allow_chars will throw an exception (str)
     drop_chars..: Drop sequences that contain these characters e.g., "-X" (str)
@@ -105,40 +105,49 @@ def read_msa(input_path, size=float("inf"), allow_chars="", drop_chars="", remov
   names = []
   seqs = []
   char_whitelist = STANDARD_AAs + allow_chars + drop_chars + remove_chars
-  with open(input_path) as f:
-    for i, line in enumerate(f, start=1):
-      line = line.strip()
-      if line:
-        if line.startswith(">"):
-          if seqs and seqs[-1] == "":
-            raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
-          if len(seqs) >= size+1:
-            break
-          match = re.search(r">([\w\-_]*)", line)
-          assert match is not None, ValueError(f"Invalid MSA/fasta. {line} is not a valid header.")
-          name = match.group(1)
-          assert len(name), ValueError(f"Invalid MSA/fasta. line {i} has an empty header.")
-          names.append(name)
-          seqs.append("")
-        else:
-          if uppercase:
-            line = line.upper()
-          # remove whitespace and remove_chars
-          if remove_chars:
-            line = re.sub(f"[{remove_chars}\s]", "", line)
-          # drop chars
-          if drop_chars:
-            match = re.search(f"[{drop_chars}]", line)
-            if match is not None:
-              names.pop()
-              seqs.pop()
-              continue
-          
-          match = re.search(f"^[{STANDARD_AAs+allow_chars}]*$", line)
-          if match is None:
-            raise ValueError(f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'")
-          seqs[-1] += line
 
+  if isinstance(input_fasta, str):
+    if os.path.exists(input_fasta):
+      f = open(input_fasta)
+  elif isinstance(input_fasta, io.TextIOBase):
+    f = input_fasta
+  else:
+    raise ValueError(f"Invalid input for input_fasta, {type(input_fasta)} is not a valid type.")
+
+  for i, line in enumerate(f, start=1):
+    line = line.strip()
+    if line:
+      if line.startswith(">"):
+        if seqs and seqs[-1] == "":
+          raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
+        if len(seqs) >= size+1:
+          break
+        match = re.search(r">([\w\-_]*)", line)
+        assert match is not None, ValueError(f"Invalid MSA/fasta. {line} is not a valid header.")
+        name = match.group(1)
+        assert len(name), ValueError(f"Invalid MSA/fasta. line {i} has an empty header.")
+        names.append(name)
+        seqs.append("")
+      else:
+        if uppercase:
+          line = line.upper()
+        # remove whitespace and remove_chars
+        if remove_chars:
+          line = re.sub(f"[{remove_chars}\s]", "", line)
+        # drop chars
+        if drop_chars:
+          match = re.search(f"[{drop_chars}]", line)
+          if match is not None:
+            names.pop()
+            seqs.pop()
+            continue
+        
+        match = re.search(f"^[{STANDARD_AAs+allow_chars}]*$", line)
+        if match is None:
+          raise ValueError(f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'")
+        seqs[-1] += line
+
+  f.close()
   assert len(names) == len(seqs), ValueError("Invalid MSA/fasta. The number sequences and headers found do not match.")
   return names, seqs
 

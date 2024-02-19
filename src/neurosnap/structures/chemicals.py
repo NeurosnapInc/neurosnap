@@ -4,7 +4,6 @@ Provides functions and classes related to processing chemical data.
 ### IMPORTS ###
 import os
 from rdkit import Chem
-from openbabel import pybel
 
 
 ### FUNCTIONS ###

@@ -9,6 +9,7 @@ from biotite.structure.io import pdb
 from biotite.structure.residues import get_residues
 from biotite.sequence import ProteinSequence
 from openbabel import pybel
+from rdkit import Chem
 
 
 ### FUNCTIONS ###

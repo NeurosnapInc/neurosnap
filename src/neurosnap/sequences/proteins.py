@@ -7,7 +7,8 @@ import os, requests, time, tarfile, re, io
 
 ### CONSTANTS ###
 # Standard amino acids excluding the unknown character ("X")
-STANDARD_AAs = "ARNDBCEQZGHILKMFPSTWYV"
+# Currently excludes "asparagine/aspartic acid - asx - B" and "glutamine/glutamic acid - glx - Z" 
+STANDARD_AAs = "ARNDCEQGHILKMFPSTWYV"
 
 
 ### FUNCTIONS ###

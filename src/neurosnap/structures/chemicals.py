@@ -23,4 +23,4 @@ def smiles_to_sdf(smiles, output_path):
     with Chem.SDWriter(output_path) as w:
       w.write(m)
   except Exception as e:
-    raise ValueError(f'"{smiles}" is not a valid SMILES string, please follow the input instructions. Specific error: {e}')
+    raise ValueError(f'"{smiles}" is not a valid SMILES string, please follow the input instructions')

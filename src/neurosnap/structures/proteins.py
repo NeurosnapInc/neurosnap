@@ -31,7 +31,8 @@ def read_chains(pdb_path):
 def calc_pdm(pdb_path, chain=None):
   """
   -------------------------------------------------------
-  Calculates distance matrix for a given input protein
+  Calculates distance matrix for a given input protein using
+  the C-Alpha distances between residues.
   -------------------------------------------------------
   Parameters:
     pdb_path: Path to PDB file you want to calculate the distance matrix of (str)

@@ -108,14 +108,16 @@ To access the following functions import the following:
 from neurosnap.structures.chemicals import *
 ```
 
-#### `smiles_to_sdf(smiles, output_path)`
-
-**Description:**
+#### smiles_to_sdf
+##### Usage
+```py
+smiles_to_sdf(smiles, output_path)
+```
+##### Description:
 Converts a SMILES string to an sdf file.Will overwrite existing results.
-
-**Parameters:**
-- smiles.....: Smiles string to parse and convert (str)
-- output_path: Path to output SDF file, should end with .sdf (str)
+##### Parameters:
+- **smiles**:  Smiles string to parse and convert (str)
+- **output_path**:  Path to output SDF file, should end with .sdf (str)
 
 
 ### Proteins

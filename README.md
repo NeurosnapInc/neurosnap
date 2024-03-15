@@ -23,7 +23,7 @@ This package is organized into the following sections:
 neurosnap/
 ├── sequences/
 │   └── proteins.py
-├── structures/
+└── structures/
     └── chemicals.py
     └── proteins.py
 ```

@@ -33,7 +33,7 @@ from neurosnap.sequences.proteins import *
 run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None)
 ```
 ##### Description:
-Generate an a3m MSA using the ColabFold API. Will writeall results to the output directory including templates,MSAs, and accompanying files.Code originally from https://github.com/sokrypton/ColabFold/.
+Generate an a3m MSA using the ColabFold API. Will writeall results to the output directory including templates, MSAs, and accompanying files.Code originally from https://github.com/sokrypton/ColabFold/.
 ##### Parameters:
 - **seq**:  Amino acid sequence for protein to generate an MSA of (str)
 - **output**:  Output directory path, will overwrite existing results (str)

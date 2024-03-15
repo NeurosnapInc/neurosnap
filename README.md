@@ -124,59 +124,65 @@ To access the following functions import the following:
 from neurosnap.structures.proteins import *
 ```
 
-#### `read_chains(pdb_path)`
-
-**Description:**
+#### read_chains
+##### Usage
+```py
+read_chains(pdb_path)
+```
+##### Description:
 Reads the chains in PDB file and returns a set of their names/IDs.
+##### Parameters:
+- **pdb_path**:  Input PDB file path (str)
+##### Returns:
+- **chains**:  Chain names/IDs found within the PDB file (set<str>)
 
-**Parameters:**
-- pdb_path: Input PDB file path (str)
-
-**Returns:**
-- chains: Chain names/IDs found within the PDB file (set<str>)
-
-#### `calc_pdm(pdb_path, chain=None)`
-
-**Description:**
+#### calc_pdm
+##### Usage
+```py
+calc_pdm(pdb_path, chain=None)
+```
+##### Description:
 Calculates distance matrix for a given input protein usingthe C-Alpha distances between residues.
+##### Parameters:
+- **pdb_path**:  Path to PDB file you want to calculate the distance matrix of (str)
+- **chain**:  The chain to use. By default will just use the longest chain (str)
+##### Returns:
+- **dm**:  Distance matrix of the PDB file (np.array)
 
-**Parameters:**
-- pdb_path: Path to PDB file you want to calculate the distance matrix of (str)
-- chain...: The chain to use. By default will just use the longest chain (str)
-
-**Returns:**
-- dm: Distance matrix of the PDB file (np.array)
-
-#### `pdb_to_aa(pdb_path)`
-
-**Description:**
+#### pdb_to_aa
+##### Usage
+```py
+pdb_to_aa(pdb_path)
+```
+##### Description:
 Reads a PDB file to and gets its corresponding amino acid sequence.Current implementation uses biotite and not biopython.
+##### Parameters:
+- **pdb_path**:  Path to input PDB file to read (str)
+##### Returns:
+- **seq**:  Corresponding amino acid sequence of PDB file (str)
 
-**Parameters:**
-- pdb_path: Path to input PDB file to read (str)
-
-**Returns:**
-- seq: Corresponding amino acid sequence of PDB file (str)
-
-#### `pdb_to_sdf(pdb_path, output_path, max_residues=50)`
-
-**Description:**
+#### pdb_to_sdf
+##### Usage
+```py
+pdb_to_sdf(pdb_path, output_path, max_residues=50)
+```
+##### Description:
 Converts a protein/peptide in a PDB file to an SDF.PDB file can only include a single entry.Will overwrite existing results.Validates the SDF file with RDkit on completion
+##### Parameters:
+- **pdb_path**:  Path to input PDB file to convert (str)
+- **output_path**:  Path to output SDF file, should end with .sdf (str)
+- **max_residues**:  Maximum number of residues, default=50 (int)
 
-**Parameters:**
-- pdb_path....: Path to input PDB file to convert (str)
-- output_path.: Path to output SDF file, should end with .sdf (str)
-- max_residues: Maximum number of residues, default=50 (int)
-
-
-#### `align_pdbs(ref_pdb, sample_pdb)`
-**Description:**
+#### align_pdbs
+##### Usage
+```py
+align_pdbs(ref_pdb, sample_pdb)
+```
+##### Description:
 Aligns two pdb structures by their longest chain using the first pdb as the reference.Reference pdb is not modified while the sample pdb is
-
-**Parameters:**
-- ref_pdb...: Reference protein to align to (str)
-- sample_pdb: Sample protein to be modified and aligned to the reference (str)
-
+##### Parameters:
+- **ref_pdb**:  Reference protein to align to (str)
+- **sample_pdb**:  Sample protein to be modified and aligned to the reference (str)
 
 
 <!-- ## Package Structure

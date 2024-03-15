@@ -12,7 +12,7 @@ sudo apt-get install openbabel
 sudo pacman -S python-openbabel
 
 ## install the package
-pip install -U --no-cache-dir --force-reinstall git+https://github.com/KeaunAmani/neurosnap.git
+pip install -U --no-cache-dir git+https://github.com/KeaunAmani/neurosnap.git
 ```
 
 # Usage

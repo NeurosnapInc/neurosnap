@@ -24,8 +24,8 @@ neurosnap/
 ├── sequences/
 │   └── proteins.py
 ├── structures/
-│   └── chemicals.py
-│   └── proteins.py
+    └── chemicals.py
+    └── proteins.py
 ```
 
 ## Sequence tools

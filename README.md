@@ -29,7 +29,9 @@ from neurosnap.sequences.proteins import *
 
 #### run_mmseqs2
 ##### Usage
-`run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None)`
+```py
+run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None)
+```
 ##### Description:
 Generate an a3m MSA using the ColabFold API. Will writeall results to the output directory including templates,MSAs, and accompanying files.Code originally from https://github.com/sokrypton/ColabFold/.
 ##### Parameters:
@@ -42,7 +44,9 @@ Generate an a3m MSA using the ColabFold API. Will writeall results to the output
 
 #### read_msa
 ##### Usage
-`read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True)`
+```py
+read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True)
+```
 ##### Description:
 Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
 ##### Parameters:
@@ -58,7 +62,9 @@ Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
 
 #### write_msa
 ##### Usage
-`write_msa(output_path, names, seqs)`
+```py
+write_msa(output_path, names, seqs)
+```
 ##### Description:
 Writes an MSA, a3m, or fasta to a file.Makes no assumptions about the validity of names orsequences. Will throw an exception if len(names) != len(seqs)
 ##### Parameters:
@@ -68,7 +74,9 @@ Writes an MSA, a3m, or fasta to a file.Makes no assumptions about the validity o
 
 #### pad_seqs
 ##### Usage
-`pad_seqs(seqs, char="-", truncate=False)`
+```py
+pad_seqs(seqs, char="-", truncate=False)
+```
 ##### Description:
 Pads all sequences to the longest sequences lengthusing a character from the right side.
 ##### Parameters:
@@ -80,7 +88,9 @@ Pads all sequences to the longest sequences lengthusing a character from the rig
 
 #### get_seqid
 ##### Usage
-`get_seqid(seq1, seq2, align=False)`
+```py
+get_seqid(seq1, seq2, align=False)
+```
 ##### Description:
 Calculate the pairwise sequence identity of two same length sequences or alignments.
 ##### Parameters:

@@ -17,6 +17,16 @@ pip install -U --no-cache-dir git+https://github.com/KeaunAmani/neurosnap.git
 
 # Usage
 Note that all functions have their own documentation within the code. We recommend checking those documentation blocks when confused.
+## Package Structure
+This package is organized into the following sections:
+```
+neurosnap/
+├── sequences/
+│   └── proteins.py
+├── structures/
+│   └── chemicals.py
+│   └── proteins.py
+```
 
 ## Sequence tools
 This modules contains utility functions for working with sequence data such as protein sequences, alignments, etc.
@@ -184,18 +194,3 @@ Aligns two pdb structures by their longest chain using the first pdb as the refe
 ##### Parameters:
 - **ref_pdb**:  Reference protein to align to (str)
 - **sample_pdb**:  Sample protein to be modified and aligned to the reference (str)
-
-
-<!-- ## Package Structure
-This package is organized into the following sections:
-```
-neurosnap/
-├── sequences
-├── pyproject.toml
-├── README.md
-├── src/
-│   └── example_package_YOUR_USERNAME_HERE/
-│       ├── __init__.py
-│       └── example.py
-└── tests/
-``` -->

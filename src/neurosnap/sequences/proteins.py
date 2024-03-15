@@ -2,7 +2,7 @@
 Provides functions and classes related to processing protein sequence data.
 """
 ### IMPORTS ###
-import os, requests, time, tarfile, re, io
+import os, requests, time, tarfile, re, io, shutil
 
 
 ### CONSTANTS ###
@@ -12,54 +12,132 @@ STANDARD_AAs = "ARNDCEQGHILKMFPSTWYV"
 
 
 ### FUNCTIONS ###
-def generate_msa(seq, output_path, mode="all", max_retries=10):
+def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None):
   """
   -------------------------------------------------------
-  Generate an a3m MSA using the ColabFold API.
+  Generate an a3m MSA using the ColabFold API. Will write
+  all results to the output directory including templates,
+  MSAs, and accompanying files.
+  Code originally from https://github.com/sokrypton/ColabFold/.
   -------------------------------------------------------
   Parameters:
-    seq........: Amino acid sequence for protein to generate an MSA of (str)
-    output_path: Path to where the MSA will be downloaded, should end with .a3m (str)
-    mode.......: Supports modes like "all" or "env" (str)
-    max_retries: Maximum number of retries (int)
+    seq..........: Amino acid sequence for protein to generate an MSA of (str)
+    output.......: Output directory path, will overwrite existing results (str)
+    database.....: Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref" (str)
+    use_filter...: Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper) (bool)
+    use_templates: Download templates as well using the mmseqs2 results (bool)
+    pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
   """
-  print("[*] This function uses ColabFold mmseqs2 API (https://colabfold.mmseqs.com/). This API is made freely available so consider citing the authors (https://doi.org/10.1038/s41592-022-01488-1).")
-  def get_status(ID):
-    r = requests.get(f'https://api.colabfold.com/ticket/{ID}')
+  # API settings
+  user_agent = "Neurosnap-OSS-Tools/v1" #TODO: Use actual version
+  host_url = "https://api.colabfold.com"
+  submission_endpoint = "ticket/pair" if pairing else "ticket/msa"
+  headers = {}
+  headers['User-Agent'] = user_agent
+  timeout = 6.02
+
+  # set the mode
+  assert database in ["mmseqs2_uniref_env", "mmseqs2_uniref"], ValueError('database must be either "mmseqs2_uniref_env" or "mmseqs2_uniref"')
+  if use_filter:
+    mode = "env" if database == "mmseqs2_uniref_env" else "all"
+  else:
+    mode = "env-nofilter" if database == "mmseqs2_uniref_env" else "nofilter"
+
+  if pairing:
+    use_templates = False
+    # greedy is default, complete was the previous behavior
+    assert pairing in ["greedy", "complete"], ValueError('pairing must be either "greedy", "complete", or None')
+    if pairing == "greedy":
+      mode = "pairgreedy"
+    elif pairing == "complete":
+      mode = "paircomplete"
+
+  # define path
+  if os.path.isdir(output):
+    shutil.rmtree(output)
+  os.mkdir(output)
+
+  def submit(seq, mode):
+    query = f">query\n{seq}\n"
+    while True:
+      error_count = 0
+      try:
+        r = requests.post(f'{host_url}/{submission_endpoint}', data={'q': query, 'mode':mode}, timeout=timeout, headers=headers)
+      except requests.exceptions.Timeout:
+        print("Timeout while submitting to MSA server. Retrying...")
+        continue
+      except Exception as e:
+        error_count += 1
+        print(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
+        print(f"Error: {e}")
+        time.sleep(timeout)
+        if error_count > 5:
+          raise
+        continue
+      break
+
     try:
       out = r.json()
     except ValueError:
-      print(f"Server didn't reply with json: {res.text}")
+      print(f"Server didn't reply with json: {r.text}")
       out = {"status":"ERROR"}
     return out
 
-  query = f">input_seq\n{seq}"
-  ID = None
-  while ID is None:
-    r = requests.post(f'https://api.colabfold.com/ticket/msa', data={'q':query,'mode': mode}, timeout=6.02)
-    data = r.json()
-    if "id" in data:
-      ID = data["id"]
-      print(data)
-    else:
-      print(f"[-] Failed {data['status']} {proxy}")
-      print(data)
-      proxy_index += 1
-
-  for _ in range(max_retries):
-    status = get_status(ID)["status"]
-    if status == "COMPLETE":
+  def status(ID):
+    while True:
+      error_count = 0
+      try:
+        r = requests.get(f'{host_url}/ticket/{ID}', timeout=timeout, headers=headers)
+      except requests.exceptions.Timeout:
+        print("Timeout while fetching status from MSA server. Retrying...")
+        continue
+      except Exception as e:
+        error_count += 1
+        print(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
+        print(f"Error: {e}")
+        time.sleep(timeout)
+        if error_count > 5:
+          raise
+        continue
       break
-    elif status == "ERROR":
-      raise
-    else:
-      time.sleep(5)
-  
-  # download
+    try:
+      out = r.json()
+    except ValueError:
+      print(f"Server didn't reply with json: {r.text}")
+      out = {"status":"ERROR"}
+    return out
+
+  ## call mmseqs2 api
+  # Resubmit job until it goes through
+  out = submit(seq, mode)
+  while out["status"] in ["UNKNOWN", "RATELIMIT"]:
+    print(f"Sleeping for {timeout}s. Reason: {out['status']}")
+    # resubmit
+    time.sleep(timeout)
+    out = submit(seq, mode)
+
+  if out["status"] == "ERROR":
+    raise Exception(f'MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
+
+  if out["status"] == "MAINTENANCE":
+    raise Exception(f'MMseqs2 API is undergoing maintenance. Please try again in a few minutes.')
+
+  # wait for job to finish
+  ID = out["id"]
+  while out["status"] in ["UNKNOWN","RUNNING","PENDING"]:
+    print(f"Sleeping for {timeout}s. Reason: {out['status']}")
+    time.sleep(timeout)
+    out = status(ID)
+
+  if out["status"] == "ERROR" or out["status"] != "COMPLETE":
+    print(out)
+    raise Exception(f'MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
+
+  # Download results
   error_count = 0
   while True:
     try:
-      r = requests.get(f'https://api.colabfold.com/result/download/{ID}', timeout=6.02)
+      r = requests.get(f'{host_url}/result/download/{ID}', stream=True, timeout=timeout, headers=headers)
     except requests.exceptions.Timeout:
       print("Timeout while fetching result from MSA server. Retrying...")
       continue
@@ -67,24 +145,57 @@ def generate_msa(seq, output_path, mode="all", max_retries=10):
       error_count += 1
       print(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
       print(f"Error: {e}")
-      time.sleep(5)
-      if error_count > max_retries:
+      time.sleep(timeout)
+      if error_count > 5:
         raise
       continue
     break
-  # write tar file
-  tar_path = f"{ID}.tar.gz"
-  with open(tar_path, "wb") as f:
-    f.write(r.content)
-  # extract a3m only
-  with tarfile.open(tar_path) as tar:
-    for member in tar.getmembers():
-      if member.name.endswith(".a3m"):
-        with open(output_path, "wb") as f:
-          f.write(tar.extractfile(member).read())
+  # extract files
+  with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
+    tar.extractall(path=output, filter="data")
+
+  # remove null bytes from all files including pair files
+  for fname in os.listdir(output):
+    if fname in ["uniref.a3m", "bfd.mgnify30.metaeuk30.smag30.a3m", "pair.a3m"]:
+      with open(f"{output}/{fname}", "r") as fin:
+        with open(f"{output}/{fname}.tmp", "w") as fout:
+          for line in fin:
+            fout.write(line.replace("\x00",""))
+      shutil.move(f"{output}/{fname}.tmp", f"{output}/{fname}")
+
+  # templates
+  if use_templates:
+    templates = []
+    # .m8 file description: https://linsalrob.github.io/ComputationalGenomicsManual/SequenceFileFormats/#blast-m8
+    # print("seq\tpdb\tcid\tevalue")
+    for line in open(f"{output}/pdb70.m8","r"):
+      line = line.rstrip().split()
+      name, pdb, qid, e_value = line[0], line[1], line[2], line[10]
+      templates.append(pdb)
+      # if len(templates) <= 20:
+      #  print(f"{name}\t{pdb}\t{qid}\t{e_value}")
+
+    template_path = f"{output}/templates"
+    os.mkdir(f"{output}/templates")
+    for template in templates:
+      error_count = 0
+      while True:
+        try:
+          r = requests.get(f"{host_url}/template/{template[:20]}", stream=True, timeout=timeout, headers=headers)
+        except requests.exceptions.Timeout:
+          print("Timeout while submitting to template server. Retrying...")
+          continue
+        except Exception as e:
+          error_count += 1
+          print(f"Error while fetching result from template server. Retrying... ({error_count}/5)")
+          print(f"Error: {e}")
+          time.sleep(timeout)
+          if error_count > 5:
+            raise
+          continue
         break
-  # clean
-  os.remove(tar_path)
+      with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
+        tar.extractall(path=template_path, filter="data")
 
 
 def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True):
@@ -105,6 +216,9 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
   """
   names = []
   seqs = []
+  allow_chars = allow_chars.replace("-", "\-")
+  drop_chars = drop_chars.replace("-", "\-")
+  remove_chars = remove_chars.replace("-", "\-")
   char_whitelist = STANDARD_AAs + allow_chars + drop_chars + remove_chars
 
   if isinstance(input_fasta, str):

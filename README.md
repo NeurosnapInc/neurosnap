@@ -119,7 +119,6 @@ Converts a SMILES string to an sdf file.Will overwrite existing results.
 - **smiles**:  Smiles string to parse and convert (str)
 - **output_path**:  Path to output SDF file, should end with .sdf (str)
 
-
 ### Proteins
 To access the following functions import the following:
 ```py

@@ -1,9 +1,9 @@
 import re
 
 
-# filename = "src/neurosnap/structures/proteins.py"
-# filename = "src/neurosnap/structures/chemicals.py"
 filename = "src/neurosnap/sequences/proteins.py"
+# filename = "src/neurosnap/structures/chemicals.py"
+# filename = "src/neurosnap/structures/proteins.py"
 
 with open(filename) as f:
   func = None

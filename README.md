@@ -19,7 +19,14 @@ pip install -U --no-cache-dir --force-reinstall git+https://github.com/KeaunAman
 Note that all functions have their own documentation within the code. We recommend checking those documentation blocks when confused.
 
 ### Sequence tools
+This modules contains utility functions for working with sequence data such as protein sequences, alignments, etc.
+
 #### Proteins
+To access the following functions import the following:
+```py
+from neurosnap.sequences.proteins import *
+```
+
 ```py
 """
 -------------------------------------------------------

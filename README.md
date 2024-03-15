@@ -27,12 +27,12 @@ To access the following functions import the following:
 from neurosnap.sequences.proteins import *
 ```
 
-#### `run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None)`
-
-**Description:**
+#### run_mmseqs2
+##### Usage
+`run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None)`
+##### Description:
 Generate an a3m MSA using the ColabFold API. Will writeall results to the output directory including templates,MSAs, and accompanying files.Code originally from https://github.com/sokrypton/ColabFold/.
-
-**Parameters:**
+##### Parameters:
 - seq..........: Amino acid sequence for protein to generate an MSA of (str)
 - output.......: Output directory path, will overwrite existing results (str)
 - database.....: Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref" (str)
@@ -40,58 +40,54 @@ Generate an a3m MSA using the ColabFold API. Will writeall results to the output
 - use_templates: Download templates as well using the mmseqs2 results (bool)
 - pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
 
-#### `read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True)`
-
-**Description:**
+#### read_msa
+##### Usage
+`read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True)`
+##### Description:
 Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
-
-**Parameters:**
+##### Parameters:
 - input_fasta.: Path to read input a3m file, fasta as a raw string, or a file-handle like object to read (str|io.TextIOBase)
 - size........: Number of rows to read (int)
 - allow_chars.: Sequences that contain characters not included within STANDARD_AAs+allow_chars will throw an exception (str)
 - drop_chars..: Drop sequences that contain these characters e.g., "-X" (str)
 - remove_chars: Removes these characters from sequences e.g., "*-X" (str)
 - uppercase...: Converts all amino acid chars to uppercase when True (bool)
-
-**Returns:**
+##### Returns:
 - names: List of proteins names from the a3m file including gaps (list<str>)
 - seqs.: List of proteins sequences from the a3m file including gaps (list<str>)
 
-#### `write_msa(output_path, names, seqs)`
-
-**Description:**
+#### write_msa
+##### Usage
+`write_msa(output_path, names, seqs)`
+##### Description:
 Writes an MSA, a3m, or fasta to a file.Makes no assumptions about the validity of names orsequences. Will throw an exception if len(names) != len(seqs)
-
-**Parameters:**
+##### Parameters:
 - output_path: Path to output file to write, will overwrite existing files (str)
 - names......: List of proteins names from the file (list<str>)
 - seqs.......: List of proteins sequences from the file (list<str>)
 
-#### `pad_seqs(seqs, char="-", truncate=False)`
-
-**Description:**
+#### pad_seqs
+##### Usage
+`pad_seqs(seqs, char="-", truncate=False)`
+##### Description:
 Pads all sequences to the longest sequences lengthusing a character from the right side.
-
-**Parameters:**
+##### Parameters:
 - seqs......: List of sequences to pad (list<str>)
 - chars.....: The character to perform the padding with, default is "-" (str)
 - truncate..: When set to True will truncate all sequences to the length of the first, set to integer to truncate sequence to that length (bool/int)
-
-**Returns:**
+##### Returns:
 - seqs_padded: The padded sequences (list<str>)
 
-#### `get_seqid(seq1, seq2, align=False)`
-
-**Description:**
+#### get_seqid
+##### Usage
+`get_seqid(seq1, seq2, align=False)`
+##### Description:
 Calculate the pairwise sequence identity of two same length sequences or alignments.
-
-**Parameters:**
+##### Parameters:
 - seq1: The 1st sequence / aligned sequence. (str)
 - seq2: The 2nd sequence / aligned sequence. (str)
-
-**Returns:**
+##### Returns:
 - seq_id: The pairwise sequence identity. Will return None  (float)
-
 
 ## Structure tools
 This modules contains utility functions for working with structural data such as protein structures, small molecules, ligands, and more.

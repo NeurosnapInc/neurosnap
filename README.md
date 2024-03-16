@@ -194,3 +194,7 @@ Aligns two pdb structures by their longest chain using the first pdb as the refe
 ##### Parameters:
 - **ref_pdb**:  Reference protein to align to (str)
 - **sample_pdb**:  Sample protein to be modified and aligned to the reference (str)
+
+
+# Contributions
+We welcome contributions to this package. If you have a feature that you want to code or have added, submit a pull request or an issue.

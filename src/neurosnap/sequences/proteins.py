@@ -8,12 +8,56 @@ import os, requests, time, tarfile, re, io, shutil
 ### CONSTANTS ###
 ## Standard amino acids excluding the unknown character ("X")
 ## Currently excludes
-# asparagine/aspartic acid - asx - B
-# glutamine/glutamic acid - glx - Z
-# leucine/isoleucine - xle - J
-# unknown codon - UNK - X
-# termination codon - TERM - *
+# B | asx | asparagine/aspartic acid
+# Z | glx | glutamine/glutamic acid
+# J | xle | leucine/isoleucine
+# O | pyl | pyrrolysine
+# U | sec | selenocysteine
+# X | UNK | unknown codon
+# * | TRM | termination codon
 STANDARD_AAs = "ARNDCEQGHILKMFPSTWYV"
+
+## Full standard amino acids table
+AAs_FULL_TABLE = [
+  ['Ala', 'A', 'alanine'],
+  ['Arg', 'R', 'arginine'],
+  ['Asn', 'N', 'asparagine'],
+  ['Asp', 'D', 'aspartic acid'],
+  ['Cys', 'C', 'cysteine'],
+  ['Gln', 'Q', 'glutamine'],
+  ['Glu', 'E', 'glutamic acid'],
+  ['Gly', 'G', 'glycine'],
+  ['His', 'H', 'histidine'],
+  ['Ile', 'I', 'isoleucine'],
+  ['Leu', 'L', 'leucine'],
+  ['Lys', 'K', 'lysine'],
+  ['Met', 'M', 'methionine'],
+  ['Phe', 'F', 'phenylalanine'],
+  ['Pro', 'P', 'proline'],
+  ['Ser', 'S', 'serine'],
+  ['Thr', 'T', 'threonine'],
+  ['Trp', 'W', 'tryptophan'],
+  ['Tyr', 'Y', 'tyrosine'],
+  ['Val', 'V', 'valine'],
+  ['Pyl', 'O', 'pyrrolysine'],
+  ['Sec', 'U', 'selenocysteine'],
+]
+
+### CLASSES ###
+class GetAA:
+  """
+  -------------------------------------------------------
+  Efficiently get any amino acid using either their 1 letter code,
+  3 letter abbreviation, or full name.
+  -------------------------------------------------------
+  Parameters:
+    seq..........: Amino acid sequence for protein to generate an MSA of (str)
+    output.......: Output directory path, will overwrite existing results (str)
+    database.....: Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref" (str)
+    use_filter...: Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper) (bool)
+    use_templates: Download templates as well using the mmseqs2 results (bool)
+    pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
+  """
 
 
 ### FUNCTIONS ###

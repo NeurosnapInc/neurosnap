@@ -37,13 +37,27 @@ To access the following functions import the following:
 from neurosnap.sequences.proteins import *
 ```
 
+#### getAA
+##### Usage
+```py
+getAA(query)
+```
+##### Description:
+Efficiently get any amino acid using either their 1 letter code,3 letter abbreviation, or full name. See AAs_FULL_TABLEfor a list of all supported amino acids and codes.
+##### Parameters:
+- **query**:  Amino acid code, abbreviation, or name (str)
+##### Returns:
+- **code**:  Amino acid 1 letter abbreviation / code (str)
+- **abr**:  Amino acid 3 letter abbreviation / code (str)
+- **name**:  Amino acid full name (str)
+
 #### run_mmseqs2
 ##### Usage
 ```py
 run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None)
 ```
 ##### Description:
-Generate an a3m MSA using the ColabFold API. Will writeall results to the output directory including templates, MSAs, and accompanying files.Code originally from https://github.com/sokrypton/ColabFold/.
+Generate an a3m MSA using the ColabFold API. Will writeall results to the output directory including templates,MSAs, and accompanying files.Code originally adapted from: https://github.com/sokrypton/ColabFold/
 ##### Parameters:
 - **seq**:  Amino acid sequence for protein to generate an MSA of (str)
 - **output**:  Output directory path, will overwrite existing results (str)

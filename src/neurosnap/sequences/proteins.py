@@ -8,59 +8,85 @@ import os, requests, time, tarfile, re, io, shutil
 ### CONSTANTS ###
 ## Standard amino acids excluding the unknown character ("X")
 ## Currently excludes
+# O | pyl | pyrrolysine
+# U | sec | selenocysteine
 # B | asx | asparagine/aspartic acid
 # Z | glx | glutamine/glutamic acid
 # J | xle | leucine/isoleucine
-# O | pyl | pyrrolysine
-# U | sec | selenocysteine
 # X | UNK | unknown codon
 # * | TRM | termination codon
 STANDARD_AAs = "ARNDCEQGHILKMFPSTWYV"
 
-## Full standard amino acids table
+## Full amino acids table
 AAs_FULL_TABLE = [
-  ['Ala', 'A', 'alanine'],
-  ['Arg', 'R', 'arginine'],
-  ['Asn', 'N', 'asparagine'],
-  ['Asp', 'D', 'aspartic acid'],
-  ['Cys', 'C', 'cysteine'],
-  ['Gln', 'Q', 'glutamine'],
-  ['Glu', 'E', 'glutamic acid'],
-  ['Gly', 'G', 'glycine'],
-  ['His', 'H', 'histidine'],
-  ['Ile', 'I', 'isoleucine'],
-  ['Leu', 'L', 'leucine'],
-  ['Lys', 'K', 'lysine'],
-  ['Met', 'M', 'methionine'],
-  ['Phe', 'F', 'phenylalanine'],
-  ['Pro', 'P', 'proline'],
-  ['Ser', 'S', 'serine'],
-  ['Thr', 'T', 'threonine'],
-  ['Trp', 'W', 'tryptophan'],
-  ['Tyr', 'Y', 'tyrosine'],
-  ['Val', 'V', 'valine'],
-  ['Pyl', 'O', 'pyrrolysine'],
-  ['Sec', 'U', 'selenocysteine'],
+  ['A', 'ALA', 'ALANINE'],
+  ['R', 'ARG', 'ARGININE'],
+  ['N', 'ASN', 'ASPARAGINE'],
+  ['D', 'ASP', 'ASPARTIC ACID'],
+  ['C', 'CYS', 'CYSTEINE'],
+  ['Q', 'GLN', 'GLUTAMINE'],
+  ['E', 'GLU', 'GLUTAMIC ACID'],
+  ['G', 'GLY', 'GLYCINE'],
+  ['H', 'HIS', 'HISTIDINE'],
+  ['I', 'ILE', 'ISOLEUCINE'],
+  ['L', 'LEU', 'LEUCINE'],
+  ['K', 'LYS', 'LYSINE'],
+  ['M', 'MET', 'METHIONINE'],
+  ['F', 'PHE', 'PHENYLALANINE'],
+  ['P', 'PRO', 'PROLINE'],
+  ['S', 'SER', 'SERINE'],
+  ['T', 'THR', 'THREONINE'],
+  ['W', 'TRP', 'TRYPTOPHAN'],
+  ['Y', 'TYR', 'TYROSINE'],
+  ['V', 'VAL', 'VALINE'],
+  ['O', 'PYL', 'PYRROLYSINE'],
+  ['U', 'SEC', 'SELENOCYSTEINE'],
+  ['B', 'ASX', 'ASPARAGINE/ASPARTIC ACID'],
+  ['Z', 'GLX', 'GLUTAMINE/GLUTAMIC ACID'],
+  ['J', 'XLE', 'LEUCINE/ISOLEUCINE'],
+  ['X', 'UNK', 'UNKNOWN CODON'],
 ]
-
-### CLASSES ###
-class GetAA:
-  """
-  -------------------------------------------------------
-  Efficiently get any amino acid using either their 1 letter code,
-  3 letter abbreviation, or full name.
-  -------------------------------------------------------
-  Parameters:
-    seq..........: Amino acid sequence for protein to generate an MSA of (str)
-    output.......: Output directory path, will overwrite existing results (str)
-    database.....: Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref" (str)
-    use_filter...: Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper) (bool)
-    use_templates: Download templates as well using the mmseqs2 results (bool)
-    pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
-  """
+AA_CODE_TO_ABR = {}
+AA_CODE_TO_NAME = {}
+AA_ABR_TO_CODE = {}
+AA_ABR_TO_NAME = {}
+AA_NAME_TO_CODE = {}
+AA_NAME_TO_ABR = {}
+for code,abr,name in AAs_FULL_TABLE:
+  AA_CODE_TO_ABR[code] = abr
+  AA_CODE_TO_NAME[code] = name
+  AA_ABR_TO_CODE[abr] = code
+  AA_ABR_TO_NAME[abr] = name
+  AA_NAME_TO_ABR[name] = abr
+  AA_NAME_TO_CODE[name] = code
 
 
 ### FUNCTIONS ###
+def getAA(query):
+  """
+  -------------------------------------------------------
+  Efficiently get any amino acid using either their 1 letter code,
+  3 letter abbreviation, or full name. See AAs_FULL_TABLE
+  for a list of all supported amino acids and codes.
+  -------------------------------------------------------
+  Parameters:
+    query: Amino acid code, abbreviation, or name (str)
+  Returns:
+    code: Amino acid 1 letter abbreviation / code (str)
+    abr.: Amino acid 3 letter abbreviation / code (str)
+    name: Amino acid full name (str)
+  """
+  query = query.upper()
+  try:
+    if len(query) == 1:
+      return query, AA_CODE_TO_ABR[query], AA_CODE_TO_NAME[query]
+    elif len(query) == 3:
+      return AA_ABR_TO_CODE[query], query, AA_ABR_TO_NAME[query]
+    else:
+      return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
+  except KeyError:
+    raise ValueError(f"Unknown amino acid for {query}")
+
 def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None):
   """
   -------------------------------------------------------

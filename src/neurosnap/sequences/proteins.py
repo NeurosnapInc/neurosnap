@@ -6,8 +6,13 @@ import os, requests, time, tarfile, re, io, shutil
 
 
 ### CONSTANTS ###
-# Standard amino acids excluding the unknown character ("X")
-# Currently excludes "asparagine/aspartic acid - asx - B" and "glutamine/glutamic acid - glx - Z" 
+## Standard amino acids excluding the unknown character ("X")
+## Currently excludes
+# asparagine/aspartic acid - asx - B
+# glutamine/glutamic acid - glx - Z
+# leucine/isoleucine - xle - J
+# unknown codon - UNK - X
+# termination codon - TERM - *
 STANDARD_AAs = "ARNDCEQGHILKMFPSTWYV"
 
 

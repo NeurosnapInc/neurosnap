@@ -18,7 +18,7 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
   Generate an a3m MSA using the ColabFold API. Will write
   all results to the output directory including templates,
   MSAs, and accompanying files.
-  Code originally from https://github.com/sokrypton/ColabFold/.
+  Code originally adapted from: https://github.com/sokrypton/ColabFold/
   -------------------------------------------------------
   Parameters:
     seq..........: Amino acid sequence for protein to generate an MSA of (str)

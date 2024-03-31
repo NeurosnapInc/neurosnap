@@ -61,6 +61,7 @@ def calc_pdm(pdb_path, chain=None):
   chain = model[chain]
 
   # calculate distance matrix
+  # NOTE: This is redundant since the upper triangle is identical to the lower one.
   dm = np.zeros((len(chain), len(chain)), float)
   for row, residue_one in enumerate(chain):
     for col, residue_two in enumerate(chain):

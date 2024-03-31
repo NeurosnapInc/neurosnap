@@ -123,11 +123,11 @@ def align_pdbs(ref_pdb, sample_pdb):
   """
   -------------------------------------------------------
   Aligns two pdb structures by their longest chain using the first pdb as the reference.
-  Reference pdb is not modified while the sample pdb is
+  Reference pdb is not modified or overwritten while the sample pdb is overwritten.
   -------------------------------------------------------
   Parameters:
-    ref_pdb...: Reference protein to align to (str)
-    sample_pdb: Sample protein to be modified and aligned to the reference (str)
+    ref_pdb...: Filepath for reference protein to align to (str)
+    sample_pdb: Filepath for sample protein to be modified and aligned to the reference (str)
   """
   # Start the parser
   pdb_parser = Bio.PDB.PDBParser(QUIET=True)

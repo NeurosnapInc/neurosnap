@@ -10,6 +10,7 @@ from biotite.structure.residues import get_residues
 from biotite.sequence import ProteinSequence
 from openbabel import pybel
 from rdkit import Chem
+import neurosnap.structures.lDDT as lDDT
 
 
 ### FUNCTIONS ###
@@ -182,3 +183,19 @@ def align_pdbs(ref_pdb, sample_pdb):
   io = Bio.PDB.PDBIO()
   io.set_structure(sample_structure) 
   io.save(sample_pdb)
+
+
+def calc_lDDT(ref_pdb, sample_pdb):
+  """
+  -------------------------------------------------------
+  Calculates the lDDT (Local Distance Difference Test) between two proteins.
+  -------------------------------------------------------
+  Parameters:
+    ref_pdb...: Filepath for reference protein (str)
+    sample_pdb: Filepath for sample protein (str)
+  Returns:
+    lDDT: The lDDT score of the two proteins which ranges between 0-1 (float)
+  """
+  ref_L, ref_dmap, ref_rnames = lDDT.pdb2dmap(ref_pdb)
+  mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
+  return lDDT.get_LDDT(ref_dmap, mod_dmap)

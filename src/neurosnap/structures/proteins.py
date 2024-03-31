@@ -62,8 +62,8 @@ def calc_pdm(pdb_path, chain=None):
 
   # calculate distance matrix
   dm = np.zeros((len(chain), len(chain)), float)
-  for row, residue_one in enumerate(chain) :
-    for col, residue_two in enumerate(chain) :
+  for row, residue_one in enumerate(chain):
+    for col, residue_two in enumerate(chain):
       dm[row, col] = calc_residue_dist(residue_one, residue_two)
   return dm
 

@@ -2,8 +2,14 @@
 Provides functions and classes related to processing protein sequence data.
 """
 ### IMPORTS ###
-import os, requests, time, tarfile, re, io, shutil
+import io
+import os
+import re
+import shutil
+import tarfile
+import time
 
+import requests
 
 ### CONSTANTS ###
 ## Standard amino acids excluding the unknown character ("X")

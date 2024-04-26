@@ -244,7 +244,7 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
             fout.write(line.replace("\x00", ""))
       shutil.move(f"{output}/{fname}.tmp", f"{output}/{fname}")
 
-  # concatenate
+  # concatenate to create combined file
   with open(f"{output}/combined.a3m", "w") as fout:
    with open(f"{output}/uniref.a3m") as f:
     for line in f:

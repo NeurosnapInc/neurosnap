@@ -108,7 +108,7 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
   host_url = "https://api.colabfold.com"
   submission_endpoint = "ticket/pair" if pairing else "ticket/msa"
   headers = {}
-  headers['User-Agent'] = user_agent
+  headers["User-Agent"] = user_agent
   timeout = 6.02
 
   # set the mode

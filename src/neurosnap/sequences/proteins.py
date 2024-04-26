@@ -192,10 +192,10 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
     out = submit(seq, mode)
 
   if out["status"] == "ERROR":
-    raise Exception(f'MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
+    raise Exception('MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
 
   if out["status"] == "MAINTENANCE":
-    raise Exception(f'MMseqs2 API is undergoing maintenance. Please try again in a few minutes.')
+    raise Exception('MMseqs2 API is undergoing maintenance. Please try again in a few minutes.')
 
   # wait for job to finish
   ID = out["id"]
@@ -206,7 +206,7 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
 
   if out["status"] == "ERROR" or out["status"] != "COMPLETE":
     print(out)
-    raise Exception(f'MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
+    raise Exception('MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
 
   # Download results
   error_count = 0

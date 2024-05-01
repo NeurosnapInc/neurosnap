@@ -45,7 +45,9 @@ def read_pdb(pdb_path):
   for chain in structure[0]:
     protein[chain.id] = []
     for resi in chain:
-      protein[chain.id].append(resi.id[1])
+      if resi.id[0] == " ": #ensure is not heteroatom
+        protein[chain.id].append(resi.id[1])
+    protein[chain.id] = sorted(set(protein[chain.id])) # in case the PDB is really weird
   return protein
 
 def calc_pdm(pdb_path, chain=None):

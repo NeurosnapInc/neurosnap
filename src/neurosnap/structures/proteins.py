@@ -28,6 +28,26 @@ def read_chains(pdb_path):
   structure = parser.get_structure("pdb", pdb_path)
   return set(chain.id for chain in structure[0])
 
+def read_pdb(pdb_path):
+  """
+  -------------------------------------------------------
+  Reads a protein and returns the IDs
+  -------------------------------------------------------
+  Parameters:
+    pdb_path: Input PDB file path (str)
+  Returns:
+    protein: Dictionary where keys are chain IDs and values are lists of residue IDs (dict<str:[str]>)
+  """
+  parser = Bio.PDB.PDBParser()
+  structure = parser.get_structure("pdb", pdb_path)
+  # assume everything is in the first model
+  protein = {}
+  for chain in structure[0]:
+    protein[chain.id] = []
+    for resi in chain:
+      protein[chain.id].append(resi.id[1])
+  return protein
+
 
 def calc_pdm(pdb_path, chain=None):
   """

@@ -48,7 +48,6 @@ def read_pdb(pdb_path):
       protein[chain.id].append(resi.id[1])
   return protein
 
-
 def calc_pdm(pdb_path, chain=None):
   """
   -------------------------------------------------------

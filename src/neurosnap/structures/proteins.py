@@ -36,18 +36,18 @@ def read_pdb(pdb_path):
   Parameters:
     pdb_path: Input PDB file path (str)
   Returns:
-    protein: Dictionary where keys are chain IDs and values are lists of residue IDs and names (dict)
+    protein: Dictionary where keys are chain IDs and values are lists of residue IDs (dict<str:[str]>)
   """
   parser = Bio.PDB.PDBParser()
   structure = parser.get_structure("pdb", pdb_path)
   # assume everything is in the first model
   protein = {}
   for chain in structure[0]:
-    protein[chain.id] = {"resi": [], "resn": []}
+    protein[chain.id] = []
     for resi in chain:
       if resi.id[0] == " ": #ensure is not heteroatom
-        protein[chain.id]["resi"].append(resi.id[1])
-        protein[chain.id]["resn"].append(resi.resname)
+        protein[chain.id].append(resi.id[1])
+    protein[chain.id] = sorted(set(protein[chain.id])) # in case the PDB is really weird
   return protein
 
 def calc_pdm(pdb_path, chain=None):

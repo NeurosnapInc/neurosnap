@@ -106,7 +106,7 @@ def pdb_to_sdf(pdb_path, output_path, max_residues=50):
     os.remove(output_path)
   # stupidly doesn't return an exception if invalid file but will return empty list
   molecules = list(pybel.readfile("pdb", pdb_path))
-  assert len(molecules), ValueError(f"Invalid input PDB file.")
+  assert len(molecules), ValueError("Invalid input PDB file.")
   
   found = 0
   for mol in molecules:
@@ -115,7 +115,7 @@ def pdb_to_sdf(pdb_path, output_path, max_residues=50):
       # print(mol.write("sdf")) #print to stdout
       mol.write("sdf", filename=output_path)
       found += 1
-      assert found <= 1, ValueError(f"Invalid input PDB file. Contains more than one chain or molecule.")
+      assert found <= 1, ValueError("Invalid input PDB file. Contains more than one chain or molecule.")
   
   if Chem.MolFromMolFile(output_path) is None:
     raise ValueError("Invalid input PDB file. Could not convert properly into an SDF.")

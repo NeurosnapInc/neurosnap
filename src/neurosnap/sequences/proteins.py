@@ -313,7 +313,6 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
   allow_chars = allow_chars.replace("-", "\-")
   drop_chars = drop_chars.replace("-", "\-")
   remove_chars = remove_chars.replace("-", "\-")
-  char_whitelist = STANDARD_AAs + allow_chars + drop_chars + remove_chars
 
   if isinstance(input_fasta, str):
     if os.path.exists(input_fasta):
@@ -333,7 +332,7 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
           raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
         if len(seqs) >= size+1:
           break
-        match = re.search(r">([\w\-_]*)", line)
+        match = re.search(r">(.*)", line)
         assert match is not None, ValueError(f"Invalid MSA/fasta. {line} is not a valid header.")
         name = match.group(1)
         assert len(name), ValueError(f"Invalid MSA/fasta. line {i} has an empty header.")

@@ -21,7 +21,7 @@ import requests
 # J | xle | leucine/isoleucine
 # X | UNK | unknown codon
 # * | TRM | termination codon
-STANDARD_AAs = "ARNDCEQGHILKMFPSTWYV"
+STANDARD_AAs = "ACDEFGHIKLMNPQRSTVWY"
 
 ## Full amino acids table
 AAs_FULL_TABLE = [

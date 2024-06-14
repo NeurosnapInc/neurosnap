@@ -17,16 +17,17 @@ import neurosnap.structures.lDDT as lDDT
 def read_chains(pdb_path):
   """
   -------------------------------------------------------
-  Reads the chains in PDB file and returns a set of their names/IDs.
+  Reads the chains in PDB file and returns a list of their names/IDs.
+  Only does so for the first model within the pdb file.
   -------------------------------------------------------
   Parameters:
     pdb_path: Input PDB file path (str)
   Returns:
-    chains: Chain names/IDs found within the PDB file (set<str>)
+    chains: Chain names/IDs found within the PDB file (list<str>)
   """
   parser = Bio.PDB.PDBParser()
   structure = parser.get_structure("pdb", pdb_path)
-  return set(chain.id for chain in structure[0])
+  return list(set(chain.id for chain in structure[0] if chain.id.strip()))
 
 def read_pdb(pdb_path):
   """

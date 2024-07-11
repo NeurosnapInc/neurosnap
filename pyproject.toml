@@ -29,5 +29,5 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/KeaunAmani/neurosnap"
-Issues = "https://github.com/KeaunAmani/neurosnap/issues"
+Homepage = "https://https://github.com/NeurosnapInc/neurosnap"
+Issues = "https://https://github.com/NeurosnapInc/neurosnap/issues"

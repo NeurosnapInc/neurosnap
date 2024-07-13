@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=59.6.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "neurosnap"
-version = "0.0.42"
+version = "0.0.43"
 authors = [
   {name="Keaun Amani"},
 ]

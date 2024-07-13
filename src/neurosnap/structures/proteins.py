@@ -103,10 +103,9 @@ def pdb_to_aa(pdb_path):
   Returns:
     seq: Corresponding amino acid sequence of PDB file (str)
   """
-  with open(pdb_path) as f:
-    pdb_file = pdb.PDBFile.read(pdb_path)
-    atoms  = pdb_file.get_structure()
-    residues = get_residues(atoms)[1]
+  pdb_file = pdb.PDBFile.read(pdb_path)
+  atoms  = pdb_file.get_structure()
+  residues = get_residues(atoms)[1]
   return ''.join([ProteinSequence.convert_letter_3to1(r) for r in residues])
 
 

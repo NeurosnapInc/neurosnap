@@ -22,7 +22,6 @@ dependencies = [
   "requests>2",
   "numpy>1.0.0",
   "biopython",
-  "biotite",
   "openbabel-wheel",
   "rdkit",
   # "rdkit-pypi", # can swtich to this if "rdkit" does not work

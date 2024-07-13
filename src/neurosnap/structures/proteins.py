@@ -5,9 +5,7 @@ Provides functions and classes related to processing protein structure data.
 import os
 import numpy as np
 import Bio.PDB
-from biotite.structure.io import pdb
-from biotite.structure.residues import get_residues
-from biotite.sequence import ProteinSequence
+from Bio.PDB import PDBParser, PPBuilder
 from openbabel import pybel
 from rdkit import Chem
 import neurosnap.structures.lDDT as lDDT
@@ -91,22 +89,34 @@ def calc_pdm(pdb_path, chain=None):
       dm[row, col] = calc_residue_dist(residue_one, residue_two)
   return dm
 
-
 def pdb_to_aa(pdb_path):
   """
   -------------------------------------------------------
   Reads a PDB file to and gets its corresponding amino acid sequence.
-  Current implementation uses biotite and not biopython. 
+  Current implementation uses biopython and ignores all non-standard AA molecules.
+  All chains on all models are concatenated together. 
   -------------------------------------------------------
   Parameters:
     pdb_path: Path to input PDB file to read (str)
   Returns:
     seq: Corresponding amino acid sequence of PDB file (str)
   """
-  pdb_file = pdb.PDBFile.read(pdb_path)
-  atoms  = pdb_file.get_structure()
-  residues = get_residues(atoms)[1]
-  return ''.join([ProteinSequence.convert_letter_3to1(r) for r in residues])
+  parser = PDBParser(QUIET=True)
+  structure = parser.get_structure("structure", pdb_path)
+
+  # Create a Polypeptide builder
+  ppb = PPBuilder()
+  
+  # Extract the amino acid sequence
+  sequences = []
+  for pp in ppb.build_peptides(structure):
+    print(pp.get_sequence())
+    sequences.append(pp.get_sequence())
+  
+  # Concatenate sequences in case there are multiple chains
+  full_sequence = ''.join(map(str, sequences))
+  
+  return full_sequence
 
 
 def pdb_to_sdf(pdb_path, output_path, max_residues=50):

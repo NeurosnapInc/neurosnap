@@ -110,7 +110,6 @@ def pdb_to_aa(pdb_path):
   # Extract the amino acid sequence
   sequences = []
   for pp in ppb.build_peptides(structure):
-    print(pp.get_sequence())
     sequences.append(pp.get_sequence())
   
   # Concatenate sequences in case there are multiple chains

@@ -109,6 +109,40 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
     use_templates: Download templates as well using the mmseqs2 results (bool)
     pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
   """
+  print("""The MMseqs2 webserver used to generate this MSA is provided as a free service. Please help keep the authors of this service keep things free by appropriately citing them as follows:
+@article{Mirdita2019,
+  title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
+  author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
+  year         = 2019,
+  journal      = {Bioinformatics},
+  volume       = 35,
+  number       = 16,
+  pages        = {2856--2858},
+  doi          = {10.1093/bioinformatics/bty1057},
+  pmid         = 30615063,
+  comment      = {MMseqs2 search server}
+}
+@article{Mirdita2017,
+  title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
+  author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
+  year         = 2017,
+  journal      = {Nucleic Acids Res.},
+  volume       = 45,
+  number       = {D1},
+  pages        = {D170--D176},
+  doi          = {10.1093/nar/gkw1081},
+  pmid         = 27899574,
+  comment      = {Uniclust30/UniRef30 database}
+}
+@article{Mitchell2019,
+  title        = {{MGnify: the microbiome analysis resource in 2020}},
+  author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
+  year         = 2019,
+  journal      = {Nucleic Acids Res.},
+  doi          = {10.1093/nar/gkz1035},
+  comment      = {MGnify database}
+}
+  """)
   # API settings
   user_agent = "Neurosnap-OSS-Tools/v1" #TODO: Use actual version
   host_url = "https://api.colabfold.com"

@@ -441,7 +441,7 @@ def pad_seqs(seqs, char="-", truncate=False):
   return seqs
 
 
-def get_seqid(seq1, seq2, align=False):
+def get_seqid(seq1, seq2):
   """
   -------------------------------------------------------
   Calculate the pairwise sequence identity of two same length sequences or alignments.

@@ -21,6 +21,7 @@ requires-python = ">=3.8"
 dependencies = [
   "requests>2",
   "numpy>1.0.0",
+  "pandas",
   "biopython",
   "openbabel-wheel",
   "rdkit",

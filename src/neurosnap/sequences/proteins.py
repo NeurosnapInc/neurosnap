@@ -1,7 +1,6 @@
 """
 Provides functions and classes related to processing protein sequence data.
 """
-### IMPORTS ###
 import io
 import os
 import re

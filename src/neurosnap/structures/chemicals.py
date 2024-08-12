@@ -1,7 +1,6 @@
 """
 Provides functions and classes related to processing chemical data.
 """
-### IMPORTS ###
 from rdkit import Chem
 
 

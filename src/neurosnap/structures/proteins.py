@@ -1,7 +1,6 @@
 """
 Provides functions and classes related to processing protein structure data.
 """
-### IMPORTS ###
 import os
 import numpy as np
 import Bio.PDB

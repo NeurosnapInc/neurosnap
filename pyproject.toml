@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neurosnap"
-version = "0.0.51"
+version = "0.0.52"
 authors = [
   {name="Keaun Amani"},
 ]

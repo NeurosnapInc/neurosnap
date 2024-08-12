@@ -2,6 +2,7 @@
 Provides functions and classes related to processing chemical data.
 """
 from rdkit import Chem
+from neurosnap.log import logger
 
 
 ### FUNCTIONS ###
@@ -21,5 +22,5 @@ def smiles_to_sdf(smiles, output_path):
     with Chem.SDWriter(output_path) as w:
       w.write(m)
   except Exception as e:
-    print(f"Exception {e}")
+    logger.error(f"Exception {e}")
     raise ValueError(f'"{smiles}" is not a valid SMILES string, please follow the input instructions')

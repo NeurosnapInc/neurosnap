@@ -15,6 +15,8 @@ from Bio.PDB import PDBIO, PDBParser, PPBuilder
 from neurosnap.log import logger
 
 ### CONSTANTS ###
+# Codes for both RNA and DNA
+STANDARD_NUCLEOTIDES = {'A', 'T', 'C', 'G', 'U', 'DA', 'DT', 'DC', 'DG', 'DU'}
 ## Standard amino acids excluding the unknown character ("X")
 ## Currently excludes
 # O | pyl | pyrrolysine
@@ -114,6 +116,7 @@ class Protein():
       "chain": [],
       "res_id": [],
       "res_name": [],
+      "res_type": [],
       "atom": [],
       "atom_name": [],
       "bfactor": [],
@@ -126,10 +129,17 @@ class Protein():
       for chain in model:
         for res in chain:
           for atom in res:
+            # get residue type
+            res_type = "HETEROGEN"
+            if res.id[0] == " " and res.resname in AA_ABR_TO_CODE:
+              res_type = "AMINO_ACID"
+            elif res.id[0] == " " and res.resname in STANDARD_NUCLEOTIDES:
+              res_type = "NUCLEOTIDE"
             df["model"].append(model.id)
             df["chain"].append(chain.id)
             df["res_id"].append(res.id[1])
             df["res_name"].append(res.resname)
+            df["res_type"].append(res_type)
             df["atom"].append(atom.serial_number)
             df["atom_name"].append(atom.name)
             df["bfactor"].append(atom.bfactor)
@@ -138,6 +148,9 @@ class Protein():
             df["z"].append(atom.coord[2])
             df["mass"].append(atom.mass)
     self.df = pd.DataFrame(df)
+
+  def __repr__(self):
+    return f"<Neurosnap Protein: Models={self.models()}, Chains=[{', '.join(self.chains())}], Atoms={len(self.df)}>"
 
   def models(self):
     """
@@ -166,7 +179,7 @@ class Protein():
     """
     -------------------------------------------------------
     Returns the amino acid sequence of a target chain.
-    Ligands, small molecules, and nucleotides are ignored.#TODO CHeck nucleotides
+    Ligands, small molecules, and nucleotides are ignored.
     -------------------------------------------------------
     Parameters:
       model: The ID of the model containing the target chain (int)

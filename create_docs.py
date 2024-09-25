@@ -53,7 +53,7 @@ for filename in filenames:
         print(f"#### {func.split('(')[0]}")
         print(f"```py\n{import_statement}\n{filename_clean[-1]}.{func}\n```")
         print(f"\n**Description:**\n")
-        print(f"{desc}")
+        print(desc.strip())
         if params:
           print(f"\n**Parameters:**\n")
           for x in params:

@@ -1,6 +1,5 @@
 """
 Provides functions and classes related to processing protein sequence data.
-TODO: Move some stuff from proteins.py over here
 """
 import io
 import os

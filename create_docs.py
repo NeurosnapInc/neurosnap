@@ -72,7 +72,7 @@ for filename in filenames:
           else:
             desc_border2 = True
         elif desc_border1 == True and desc_border2 == False:
-          desc += line.strip()
+          desc += line.strip() + " "
         elif line.strip() == "Parameters:":
           params_border = True
         elif line.strip() == "Returns:":

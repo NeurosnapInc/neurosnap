@@ -4,14 +4,14 @@ Feature rich wrapper around protein structures using BioPython.
 - Easy way to get backbone coordinates
 """
 import io
-import tempfile
 import os
-
+import tempfile
 
 import pandas as pd
-from neurosnap.log import logger
 import requests
 from Bio.PDB import PDBIO, PDBParser, PPBuilder
+
+from neurosnap.log import logger
 
 
 class Protein():

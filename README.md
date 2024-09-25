@@ -1,4 +1,4 @@
-[![GitHub license](https://img.shields.io/github/license/NeurosnapInc/neurosnap)](https://github.com/NeurosnapInc/neurosnap/blob/master/LICENSE)
+[![GitHub license](https://img.shields.io/github/license/KeaunAmani/neurosnap)](https://github.com/KeaunAmani/neurosnap/blob/master/LICENSE)
 
 # Neurosnap Tools
 [![Neurosnap Header](https://raw.githubusercontent.com/NeurosnapInc/neurosnap/refs/heads/main/assets/header.webp)](https://neurosnap.ai/)

@@ -1,5 +1,7 @@
-[![GitHub license](https://img.shields.io/github/license/KeaunAmani/neurosnap)](https://github.com/KeaunAmani/neurosnap/blob/master/LICENSE)
-![GitHub commits since latest release](https://img.shields.io/github/commits-since/KeaunAmani/neurosnap/latest)
+[![GitHub license](https://img.shields.io/github/license/KeaunAmani/neurosnap?color=%234361EE)](https://github.com/KeaunAmani/neurosnap/blob/master/LICENSE)
+![GitHub Created At](https://img.shields.io/github/created-at/KeaunAmani/neurosnap?color=%234361EE)
+![GitHub last commit](https://img.shields.io/github/last-commit/KeaunAmani/neurosnap?color=%234361EE)
+![Discord](https://img.shields.io/discord/1014770343883309076)
 
 # Neurosnap Tools
 [![Neurosnap Header](https://raw.githubusercontent.com/NeurosnapInc/neurosnap/refs/heads/main/assets/header.webp)](https://neurosnap.ai/)

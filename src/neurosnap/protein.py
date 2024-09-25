@@ -152,6 +152,29 @@ class Protein():
   def __repr__(self):
     return f"<Neurosnap Protein: Models={self.models()}, Chains=[{', '.join(self.chains())}], Atoms={len(self.df)}>"
 
+  def __call__(self, model = None, chain = None, res_type = None):
+    """
+    -------------------------------------------------------
+    Returns a selection of a copy of the internal dataframe
+    that matches the provided query. If no queries are
+    provided, will return a copy of the internal dataframe.
+    -------------------------------------------------------
+    Parameters:
+      model...: If provided, returned atoms must match this model (int)
+      chain...: If provided, returned atoms must match this chain (int)
+      res_type: If provided, returned atoms must match this res_type (int)
+    Returns:
+      df: Copy of the internal dataframe that matches the input query (pandas.core.frame.DataFrame)
+    """
+    df = self.df.copy()
+    if model is not None:
+      df = df.loc[df.model == model]
+    if chain is not None:
+      df = df.loc[df.chain == chain]
+    if res_type is not None:
+      df = df.loc[df.res_type == res_type]
+    return df
+
   def models(self):
     """
     -------------------------------------------------------

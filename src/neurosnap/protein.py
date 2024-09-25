@@ -1,7 +1,7 @@
 """
 Provides functions and classes related to processing protein data as well as
 a feature rich wrapper around protein structures using BioPython.
-# TODO:
+TODO:
 - Easy way to get backbone coordinates
 """
 import io

@@ -6,6 +6,9 @@ Collection of useful bioinformatic functions and tools for various computational
 
 This a package developed by Keaun Amani at [neurosnap.ai](https://neurosnap.ai/). You are welcome to use this code and contribute as you see fit. We are currently working on expanding this package as well to add support for more common functions.
 
+# Contributions
+We welcome contributions to this package. If you have a feature that you want to code or have added, submit a pull request or an issue.
+
 # Installation
 ```sh
 ## ensure you have openbabel installed for the python bindings
@@ -211,7 +214,3 @@ Aligns two pdb structures by their longest chain using the first pdb as the refe
 ##### Parameters:
 - **ref_pdb**:  Reference protein to align to (str)
 - **sample_pdb**:  Sample protein to be modified and aligned to the reference (str)
-
-
-# Contributions
-We welcome contributions to this package. If you have a feature that you want to code or have added, submit a pull request or an issue.

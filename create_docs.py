@@ -52,15 +52,15 @@ for filename in filenames:
         comment_border2 = True
         print(f"#### {func.split('(')[0]}")
         print(f"```py\n{import_statement}\n{filename_clean[-1]}.{func}\n```")
-        print(f"\n**Description:**\n")
+        print(f"##### Description:")
         print(desc.strip())
         if params:
-          print(f"\n**Parameters:**\n")
+          print(f"##### Parameters:")
           for x in params:
             t,d = x.split(":", 1)
             print(f"- **{t.strip('.')}**: {d}")
         if returns:
-          print(f"\n**Returns:**\n")
+          print(f"##### Returns:")
           for x in returns:
             t,d = x.split(":", 1)
             print(f"- **{t.strip('.')}**: {d}")

@@ -26,6 +26,7 @@ def read_chains(pdb_path):
   structure = parser.get_structure("pdb", pdb_path)
   return list(set(chain.id for chain in structure[0] if chain.id.strip()))
 
+
 def read_pdb(pdb_path):
   """
   -------------------------------------------------------
@@ -47,6 +48,7 @@ def read_pdb(pdb_path):
         protein[chain.id].append(resi.id[1])
     protein[chain.id] = sorted(set(protein[chain.id])) # in case the PDB is really weird
   return protein
+
 
 def calc_pdm(pdb_path, chain=None):
   """
@@ -87,6 +89,7 @@ def calc_pdm(pdb_path, chain=None):
     for col, residue_two in enumerate(chain):
       dm[row, col] = calc_residue_dist(residue_one, residue_two)
   return dm
+
 
 def pdb_to_aa(pdb_path):
   """

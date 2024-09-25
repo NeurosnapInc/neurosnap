@@ -1,5 +1,6 @@
 """
-Feature rich wrapper around protein structures using BioPython.
+Provides functions and classes related to processing protein data as well as
+a feature rich wrapper around protein structures using BioPython.
 # TODO:
 - Easy way to get backbone coordinates
 """
@@ -13,7 +14,63 @@ from Bio.PDB import PDBIO, PDBParser, PPBuilder
 
 from neurosnap.log import logger
 
+### CONSTANTS ###
+## Standard amino acids excluding the unknown character ("X")
+## Currently excludes
+# O | pyl | pyrrolysine
+# U | sec | selenocysteine
+# B | asx | asparagine/aspartic acid
+# Z | glx | glutamine/glutamic acid
+# J | xle | leucine/isoleucine
+# X | UNK | unknown codon
+# * | TRM | termination codon
+STANDARD_AAs = "ACDEFGHIKLMNPQRSTVWY"
 
+## Full amino acids table
+AAs_FULL_TABLE = [
+  ['A', 'ALA', 'ALANINE'],
+  ['R', 'ARG', 'ARGININE'],
+  ['N', 'ASN', 'ASPARAGINE'],
+  ['D', 'ASP', 'ASPARTIC ACID'],
+  ['C', 'CYS', 'CYSTEINE'],
+  ['Q', 'GLN', 'GLUTAMINE'],
+  ['E', 'GLU', 'GLUTAMIC ACID'],
+  ['G', 'GLY', 'GLYCINE'],
+  ['H', 'HIS', 'HISTIDINE'],
+  ['I', 'ILE', 'ISOLEUCINE'],
+  ['L', 'LEU', 'LEUCINE'],
+  ['K', 'LYS', 'LYSINE'],
+  ['M', 'MET', 'METHIONINE'],
+  ['F', 'PHE', 'PHENYLALANINE'],
+  ['P', 'PRO', 'PROLINE'],
+  ['S', 'SER', 'SERINE'],
+  ['T', 'THR', 'THREONINE'],
+  ['W', 'TRP', 'TRYPTOPHAN'],
+  ['Y', 'TYR', 'TYROSINE'],
+  ['V', 'VAL', 'VALINE'],
+  ['O', 'PYL', 'PYRROLYSINE'],
+  ['U', 'SEC', 'SELENOCYSTEINE'],
+  ['B', 'ASX', 'ASPARAGINE/ASPARTIC ACID'],
+  ['Z', 'GLX', 'GLUTAMINE/GLUTAMIC ACID'],
+  ['J', 'XLE', 'LEUCINE/ISOLEUCINE'],
+  ['X', 'UNK', 'UNKNOWN CODON'],
+]
+AA_CODE_TO_ABR = {}
+AA_CODE_TO_NAME = {}
+AA_ABR_TO_CODE = {}
+AA_ABR_TO_NAME = {}
+AA_NAME_TO_CODE = {}
+AA_NAME_TO_ABR = {}
+for code,abr,name in AAs_FULL_TABLE:
+  AA_CODE_TO_ABR[code] = abr
+  AA_CODE_TO_NAME[code] = name
+  AA_ABR_TO_CODE[abr] = code
+  AA_ABR_TO_NAME[abr] = name
+  AA_NAME_TO_ABR[name] = abr
+  AA_NAME_TO_CODE[name] = code
+
+
+### CLASSES ###
 class Protein():
   def __init__(self, pdb):
     """
@@ -134,3 +191,30 @@ class Protein():
     io = PDBIO()
     io.set_structure(self.structure)
     io.save(fpath, preserve_atom_numbering = True)
+
+
+### FUNCTIONS ###
+def getAA(query):
+  """
+  -------------------------------------------------------
+  Efficiently get any amino acid using either their 1 letter code,
+  3 letter abbreviation, or full name. See AAs_FULL_TABLE
+  for a list of all supported amino acids and codes.
+  -------------------------------------------------------
+  Parameters:
+    query: Amino acid code, abbreviation, or name (str)
+  Returns:
+    code: Amino acid 1 letter abbreviation / code (str)
+    abr.: Amino acid 3 letter abbreviation / code (str)
+    name: Amino acid full name (str)
+  """
+  query = query.upper()
+  try:
+    if len(query) == 1:
+      return query, AA_CODE_TO_ABR[query], AA_CODE_TO_NAME[query]
+    elif len(query) == 3:
+      return AA_ABR_TO_CODE[query], query, AA_ABR_TO_NAME[query]
+    else:
+      return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
+  except KeyError:
+    raise ValueError(f"Unknown amino acid for {query}")

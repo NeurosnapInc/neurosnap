@@ -1,5 +1,6 @@
-# Neurosnap Tools
+[![GitHub license](https://img.shields.io/github/license/NeurosnapInc/neurosnap)](https://github.com/NeurosnapInc/neurosnap/blob/master/LICENSE)
 
+# Neurosnap Tools
 [![Neurosnap Header](https://raw.githubusercontent.com/NeurosnapInc/neurosnap/refs/heads/main/assets/header.webp)](https://neurosnap.ai/)
 
 Collection of useful bioinformatic functions and tools for various computational biology pipelines. Primarily designed for working with amino acid sequences and chemical structures.

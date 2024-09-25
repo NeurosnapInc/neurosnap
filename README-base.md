@@ -23,13 +23,3 @@ pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
 
 # Usage
 Note that all functions have their own documentation within the code. We recommend checking those documentation blocks when confused.
-## Package Structure
-This package is organized into the following sections:
-```
-neurosnap/
-├── sequences/
-│   └── proteins.py
-└── structures/
-    └── chemicals.py
-    └── proteins.py
-```

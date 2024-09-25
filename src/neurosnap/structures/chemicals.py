@@ -11,6 +11,9 @@ def smiles_to_sdf(smiles, output_path):
   -------------------------------------------------------
   Converts a SMILES string to an sdf file.
   Will overwrite existing results.
+  NOTE: This function does the bare minimum in terms of
+  generating the SDF molecule. The conformers.py module
+  should be used in most cases.
   -------------------------------------------------------
   Parameters:
     smiles.....: Smiles string to parse and convert (str)

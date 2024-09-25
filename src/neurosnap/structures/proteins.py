@@ -1,5 +1,6 @@
 """
 Provides functions and classes related to processing protein structure data.
+# TODO: Refactor like the rest for consistency or integrate into protein.py.
 """
 import os
 import numpy as np

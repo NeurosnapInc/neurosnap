@@ -22,9 +22,7 @@ pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
 ```
 
 # Usage
-Note that all functions have their own documentation within the code. We recommend checking those documentation blocks when confused.
-
-### CHEMICALS MODULE
+Note that all functions have their own documentation within the code. We recommend checking those documentation blocks when confused.### CHEMICALS MODULE
 Provides functions and classes related to processing chemical data.
 
 #### smiles_to_sdf
@@ -35,7 +33,7 @@ chemicals.smiles_to_sdf(smiles, output_path)
 
 **Description:**
 
-Converts a SMILES string to an sdf file.Will overwrite existing results.NOTE: This function does the bare minimum in terms ofgenerating the SDF molecule. The conformers.py moduleshould be used in most cases.
+Converts a SMILES string to an sdf file. Will overwrite existing results. NOTE: This function does the bare minimum in terms of generating the SDF molecule. The conformers.py module should be used in most cases.
 
 **Parameters:**
 
@@ -59,7 +57,7 @@ protein.getAA(query)
 
 **Description:**
 
-Efficiently get any amino acid using either their 1 letter code,3 letter abbreviation, or full name. See AAs_FULL_TABLEfor a list of all supported amino acids and codes.
+Efficiently get any amino acid using either their 1 letter code, 3 letter abbreviation, or full name. See AAs_FULL_TABLE for a list of all supported amino acids and codes.
 
 **Parameters:**
 
@@ -82,7 +80,7 @@ conformers.find_LCS(mol)
 
 **Description:**
 
-Find the largest common substructure (LCS) between aset of conformers and aligns all conformers to the LCS.Raises an exception if no LCS detected.
+Find the largest common substructure (LCS) between a set of conformers and aligns all conformers to the LCS. Raises an exception if no LCS detected.
 
 **Parameters:**
 
@@ -100,7 +98,7 @@ conformers.minimize(mol, method="MMFF94", e_delta=5)
 
 **Description:**
 
-Minimize conformer energy (kcal/mol) using RDkitand filter out conformers below a certain threshold.
+Minimize conformer energy (kcal/mol) using RDkit and filter out conformers below a certain threshold.
 
 **Parameters:**
 
@@ -121,7 +119,7 @@ conformers.generate(input_mol, output_name="unique_conformers", write_multi=Fals
 
 **Description:**
 
-Generate conformers for an input molecule.Performs the following actions in order:1. Generate conformers using ETKDG method2. Minimize energy of all conformers and remove those below a dynamic threshold3. Align & create RMSD matrix of all conformers4. Clusters using Butina method to remove structurally redundant conformers5. Return most energetically favorable conformers in each cluster
+Generate conformers for an input molecule. Performs the following actions in order: 1. Generate conformers using ETKDG method 2. Minimize energy of all conformers and remove those below a dynamic threshold 3. Align & create RMSD matrix of all conformers 4. Clusters using Butina method to remove structurally redundant conformers 5. Return most energetically favorable conformers in each cluster
 
 **Parameters:**
 
@@ -148,7 +146,7 @@ proteins.read_chains(pdb_path)
 
 **Description:**
 
-Reads the chains in PDB file and returns a list of their names/IDs.Only does so for the first model within the pdb file.
+Reads the chains in PDB file and returns a list of their names/IDs. Only does so for the first model within the pdb file.
 
 **Parameters:**
 
@@ -184,7 +182,7 @@ proteins.calc_pdm(pdb_path, chain=None)
 
 **Description:**
 
-Calculates distance matrix for a given input protein usingthe C-Alpha distances between residues.
+Calculates distance matrix for a given input protein using the C-Alpha distances between residues.
 
 **Parameters:**
 
@@ -203,7 +201,7 @@ proteins.pdb_to_aa(pdb_path)
 
 **Description:**
 
-Reads a PDB file to and gets its corresponding amino acid sequence.Current implementation uses biopython and ignores all non-standard AA molecules.All chains on all models are concatenated together.
+Reads a PDB file to and gets its corresponding amino acid sequence. Current implementation uses biopython and ignores all non-standard AA molecules. All chains on all models are concatenated together.
 
 **Parameters:**
 
@@ -221,7 +219,7 @@ proteins.pdb_to_sdf(pdb_path, output_path, max_residues=50)
 
 **Description:**
 
-Converts a protein/peptide in a PDB file to an SDF.PDB file can only include a single entry.Will overwrite existing results.Validates the SDF file with RDkit on completion
+Converts a protein/peptide in a PDB file to an SDF. PDB file can only include a single entry. Will overwrite existing results. Validates the SDF file with RDkit on completion
 
 **Parameters:**
 
@@ -237,7 +235,7 @@ proteins.align_pdbs(ref_pdb, sample_pdb)
 
 **Description:**
 
-Aligns two pdb structures by their longest chain using the first pdb as the reference.Reference pdb is not modified or overwritten while the sample pdb is overwritten.
+Aligns two pdb structures by their longest chain using the first pdb as the reference. Reference pdb is not modified or overwritten while the sample pdb is overwritten.
 
 **Parameters:**
 
@@ -298,7 +296,7 @@ msa.write_msa(output_path, names, seqs)
 
 **Description:**
 
-Writes an MSA, a3m, or fasta to a file.Makes no assumptions about the validity of names orsequences. Will throw an exception if len(names) != len(seqs)
+Writes an MSA, a3m, or fasta to a file. Makes no assumptions about the validity of names or sequences. Will throw an exception if len(names) != len(seqs)
 
 **Parameters:**
 
@@ -314,7 +312,7 @@ msa.pad_seqs(seqs, char="-", truncate=False)
 
 **Description:**
 
-Pads all sequences to the longest sequences lengthusing a character from the right side.
+Pads all sequences to the longest sequences length using a character from the right side.
 
 **Parameters:**
 
@@ -353,7 +351,7 @@ msa.run_phmmer(query, database, evalue=10, cpu=2)
 
 **Description:**
 
-Run phmmer using a query sequence against a database andreturn all the sequences that are considered as hits.Shameless stolen and adapted from https://github.com/seanrjohnson/protein_gibbs_sampler/blob/a5de349d5f6a474407fc0f19cecf39a0447a20a6/src/pgen/utils.py#L263
+Run phmmer using a query sequence against a database and return all the sequences that are considered as hits. Shameless stolen and adapted from https://github.com/seanrjohnson/protein_gibbs_sampler/blob/a5de349d5f6a474407fc0f19cecf39a0447a20a6/src/pgen/utils.py#L263
 
 **Parameters:**
 
@@ -417,7 +415,7 @@ msa.run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
 
 **Description:**
 
-Generate an a3m MSA using the ColabFold API. Will writeall results to the output directory including templates,MSAs, and accompanying files.Code originally adapted from: https://github.com/sokrypton/ColabFold/
+Generate an a3m MSA using the ColabFold API. Will write all results to the output directory including templates, MSAs, and accompanying files. Code originally adapted from: https://github.com/sokrypton/ColabFold/
 
 **Parameters:**
 

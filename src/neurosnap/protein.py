@@ -3,8 +3,15 @@ Feature rich wrapper around protein structures using BioPython.
 # TODO:
 - Easy way to get backbone coordinates
 """
+import io
+import tempfile
+import os
+
+
 import pandas as pd
-from Bio.PDB import PDBParser, PPBuilder, PDBIO
+from neurosnap.log import logger
+import requests
+from Bio.PDB import PDBIO, PDBParser, PPBuilder
 
 
 class Protein():
@@ -15,11 +22,33 @@ class Protein():
     Utilizes the biopython protein structure under the hood.
     -------------------------------------------------------
     Parameters:
-      pdb: Can be either a file handle or filepath for a PDB file (str|io.IOBase)
+      pdb: Can be either a file handle, PDB filepath, PDB ID, or UniProt ID (str|io.IOBase)
     """
+    if isinstance(pdb, io.IOBase):
+      pass
+    elif isinstance(pdb, str):
+      if not os.path.exists(pdb):
+        if len(pdb) == 4: # check if a valid PDB ID
+          r = requests.get(f"https://files.rcsb.org/download/{pdb.upper()}.pdb")
+          r.raise_for_status()
+          with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as temp_file:
+            temp_file.write(r.content)
+            pdb = temp_file.name
+            logger.info("Found matching structure in RCSB PDB, downloading and using that.")
+        else: # check if provided a uniprot ID and fetch from AF2
+          r = requests.get(f"https://alphafold.ebi.ac.uk/api/prediction/{pdb.upper()}")
+          r = requests.get(r.json()[0]["pdbUrl"])
+          r.raise_for_status()
+          with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as temp_file:
+            temp_file.write(r.content)
+            pdb = temp_file.name
+            logger.info("Found matching structure in AF-DB, downloading and using that.")
+    else:
+      raise ValueError("Invalid input type provided. Can be either a file handle, PDB filepath, PDB ID, or UniProt ID")
+
+    # load structure
     parser = PDBParser()
     self.structure = parser.get_structure("structure", pdb)
-
     assert len(self.structure), ValueError("No models found. Structure appears to be empty.")
 
     # create a pandas dataframe similar to that of biopandas (https://biopandas.github.io/biopandas/)

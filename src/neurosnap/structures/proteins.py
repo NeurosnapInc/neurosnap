@@ -160,6 +160,7 @@ def align_pdbs(ref_pdb, sample_pdb):
   -------------------------------------------------------
   Aligns two pdb structures by their longest chain using the first pdb as the reference.
   Reference pdb is not modified or overwritten while the sample pdb is overwritten.
+  TODO: REMOVE, replaced by Protein.calculate_rmsd()
   -------------------------------------------------------
   Parameters:
     ref_pdb...: Filepath for reference protein to align to (str)

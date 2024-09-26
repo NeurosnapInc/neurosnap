@@ -8,9 +8,16 @@ import io
 import os
 import tempfile
 
+import matplotlib
+import matplotlib.animation as animation
+import matplotlib.patheffects
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import requests
 from Bio.PDB import PDBIO, PDBParser, PPBuilder
+from matplotlib import collections as mcoll
+from scipy.special import expit as sigmoid
 
 from neurosnap.log import logger
 
@@ -254,3 +261,151 @@ def getAA(query):
       return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
+
+
+def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95):
+  """
+  -------------------------------------------------------
+  Plot the famous Pseudo 3D projection of a protein.
+  Algorithm originally written By Dr. Sergey Ovchinnikov.
+  Adapted from https://github.com/sokrypton/ColabDesign/blob/16e03c23f2a30a3dcb1775ac25e107424f9f7352/colabdesign/shared/plot.py
+  -------------------------------------------------------
+  Parameters:
+    xyz.......: XYZ coordinates of the protein (numpy.ndarray|pandas.core.frame.DataFrame)
+    c.........: 1D array of all the values to use to color the protein, defaults to residue index (numpy.ndarray)
+    ax........: Matplotlib axes object to add the figure to (matplotlib.axes._axes.Axes)
+    chainbreak: Minimum distance in angstroms between chains / segments before being considered a chain break (int)
+    Ls........: Allows handling multiple chains or segments by providing the lengths of each chain, ensuring that chains are visualized separately without unwanted connections (list)
+    cmap......: Matplotlib color map to use for coloring the protein (str)
+    line_w....: Line width (float)
+    cmin......: Minimum value for coloring, automatically calculated if None (float)
+    cmax......: Maximum value for coloring, automatically calculated if None (float)
+    zmin......: Minimum z coordinate values, automatically calculated if None (float)
+    zmax......: Maximum z coordinate values, automatically calculated if None (float)
+    shadow....: Shadow intensity between 0 and 1 inclusive, lower numbers mean darker more intense shadows (float)
+  Returns:
+    lc: LineCollection object of whats been drawn (matplotlib.collections.LineCollection)
+  """
+  def rescale(a, amin=None, amax=None):
+    a = np.copy(a)
+    if amin is None:
+      amin = a.min()
+    if amax is None:
+      amax = a.max()
+    a[a < amin] = amin
+    a[a > amax] = amax
+    return (a - amin)/(amax - amin)
+
+  # clip color values and produce warning if necesarry
+  if c is not None and cmin is not None and cmax is not None:
+    if np.any(c < cmin):
+      logger.warn(f"The provided c colors array contains values that are less than cmin ({cmin}). Out of range values will be clipped into range.")
+    if np.any(c > cmax):
+      logger.warn(f"The provided c colors array contains values that are greater than cmax ({cmax}). Out of range values will be clipped into range.")
+    c = np.clip(c, a_min=cmin, a_max=cmax)
+
+  # make segments and colors for each segment
+  xyz = np.asarray(xyz)
+  if Ls is None:
+    seg = np.concatenate([xyz[:,None],np.roll(xyz,1,0)[:,None]],axis=1)
+    c_seg = np.arange(len(seg))[::-1] if c is None else (c + np.roll(c,1,0))/2
+  else:
+    Ln = 0
+    seg = []
+    c_seg = []
+    for L in Ls:
+      sub_xyz = xyz[Ln:Ln+L]
+      seg.append(np.concatenate([sub_xyz[:,None],np.roll(sub_xyz,1,0)[:,None]],axis=1))
+      if c is not None:
+        sub_c = c[Ln:Ln+L]
+        c_seg.append((sub_c + np.roll(sub_c,1,0))/2)
+      Ln += L
+    seg = np.concatenate(seg,0)
+    c_seg = np.arange(len(seg))[::-1] if c is None else np.concatenate(c_seg,0)
+  
+  # set colors
+  c_seg = rescale(c_seg,cmin,cmax)  
+  if isinstance(cmap, str):
+    if cmap == "gist_rainbow": 
+      c_seg *= 0.75
+    colors = matplotlib.colormaps[cmap](c_seg)
+  else:
+    colors = cmap(c_seg)
+  
+  # remove segments that aren't connected
+  seg_len = np.sqrt(np.square(seg[:,0] - seg[:,1]).sum(-1))
+  if chainbreak is not None:
+    idx = seg_len < chainbreak
+    seg = seg[idx]
+    seg_len = seg_len[idx]
+    colors = colors[idx]
+
+  seg_mid = seg.mean(1)
+  seg_xy = seg[...,:2]
+  seg_z = seg[...,2].mean(-1)
+  order = seg_z.argsort()
+
+  # add shade/tint based on z-dimension
+  z = rescale(seg_z,zmin,zmax)[:,None]
+
+  # add shadow (make lines darker if they are behind other lines)
+  seg_len_cutoff = (seg_len[:,None] + seg_len[None,:]) / 2
+  seg_mid_z = seg_mid[:,2]
+  seg_mid_dist = np.sqrt(np.square(seg_mid[:,None] - seg_mid[None,:]).sum(-1))
+  shadow_mask = sigmoid(seg_len_cutoff * 2.0 - seg_mid_dist) * (seg_mid_z[:,None] < seg_mid_z[None,:])
+  np.fill_diagonal(shadow_mask,0.0)
+  shadow_mask = shadow ** shadow_mask.sum(-1,keepdims=True)
+
+  seg_mid_xz = seg_mid[:,:2]
+  seg_mid_xydist = np.sqrt(np.square(seg_mid_xz[:,None] - seg_mid_xz[None,:]).sum(-1))
+  tint_mask = sigmoid(seg_len_cutoff/2 - seg_mid_xydist) * (seg_mid_z[:,None] < seg_mid_z[None,:])
+  np.fill_diagonal(tint_mask,0.0)
+  tint_mask = 1 - tint_mask.max(-1,keepdims=True)
+
+  colors[:,:3] = colors[:,:3] + (1 - colors[:,:3]) * (0.50 * z + 0.50 * tint_mask) / 3
+  colors[:,:3] = colors[:,:3] * (0.20 + 0.25 * z + 0.55 * shadow_mask)
+
+  set_lim = False
+  if ax is None:
+    fig, ax = plt.subplots()
+    fig.set_figwidth(5)
+    fig.set_figheight(5)
+    set_lim = True
+  else:
+    fig = ax.get_figure()
+    if ax.get_xlim() == (0,1):
+      set_lim = True
+      
+  if set_lim:
+    xy_min = xyz[:,:2].min() - line_w
+    xy_max = xyz[:,:2].max() + line_w
+    ax.set_xlim(xy_min,xy_max)
+    ax.set_ylim(xy_min,xy_max)
+
+  ax.set_aspect("equal")
+    
+  # determine linewidths
+  width = fig.bbox_inches.width * ax.get_position().width
+  linewidths = line_w * 72 * width / np.diff(ax.get_xlim())
+
+  lines = mcoll.LineCollection(seg_xy[order], colors=colors[order], linewidths=linewidths, path_effects=[matplotlib.patheffects.Stroke(capstyle="round")])
+  return ax.add_collection(lines)
+
+
+def animate_pseudo_3D(fig, frames, interval=200, repeat_delay=0, repeat=True):
+  """
+  -------------------------------------------------------
+  Animate multiple Pseudo 3D LineCollection objects.
+  -------------------------------------------------------
+  Parameters:
+    fig.........: Matplotlib figure that contains all the frames (matplotlib.figure.Figure)
+    frames......: List of LineCollection objects (matplotlib.collections.LineCollection)
+    interval....: Delay between frames in milliseconds (int)
+    repeat_delay: The delay in milliseconds between consecutive animation runs, if repeat is True (int)
+    repeat......: Whether the animation repeats when the sequence of frames is completed (bool)
+  Returns:
+    ani: Animation of all the different frames (matplotlib.animation.ArtistAnimation)
+  """
+  frames = [[frame] for frame in frames]
+  ani = animation.ArtistAnimation(fig, frames, interval=interval, repeat_delay=repeat_delay, repeat=repeat, blit=True)
+  return ani

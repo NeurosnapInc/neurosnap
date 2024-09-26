@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, PDBParser, PPBuilder, SASA
+from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder
 from Bio.PDB.mmcifio import MMCIFIO
+from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
 from matplotlib import collections as mcoll
 from scipy.special import expit as sigmoid
@@ -419,6 +420,53 @@ class Protein():
                   salt_bridges.append((pos_res, neg_res))
     return salt_bridges
 
+  def find_hydrophobic_residues(self, model=None, chain=None):
+    """
+    -------------------------------------------------------
+    Identify hydrophobic residues in the structure.
+    -------------------------------------------------------
+    Parameters:
+      model: Model ID to extract from, if not provided checks all models (int)
+      chain: Chain ID to extract from, if not provided checks all chains (str)
+    Returns:
+      hydrophobic_residues: List of tuples (model_id, chain_id, residue) for hydrophobic residues (list)
+    -------------------------------------------------------
+    """
+    hydrophobic_residues = []
+
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            for res in c:
+              if res.get_resname() in HYDROPHOBIC_RESIDUES:
+                hydrophobic_residues.append((m.id, c.id, res))
+
+    return hydrophobic_residues
+
+  def find_missing_residues(self):
+    """
+    -------------------------------------------------------
+    Identify missing residues in the structure based on residue numbering.
+    Useful for identifying gaps in the structure.
+    -------------------------------------------------------
+    Parameters:
+      chain: The chain ID to inspect, if not provided inspects all chains (str)
+    Returns:
+      missing_residues: List of missing residue positions (list<int>)
+    -------------------------------------------------------
+    """
+    missing_residues = []
+    
+    for model in self.structure:
+      for chain in model:
+        residues = sorted(res.id[1] for res in chain)
+        for i in range(len(residues) - 1):
+          if residues[i+1] != residues[i] + 1:
+            missing_residues.extend(range(residues[i] + 1, residues[i+1]))
+    
+    return missing_residues
+
   def calculate_rmsd(self, other_protein, model1=0, model2=0, chain1=None, chain2=None, align=True):
     """
     -------------------------------------------------------
@@ -496,29 +544,6 @@ class Protein():
     dist_matrix = np.sqrt(np.sum((ca_atoms[:, np.newaxis] - ca_atoms[np.newaxis, :]) ** 2, axis=-1))
     return dist_matrix
 
-  def find_missing_residues(self):
-    """
-    -------------------------------------------------------
-    Identify missing residues in the structure based on residue numbering.
-    Useful for identifying gaps in the structure.
-    -------------------------------------------------------
-    Parameters:
-      chain: The chain ID to inspect, if not provided inspects all chains (str)
-    Returns:
-      missing_residues: List of missing residue positions (list<int>)
-    -------------------------------------------------------
-    """
-    missing_residues = []
-    
-    for model in self.structure:
-      for chain in model:
-        residues = sorted(res.id[1] for res in chain)
-        for i in range(len(residues) - 1):
-          if residues[i+1] != residues[i] + 1:
-            missing_residues.extend(range(residues[i] + 1, residues[i+1]))
-    
-    return missing_residues
-
   def calculate_center_of_mass(self, model=None, chain=None):
     """
     -------------------------------------------------------
@@ -570,29 +595,36 @@ class Protein():
     total_sasa = sum([residue.sasa for residue in structure_model.get_residues() if residue.sasa])
     return total_sasa
 
-  def find_hydrophobic_residues(self, model=None, chain=None):
+  def calculate_protein_volume(self, model=0, chain=None):
     """
     -------------------------------------------------------
-    Identify hydrophobic residues in the structure.
+    Compute an estimate of the protein volume using the van der Waals radii.
+    Uses the sum of atom radii to compute the volume.
     -------------------------------------------------------
     Parameters:
-      model: Model ID to extract from, if not provided checks all models (int)
-      chain: Chain ID to extract from, if not provided checks all chains (str)
+      model: Model ID to compute volume for, defaults to 0 (int)
+      chain: Chain ID to compute, if not provided computes for all chains (str)
     Returns:
-      hydrophobic_residues: List of tuples (model_id, chain_id, residue) for hydrophobic residues (list)
+      volume: Estimated volume in Å³ (float)
     -------------------------------------------------------
     """
-    hydrophobic_residues = []
+    vdw_radii = {
+        "H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8
+    }  # Example radii in Å
+    volume = 0
 
     for m in self.structure:
       if model is None or m.id == model:
         for c in m:
           if chain is None or c.id == chain:
             for res in c:
-              if res.get_resname() in HYDROPHOBIC_RESIDUES:
-                hydrophobic_residues.append((m.id, c.id, res))
-
-    return hydrophobic_residues
+              if is_aa(res):
+                for atom in res:
+                  element = atom.element
+                  if element in vdw_radii:
+                    radius = vdw_radii[element]
+                    volume += (4/3) * np.pi * (radius ** 3)
+    return volume
 
   def save(self, fpath, format="pdb"):
     """

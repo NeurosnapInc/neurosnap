@@ -483,6 +483,37 @@ class Protein():
     
     return missing_residues
 
+  def calculate_center_of_mass(self, model=None, chain=None):
+    """
+    -------------------------------------------------------
+    Calculate the center of mass of the protein.
+    Considers only atoms with defined masses.
+    -------------------------------------------------------
+    Parameters:
+      model: Model ID to calculate for, if not provided calculates for all models (int)
+      chain: Chain ID to calculate for, if not provided calculates for all chains (str)
+    Returns:
+      center_of_mass: A 3D numpy array representing the center of mass (numpy.ndarray)
+    -------------------------------------------------------
+    """
+    total_mass = 0
+    weighted_coords = np.zeros(3)
+
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            for res in c:
+              for atom in res:
+                if atom.mass is not None:
+                  total_mass += atom.mass
+                  weighted_coords += atom.mass * atom.coord
+    
+    if total_mass == 0:
+      raise ValueError("No atoms with mass found in the selected structure.")
+    
+    return weighted_coords / total_mass
+
   def save(self, fpath):
     """
     -------------------------------------------------------

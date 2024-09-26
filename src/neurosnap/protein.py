@@ -181,6 +181,34 @@ class Protein():
       df = df.loc[df.res_type == res_type]
     return df
 
+  def __sub__(self, other_protein):
+    """
+    -------------------------------------------------------
+    Automatically calculate the RMSD of two proteins.
+    Model used will naively be the first models that have
+    identical backbone shapes.
+    Essentially just wraps around self.calculate_rmsd()
+    -------------------------------------------------------
+    Parameters:
+      other_protein: Another Protein object to compare against (Protein)
+    Returns:
+      df: Copy of the internal dataframe that matches the input query (pandas.core.frame.DataFrame)
+    """
+    # Get models for each structure using backbone shape
+    model1 = None
+    model2 = None
+    for m1 in self.structure:
+      backbone1 = self.get_backbone(model=m1.id)
+      for m2 in other_protein.structure:
+        backbone2 = other_protein.get_backbone(model=m2.id)
+        if backbone1.shape == backbone2.shape:
+          model1 = m1.id
+          model2 = m2.id
+          break
+    
+    assert model1 is not None, ValueError("Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided.")
+    return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
+
   def models(self):
     """
     -------------------------------------------------------
@@ -351,7 +379,7 @@ class Protein():
               pass  # Skip if no SG atom found
     return disulfide_pairs
 
-  def calculate_rmsd(self, other_protein, model=0, chain=None, align=True):
+  def calculate_rmsd(self, other_protein, model1=0, model2=0, chain1=None, chain2=None, align=True):
     """
     -------------------------------------------------------
     Calculate RMSD between the current structure and another protein.
@@ -359,8 +387,10 @@ class Protein():
     -------------------------------------------------------
     Parameters:
       other_protein: Another Protein object to compare against (Protein)
-      model.......: Model ID to compare, must be present in both structures (int)
-      chain.......: Chain ID to compare, if not provided compares all chains (str)
+      model1......: Model ID of original protein to compare (int)
+      model2......: Model ID of other protein to compare (int)
+      chain1......: Chain ID of original protein, if not provided compares all chains (str)
+      chain2......: Chain ID of other protein, if not provided compares all chains (str)
       align.......: Whether to align the structures first using Superimposer (bool)
     Returns:
       rmsd: The root-mean-square deviation between the two structures (float)
@@ -368,8 +398,13 @@ class Protein():
     """
     backbone_atoms = ["N", "CA", "C"]
     # ensure models are present
-    assert model in self.models(), ValueError(f"Model {model} was not found in current protein.")
-    assert model in other_protein.models(), ValueError(f"Model {model} was not found in other protein.")
+    assert model1 in self.models(), ValueError(f"Model {model1} was not found in current protein.")
+    assert model2 in other_protein.models(), ValueError(f"Model {model2} was not found in other protein.")
+
+    # Get backbone coordinates of both structures
+    backbone1 = self.get_backbone(model=model1, chain=chain1)
+    backbone2 = other_protein.get_backbone(model=model2, chain=chain2)
+    assert backbone1.shape == backbone2.shape, "Structures must have the same number of backbone atoms for RMSD calculation."
 
     # Use the Superimposer to align the structures
     if align:
@@ -383,14 +418,12 @@ class Protein():
         return atoms
 
       sup = Superimposer()
-      sup.set_atoms(aux(self.structure[model]), aux(other_protein.structure[model]))
+      sup.set_atoms(aux(self.structure[model1]), aux(other_protein.structure[model2]))
       sup.apply(other_protein.structure)  # Apply the transformation to the other protein
 
-    # Get backbone coordinates of both structures
-    backbone1 = self.get_backbone(model=model, chain=chain)
-    backbone2 = other_protein.get_backbone(model=model, chain=chain)
-    
-    assert backbone1.shape == backbone2.shape, "Structures must have the same number of backbone atoms for RMSD calculation."
+    # Get new backbone coordinates of both structures
+    backbone1 = self.get_backbone(model=model1, chain=chain1)
+    backbone2 = other_protein.get_backbone(model=model2, chain=chain2)
     
     diff = backbone1 - backbone2
     rmsd = np.sqrt(np.sum(diff ** 2) / backbone1.shape[0])

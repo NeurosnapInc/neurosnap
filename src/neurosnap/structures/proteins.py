@@ -258,16 +258,12 @@ def score_af2m_binding(af2m_dict: str, binder_len: int, target_len: int = None) 
   """
   target_end = (binder_len + target_len) if target_len is not None else None
 
-  # --------------------------------------------------------------------------
   # pLDDT
-  #
   plddt_array = np.array(af2m_dict["plddt"])
   plddt_binder = np.mean(plddt_array[:binder_len])
   plddt_target = np.mean(plddt_array[binder_len:target_end])
 
-  # --------------------------------------------------------------------------
   # PAE
-  #
   pae_array = np.array(af2m_dict["pae"])
 
   pae_binder = np.mean(pae_array[:binder_len, :binder_len])

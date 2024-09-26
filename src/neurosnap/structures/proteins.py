@@ -8,7 +8,7 @@ import Bio.PDB
 from Bio.PDB import PDBParser, PPBuilder
 from openbabel import pybel
 from rdkit import Chem
-import neurosnap.structures.lDDT as lDDT
+import neurosnap.lDDT as lDDT
 
 
 ### FUNCTIONS ###
@@ -56,6 +56,7 @@ def calc_pdm(pdb_path, chain=None):
   -------------------------------------------------------
   Calculates distance matrix for a given input protein using
   the C-Alpha distances between residues.
+  TODO: REMOVE, replaced by Protein.calculate_distance_matrix()
   -------------------------------------------------------
   Parameters:
     pdb_path: Path to PDB file you want to calculate the distance matrix of (str)

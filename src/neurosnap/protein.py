@@ -537,6 +537,30 @@ class Protein():
     total_sasa = sum([residue.sasa for residue in structure_model.get_residues() if residue.sasa])
     return total_sasa
 
+  def find_hydrophobic_residues(self, model=None, chain=None):
+    """
+    -------------------------------------------------------
+    Identify hydrophobic residues in the structure.
+    -------------------------------------------------------
+    Parameters:
+      model: Model ID to extract from, if not provided checks all models (int)
+      chain: Chain ID to extract from, if not provided checks all chains (str)
+    Returns:
+      hydrophobic_residues: List of tuples (model_id, chain_id, residue) for hydrophobic residues (list)
+    -------------------------------------------------------
+    """
+    hydrophobic_residues = []
+
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            for res in c:
+              if res.get_resname() in HYDROPHOBIC_RESIDUES:
+                hydrophobic_residues.append((m.id, c.id, res))
+
+    return hydrophobic_residues
+
   def save(self, fpath, format="pdb"):
     """
     -------------------------------------------------------

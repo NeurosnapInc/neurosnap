@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, PDBParser, PPBuilder
-from Bio.PDB.MMCIFIO import MMCIFIO
+from Bio.PDB import PDBIO, PDBParser, PPBuilder, SASA
+from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Superimposer import Superimposer
 from matplotlib import collections as mcoll
 from scipy.special import expit as sigmoid
@@ -514,6 +514,26 @@ class Protein():
       raise ValueError("No atoms with mass found in the selected structure.")
     
     return weighted_coords / total_mass
+
+  def calculate_surface_area(self, model=0, level="R"):
+    """
+    -------------------------------------------------------
+    Calculate the solvent-accessible surface area (SASA) of the protein.
+    Utilizes Biopython's SASA module.
+    -------------------------------------------------------
+    Parameters:
+      model: The model ID to calculate SASA for, defaults to 0 (int)
+      level: The level at which ASA values are assigned, which can be one of "A" (Atom), "R" (Residue), "C" (Chain), "M" (Model), or "S" (Structure). The ASA value of an entity is the sum of all ASA values of its children. (str)
+    Returns:
+      sasa: Solvent-accessible surface area in Å² (float)
+    -------------------------------------------------------
+    """
+    assert model in self.models(), ValueError(f"Model {model} is not currently present.")
+    structure_model = self.structure[model]
+    sasa_calculator = SASA.ShrakeRupley()
+    sasa_calculator.compute(structure_model, level=level)
+    total_sasa = sum([residue.sasa for residue in structure_model.get_residues() if residue.sasa])
+    return total_sasa
 
   def save(self, fpath, format="pdb"):
     """

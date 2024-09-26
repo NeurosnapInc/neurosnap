@@ -265,6 +265,38 @@ class Protein():
         for res in residues_to_remove:
           chain.detach_child(res.id)
 
+  def remove_non_biopolymers(self, model=None, chain=None):
+    """
+    -------------------------------------------------------
+    Removes all ligands, heteroatoms, and non-biopolymer
+    residues from the selected structure. Non-biopolymer
+    residues are considered to be any residues that are not
+    standard amino acids or standard nucleotides (DNA/RNA).
+    If no model or chain is provided, it will remove from
+    the entire structure.
+    -------------------------------------------------------
+    Parameters:
+      model: The model ID to process, if not provided will use all models (int)
+      chain: The chain ID to process, if not provided will use all chains (str)
+    -------------------------------------------------------
+    """
+    # List of standard amino acids and nucleotides (biopolymer residues)
+    biopolymer_residues = set(AA_ABR_TO_CODE.keys()).union(STANDARD_NUCLEOTIDES)
+    
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            # Identify non-biopolymer residues (ligands, heteroatoms, etc.)
+            residues_to_remove = [
+              res for res in c
+              if res.get_resname() not in biopolymer_residues
+            ]
+
+            # Remove non-biopolymer residues
+            for res in residues_to_remove:
+              c.detach_child(res.id)
+
   def save(self, fpath):
     """
     -------------------------------------------------------

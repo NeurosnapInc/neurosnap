@@ -524,11 +524,11 @@ class Protein():
       format: File format to save in, either 'pdb' or 'mmcif' (str)
     -------------------------------------------------------
     """
-    if format == 'pdb':
+    if format == "pdb":
       io = PDBIO()
       io.set_structure(self.structure)
       io.save(fpath, preserve_atom_numbering=True)
-    elif format == 'mmcif':
+    elif format == "mmcif":
       from Bio.PDB.MMCIFIO import MMCIFIO
       mmcif_io = MMCIFIO()
       mmcif_io.set_structure(self.structure)

@@ -34,6 +34,8 @@ STANDARD_NUCLEOTIDES = {'A', 'T', 'C', 'G', 'U', 'DA', 'DT', 'DC', 'DG', 'DU'}
 # X | UNK | unknown codon
 # * | TRM | termination codon
 STANDARD_AAs = "ACDEFGHIKLMNPQRSTVWY"
+# List of hydrophobic residues
+HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
 
 ## Full amino acids table
 AAs_FULL_TABLE = [

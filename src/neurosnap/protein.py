@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import requests
 from Bio.PDB import PDBIO, PDBParser, PPBuilder
+from Bio.PDB.MMCIFIO import MMCIFIO
 from Bio.PDB.Superimposer import Superimposer
 from matplotlib import collections as mcoll
 from scipy.special import expit as sigmoid
@@ -530,7 +531,6 @@ class Protein():
       io.set_structure(self.structure)
       io.save(fpath, preserve_atom_numbering=True)
     elif format == "mmcif":
-      from Bio.PDB.MMCIFIO import MMCIFIO
       mmcif_io = MMCIFIO()
       mmcif_io.set_structure(self.structure)
       mmcif_io.save(fpath)

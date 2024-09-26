@@ -377,6 +377,29 @@ class Protein():
     dist_matrix = np.sqrt(np.sum((ca_atoms[:, np.newaxis] - ca_atoms[np.newaxis, :]) ** 2, axis=-1))
     return dist_matrix
 
+  def find_missing_residues(self):
+    """
+    -------------------------------------------------------
+    Identify missing residues in the structure based on residue numbering.
+    Useful for identifying gaps in the structure.
+    -------------------------------------------------------
+    Parameters:
+      chain: The chain ID to inspect, if not provided inspects all chains (str)
+    Returns:
+      missing_residues: List of missing residue positions (list<int>)
+    -------------------------------------------------------
+    """
+    missing_residues = []
+    
+    for model in self.structure:
+      for chain in model:
+        residues = sorted(res.id[1] for res in chain)
+        for i in range(len(residues) - 1):
+          if residues[i+1] != residues[i] + 1:
+            missing_residues.extend(range(residues[i] + 1, residues[i+1]))
+    
+    return missing_residues
+
   def save(self, fpath):
     """
     -------------------------------------------------------

@@ -386,6 +386,39 @@ class Protein():
               pass  # Skip if no SG atom found
     return disulfide_pairs
 
+  def find_salt_bridges(self, model=None, chain=None, cutoff=4.0):
+    """
+    -------------------------------------------------------
+    Identify salt bridges between oppositely charged residues.
+    A salt bridge is defined as an interaction between
+    a positively charged residue (Lys, Arg) and a negatively
+    charged residue (Asp, Glu) within a given cutoff distance.
+    -------------------------------------------------------
+    Parameters:
+      model: Model ID to search, if not provided searches all models (int)
+      chain: Chain ID to search, if not provided searches all chains (str)
+      cutoff: Maximum distance for a salt bridge (float)
+    Returns:
+      salt_bridges: List of residue pairs forming salt bridges (list<tuple>)
+    -------------------------------------------------------
+    """
+    positive_residues = {'LYS', 'ARG'}
+    negative_residues = {'ASP', 'GLU'}
+    salt_bridges = []
+
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            pos_residues = [res for res in c if res.get_resname() in positive_residues]
+            neg_residues = [res for res in c if res.get_resname() in negative_residues]
+            for pos_res in pos_residues:
+              for neg_res in neg_residues:
+                dist = pos_res['CA'] - neg_res['CA']  # Use alpha-carbon distance as a proxy
+                if dist < cutoff:
+                  salt_bridges.append((pos_res, neg_res))
+    return salt_bridges
+
   def calculate_rmsd(self, other_protein, model1=0, model2=0, chain1=None, chain2=None, align=True):
     """
     -------------------------------------------------------

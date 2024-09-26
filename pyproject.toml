@@ -25,7 +25,9 @@ dependencies = [
   "biopython",
   "openbabel-wheel",
   "rdkit",
-  # "rdkit-pypi", # can swtich to this if "rdkit" does not work
+  "scipy",
+  "matplotlib",
+  # "rdkit-pypi", # can switch this if "rdkit" does not work
 ]
 
 [project.urls]

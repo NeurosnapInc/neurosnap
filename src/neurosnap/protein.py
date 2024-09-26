@@ -223,6 +223,48 @@ class Protein():
     ppb = PPBuilder()
     return ppb.build_peptides(self.structure[model][chain])[0].get_sequence()
 
+  def renumber(self, model=None, chain=None, start=1):
+    """
+    -------------------------------------------------------
+    Renumbers all selected residues. If selection does not
+    exist this function will do absolutely nothing.
+    -------------------------------------------------------
+    Parameters:
+      model: The model ID to renumber, if not provided will use all models (int)
+      chain: The chain ID to renumber, if not provided will use all chains (str)
+      start: Starting value to increment from, default 1 (int)
+    """
+    def aux(start):
+      for m in self.structure:
+        if model is None or m.id == model:
+          for c in m:
+            if chain is None or c.id == chain:
+              for res in c:
+                # Renumber residue
+                res.id = (res.id[0], start, res.id[2])
+                start += 1
+    # perform initial renumbering to avoid collisions
+    aux(-100000)
+    # perform actual renumbering
+    aux(start)
+
+  def remove_waters(self):
+    """
+    -------------------------------------------------------
+    Removes all water molecules (residues named 'WAT' or 'HOH') 
+    from the structure. It is suggested to call .renumber()
+    afterwards as well.
+    -------------------------------------------------------
+    """
+    for model in self.structure:
+      for chain in model:
+        # Identify water molecules and mark them for removal
+        residues_to_remove = [res for res in chain if res.get_resname() in ['WAT', 'HOH']]
+
+        # Remove water molecules
+        for res in residues_to_remove:
+          chain.detach_child(res.id)
+
   def save(self, fpath):
     """
     -------------------------------------------------------

@@ -350,6 +350,33 @@ class Protein():
               pass  # Skip if no SG atom found
     return disulfide_pairs
 
+  def calculate_distance_matrix(self, model=None, chain=None):
+    """
+    -------------------------------------------------------
+    Calculate the distance matrix for all alpha-carbon (CA) atoms in the chain.
+    Useful for creating contact maps or proximity analyses.
+    -------------------------------------------------------
+    Parameters:
+      model: The model ID to calculate the distance matrix for, default 0 (int)
+      chain: The chain ID to calculate, if not provided calculates for all chains (str)
+    Returns:
+      dist_matrix: A 2D numpy array representing the distance matrix (numpy.ndarray)
+    -------------------------------------------------------
+    """
+    ca_atoms = []
+
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            for res in c:
+              if 'CA' in res:
+                ca_atoms.append(res['CA'].coord)
+
+    ca_atoms = np.array(ca_atoms)
+    dist_matrix = np.sqrt(np.sum((ca_atoms[:, np.newaxis] - ca_atoms[np.newaxis, :]) ** 2, axis=-1))
+    return dist_matrix
+
   def save(self, fpath):
     """
     -------------------------------------------------------

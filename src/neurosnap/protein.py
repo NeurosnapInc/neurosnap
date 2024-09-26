@@ -514,17 +514,27 @@ class Protein():
     
     return weighted_coords / total_mass
 
-  def save(self, fpath):
+  def save(self, fpath, format="pdb"):
     """
     -------------------------------------------------------
-    Save the PDB as a file. Will overwrite existing file.
+    Save the structure as a PDB or mmCIF file.
     -------------------------------------------------------
     Parameters:
-      fpath: File path to where you want to save the PDB (str)
+      fpath: File path where you want to save the structure (str)
+      format: File format to save in, either 'pdb' or 'mmcif' (str)
+    -------------------------------------------------------
     """
-    io = PDBIO()
-    io.set_structure(self.structure)
-    io.save(fpath, preserve_atom_numbering = True)
+    if format == 'pdb':
+      io = PDBIO()
+      io.set_structure(self.structure)
+      io.save(fpath, preserve_atom_numbering=True)
+    elif format == 'mmcif':
+      from Bio.PDB.MMCIFIO import MMCIFIO
+      mmcif_io = MMCIFIO()
+      mmcif_io.set_structure(self.structure)
+      mmcif_io.save(fpath)
+    else:
+      raise ValueError("Format must be 'pdb' or 'mmcif'.")
 
 
 ### FUNCTIONS ###

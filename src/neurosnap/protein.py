@@ -524,6 +524,7 @@ class Protein():
       format: File format to save in, either 'pdb' or 'mmcif' (str)
     -------------------------------------------------------
     """
+    format = format.lower()
     if format == "pdb":
       io = PDBIO()
       io.set_structure(self.structure)

@@ -1,8 +1,6 @@
 """
 Provides functions and classes related to processing protein data as well as
 a feature rich wrapper around protein structures using BioPython.
-TODO:
-- Easy way to get backbone coordinates
 """
 import io
 import os
@@ -296,6 +294,32 @@ class Protein():
             # Remove non-biopolymer residues
             for res in residues_to_remove:
               c.detach_child(res.id)
+
+  def get_backbone(self, model=None, chain=None):
+    """
+    -------------------------------------------------------
+    Extract backbone atoms (N, CA, C) from the structure.
+    If model or chain is not provided, extracts from all models/chains.
+    -------------------------------------------------------
+    Parameters:
+      model: Model ID to extract from, if not provided, all models are included (int)
+      chain: Chain ID to extract from, if not provided, all chains are included (str)
+    Returns:
+      backbone: A numpy array of backbone coordinates (Nx3) (numpy.ndarray)
+    """
+    backbone_atoms = ["N", "CA", "C"]
+    backbone_coords = []
+    
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            for res in c:
+              for atom in res:
+                if atom.name in backbone_atoms:
+                  backbone_coords.append(atom.coord)
+
+    return np.array(backbone_coords)
 
   def save(self, fpath):
     """

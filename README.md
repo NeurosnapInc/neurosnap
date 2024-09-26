@@ -63,6 +63,45 @@ Efficiently get any amino acid using either their 1 letter code, 3 letter abbrev
 - **abr**:  Amino acid 3 letter abbreviation / code (str)
 - **name**:  Amino acid full name (str)
 
+#### plot_pseudo_3D
+```py
+from neurosnap import protein
+protein.plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95)
+```
+##### Description:
+Plot the famous Pseudo 3D projection of a protein. Algorithm originally written By Dr. Sergey Ovchinnikov. Adapted from https://github.com/sokrypton/ColabDesign/blob/16e03c23f2a30a3dcb1775ac25e107424f9f7352/colabdesign/shared/plot.py
+##### Parameters:
+- **xyz**:  XYZ coordinates of the protein (numpy.ndarray|pandas.core.frame.DataFrame)
+- **c**:  1D array of all the values to use to color the protein, defaults to residue index (numpy.ndarray)
+- **ax**:  Matplotlib axes object to add the figure to (matplotlib.axes._axes.Axes)
+- **chainbreak**:  Minimum distance in angstroms between chains / segments before being considered a chain break (int)
+- **Ls**:  Allows handling multiple chains or segments by providing the lengths of each chain, ensuring that chains are visualized separately without unwanted connections (list)
+- **cmap**:  Matplotlib color map to use for coloring the protein (str)
+- **line_w**:  Line width (float)
+- **cmin**:  Minimum value for coloring, automatically calculated if None (float)
+- **cmax**:  Maximum value for coloring, automatically calculated if None (float)
+- **zmin**:  Minimum z coordinate values, automatically calculated if None (float)
+- **zmax**:  Maximum z coordinate values, automatically calculated if None (float)
+- **shadow**:  Shadow intensity between 0 and 1 inclusive, lower numbers mean darker more intense shadows (float)
+##### Returns:
+- **lc**:  LineCollection object of whats been drawn (matplotlib.collections.LineCollection)
+
+#### animate_pseudo_3D
+```py
+from neurosnap import protein
+protein.animate_pseudo_3D(fig, frames, interval=200, repeat_delay=0, repeat=True)
+```
+##### Description:
+Animate multiple Pseudo 3D LineCollection objects.
+##### Parameters:
+- **fig**:  Matplotlib figure that contains all the frames (matplotlib.figure.Figure)
+- **frames**:  List of LineCollection objects (matplotlib.collections.LineCollection)
+- **interval**:  Delay between frames in milliseconds (int)
+- **repeat_delay**:  The delay in milliseconds between consecutive animation runs, if repeat is True (int)
+- **repeat**:  Whether the animation repeats when the sequence of frames is completed (bool)
+##### Returns:
+- **ani**:  Animation of all the different frames (matplotlib.animation.ArtistAnimation)
+
 ### CONFORMERS MODULE
 Provides functions and classes related to processing and generating conformers.
 

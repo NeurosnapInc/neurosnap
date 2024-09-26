@@ -321,6 +321,35 @@ class Protein():
 
     return np.array(backbone_coords)
 
+  def find_disulfide_bonds(self, threshold=2.05):
+    """
+    -------------------------------------------------------
+    Find disulfide bonds between Cysteine residues in the structure.
+    Looks for SG-SG bonds within a threshold distance (default 2.05 Å).
+    -------------------------------------------------------
+    Parameters:
+      threshold: Maximum distance to consider a bond between SG atoms (float)
+    Returns:
+      disulfide_pairs: List of tuples of residue pairs forming disulfide bonds (list<tuple>)
+    -------------------------------------------------------
+    """
+    disulfide_pairs = []
+    
+    for model in self.structure:
+      for chain in model:
+        cysteines = [res for res in chain if res.get_resname() == 'CYS']
+        for i, res1 in enumerate(cysteines):
+          for res2 in cysteines[i+1:]:
+            try:
+              sg1 = res1['SG']
+              sg2 = res2['SG']
+              distance = sg1 - sg2
+              if distance < threshold:
+                disulfide_pairs.append((res1, res2))
+            except KeyError:
+              pass  # Skip if no SG atom found
+    return disulfide_pairs
+
   def save(self, fpath):
     """
     -------------------------------------------------------

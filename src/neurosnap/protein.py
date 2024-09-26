@@ -89,10 +89,14 @@ class Protein():
     Parameters:
       pdb: Can be either a file handle, PDB filepath, PDB ID, or UniProt ID (str|io.IOBase)
     """
+    self.title = "Untitled Protein"
     if isinstance(pdb, io.IOBase):
       pass
     elif isinstance(pdb, str):
-      if not os.path.exists(pdb):
+      if os.path.exists(pdb):
+        self.title = pdb.split("/")[-1]
+      else:
+        self.title = pdb.upper()
         if len(pdb) == 4: # check if a valid PDB ID
           r = requests.get(f"https://files.rcsb.org/download/{pdb.upper()}.pdb")
           r.raise_for_status()
@@ -156,7 +160,7 @@ class Protein():
     self.df = pd.DataFrame(df)
 
   def __repr__(self):
-    return f"<Neurosnap Protein: Models={self.models()}, Chains=[{', '.join(self.chains())}], Atoms={len(self.df)}>"
+    return f"<Neurosnap Protein: Title={self.title} Models={self.models()}, Chains=[{', '.join(self.chains())}], Atoms={len(self.df)}>"
 
   def __call__(self, model = None, chain = None, res_type = None):
     """

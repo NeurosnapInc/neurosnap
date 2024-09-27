@@ -29,7 +29,9 @@ pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
 Various interactive jupyter notebooks can be found in the [example_notebooks directory](https://github.com/NeurosnapInc/neurosnap/tree/main/example_notebooks) of this repository. For additional tutorials check out the [Official Neurosnap Blog](https://neurosnap.ai/blog) or [join our discord server](https://discord.gg/2yDZX6rTh4).
 
 # Usage
-Note that all functions have their own documentation within the code. We recommend checking those documentation blocks when confused.### CHEMICALS MODULE
+Note that all functions have their own documentation within the code. We recommend checking those documentation blocks when confused.
+
+### CHEMICALS MODULE
 Provides functions and classes related to processing chemical data.
 
 #### smiles_to_sdf
@@ -47,10 +49,6 @@ Converts a SMILES string to an sdf file. Will overwrite existing results. NOTE: 
 Provides functions and classes related to processing protein data as well as
 
 a feature rich wrapper around protein structures using BioPython.
-
-TODO:
-
-- Easy way to get backbone coordinates
 
 #### getAA
 ```py
@@ -186,7 +184,7 @@ from neurosnap.structures import proteins
 proteins.calc_pdm(pdb_path, chain=None)
 ```
 ##### Description:
-Calculates distance matrix for a given input protein using the C-Alpha distances between residues.
+Calculates distance matrix for a given input protein using the C-Alpha distances between residues. TODO: REMOVE, replaced by Protein.calculate_distance_matrix()
 ##### Parameters:
 - **pdb_path**:  Path to PDB file you want to calculate the distance matrix of (str)
 - **chain**:  The chain to use. By default will just use the longest chain (str)
@@ -223,7 +221,7 @@ from neurosnap.structures import proteins
 proteins.align_pdbs(ref_pdb, sample_pdb)
 ```
 ##### Description:
-Aligns two pdb structures by their longest chain using the first pdb as the reference. Reference pdb is not modified or overwritten while the sample pdb is overwritten.
+Aligns two pdb structures by their longest chain using the first pdb as the reference. Reference pdb is not modified or overwritten while the sample pdb is overwritten. TODO: REMOVE, replaced by Protein.calculate_rmsd()
 ##### Parameters:
 - **ref_pdb**:  Filepath for reference protein to align to (str)
 - **sample_pdb**:  Filepath for sample protein to be modified and aligned to the reference (str)
@@ -240,6 +238,25 @@ Calculates the lDDT (Local Distance Difference Test) between two proteins.
 - **sample_pdb**:  Filepath for sample protein (str)
 ##### Returns:
 - **lDDT**:  The lDDT score of the two proteins which ranges between 0-1 (float)
+
+#### score_af2m_binding
+```py
+from neurosnap.structures import proteins
+proteins.score_af2m_binding(af2m_dict: str, binder_len: int, target_len: int = None) -> dict
+```
+##### Description:
+Calculate binding scores from AlphaFold2 multimer prediction results. The binder is assumed to be the first part of the sequence up to `binder_len`, with the target being the remainder, unless otherwise specified. Adapted from: https://github.com/hgbrian/biomodals/blob/990c010e711c1e8a7221294e0370c6f37927eae6/modal_alphafold.py#L33
+##### Parameters:
+- **af_multimer_dict**:  From AlphaFold2 multimer JSON file (str)
+- **binder_len**:  Length of the binder protein sequence (int)
+- **target_len**:  Length of the target protein sequence (int)
+##### Returns:
+- **dict**:  A dictionary containing the following scores:
+- **- plddt_binder (float)**:  Average pLDDT score for the binder.
+- **- plddt_target (float)**:  Average pLDDT score for the target.
+- **- pae_binder (float)**:  Average PAE score within the binder.
+- **- pae_target (float)**:  Average PAE score within the target.
+- **- ipae (float)**:  Average PAE score for the binder-target interaction.
 
 ### MSA MODULE
 Provides functions and classes related to processing protein sequence data.

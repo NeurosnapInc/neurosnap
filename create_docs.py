@@ -10,6 +10,8 @@ filenames = [
   "src/neurosnap/msa.py",
 ]
 
+print() #  required
+
 for filename in filenames:
   module_doc_start = False
   module_doc_end = False

@@ -44,6 +44,7 @@ class NeurosnapAPI:
                 "Link": link
             }
         formatted_services = [format_service(service) for service in services]
+        format_type = format_type.lower()
         if format_type == "table":
             print(tabulate(formatted_services, headers="keys"))
         elif format_type == "json":
@@ -73,6 +74,7 @@ class NeurosnapAPI:
             if 'Submitted' in job:
                 timestamp = job['Submitted'] // 1000  # Convert milliseconds to seconds
                 job['Submitted'] = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')
+        format_type = format_type.lower()
         if format_type == "table":
             print(tabulate(jobs, headers="keys"))
         elif format_type == "json":
@@ -163,6 +165,7 @@ class NeurosnapAPI:
         # Parse the response
         files = response.json()
         # Optionally format the output based on the format_type
+        format_type = format_type.lower()
         if format_type == "table":
             # Print the file details in a table format
             print(tabulate(files, headers=["File Name", "File Size"]))
@@ -282,6 +285,7 @@ class NeurosnapAPI:
         assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
 
         team_info = response.json()
+        format_type = format_type.lower()
         if format_type == 'table':
             # Prepare data for tabulation
             members_table = [
@@ -295,7 +299,6 @@ class NeurosnapAPI:
             print(f"Jobs Count: {team_info.get('jobsCount', 0)}")
             print(f"Max Seats: {team_info.get('seatsMax', 0)}")
             print(f"Is Leader: {team_info.get('is_leader', False)}")
-
         elif format_type == 'json':
             # Print the team information in JSON format
             print(json.dumps(team_info, indent=2))
@@ -324,6 +327,7 @@ class NeurosnapAPI:
             if 'Submitted' in job:
                 timestamp = job['Submitted'] // 1000  # Convert milliseconds to seconds
                 job['Submitted'] = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')
+        format_type = format_type.lower()
         if format_type == "table":
             print(tabulate(jobs, headers="keys"))
         elif format_type == "json":

@@ -1,4 +1,5 @@
 import json
+import urllib.parse
 from datetime import datetime
 from typing import Dict, List
 
@@ -35,7 +36,8 @@ class NeurosnapAPI:
         def format_service(service):
             """Helper to format individual service details."""
             title = service.get("title")
-            link = f"https://neurosnap.ai/service/{title.replace(" ", "%20")}"
+            link = urllib.parse.quote(title)
+            link = f"https://neurosnap.ai/service/{link}"
             return {
                 "Title": title,
                 "Beta": service.get("beta"),

@@ -6,6 +6,8 @@ from typing import Dict, List
 import requests
 from tabulate import tabulate
 
+from neurosnap.log import logger
+
 
 class NeurosnapAPI:
     BASE_URL = "https://neurosnap.ai/api"
@@ -13,6 +15,13 @@ class NeurosnapAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.headers = {"X-API-KEY": self.api_key}
+        # test to ensure authenticated
+        r = requests.head(f"{self.BASE_URL}/jobs", headers=self.headers)
+        if r.status_code != 200:
+            logger.error(f"Invalid API key provided (status code: {r.status_code}). Failed to setup the NeurosnapAPI object, please ensure your API key is correct.")
+            raise ValueError("Invalid token provided")
+        else:
+            logger.info("Successfully connected to the Neurosnap API.\n - For information visit https://neurosnap.ai/blog/post/66b00dacec3f2aa9b4be703a\n - For support visit https://neurosnap.ai/support\n - For bug reports visit https://github.com/NeurosnapInc/neurosnap")
 
     def get_services(self, format_type: str = None) -> List[Dict]:
         """

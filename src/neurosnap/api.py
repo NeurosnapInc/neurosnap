@@ -1,8 +1,10 @@
-import requests
-from typing import Dict, List
-from tabulate import tabulate
-from datetime import datetime
 import json
+from datetime import datetime
+from typing import Dict, List
+
+import requests
+from tabulate import tabulate
+
 
 class NeurosnapAPI:
     BASE_URL = "https://neurosnap.ai/api"

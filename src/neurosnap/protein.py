@@ -124,44 +124,8 @@ class Protein():
     self.structure = parser.get_structure("structure", pdb)
     assert len(self.structure), ValueError("No models found. Structure appears to be empty.")
 
-    # create a pandas dataframe similar to that of biopandas (https://biopandas.github.io/biopandas/)
-    df = {
-      "model": [],
-      "chain": [],
-      "res_id": [],
-      "res_name": [],
-      "res_type": [],
-      "atom": [],
-      "atom_name": [],
-      "bfactor": [],
-      "x": [],
-      "y": [],
-      "z": [],
-      "mass": [],
-    }
-    for model in self.structure:
-      for chain in model:
-        for res in chain:
-          for atom in res:
-            # get residue type
-            res_type = "HETEROGEN"
-            if res.id[0] == " " and res.resname in AA_ABR_TO_CODE:
-              res_type = "AMINO_ACID"
-            elif res.id[0] == " " and res.resname in STANDARD_NUCLEOTIDES:
-              res_type = "NUCLEOTIDE"
-            df["model"].append(model.id)
-            df["chain"].append(chain.id)
-            df["res_id"].append(res.id[1])
-            df["res_name"].append(res.resname)
-            df["res_type"].append(res_type)
-            df["atom"].append(atom.serial_number)
-            df["atom_name"].append(atom.name)
-            df["bfactor"].append(atom.bfactor)
-            df["x"].append(atom.coord[0])
-            df["y"].append(atom.coord[1])
-            df["z"].append(atom.coord[2])
-            df["mass"].append(atom.mass)
-    self.df = pd.DataFrame(df)
+    # generate the pandas dataframe similar to that of biopandas
+    self.generate_df()
 
   def __repr__(self):
     return f"<Neurosnap Protein: Title={self.title} Models={self.models()}, Chains=[{', '.join(self.chains())}], Atoms={len(self.df)}>"
@@ -240,6 +204,55 @@ class Protein():
     """
     return [chain.id for chain in self.structure[model] if chain.id.strip()]
   
+  def generate_df(self):
+    """
+    -------------------------------------------------------
+    Generate the biopandas-like dataframe and update the
+    value of self.df to the new dataframe.
+    This method should be called whenever the internal
+    protein structure is modified or has a transformation
+    applied to it.
+    Inspired by: https://biopandas.github.io/biopandas
+    -------------------------------------------------------
+    """
+    df = {
+      "model": [],
+      "chain": [],
+      "res_id": [],
+      "res_name": [],
+      "res_type": [],
+      "atom": [],
+      "atom_name": [],
+      "bfactor": [],
+      "x": [],
+      "y": [],
+      "z": [],
+      "mass": [],
+    }
+    for model in self.structure:
+      for chain in model:
+        for res in chain:
+          for atom in res:
+            # get residue type
+            res_type = "HETEROGEN"
+            if res.id[0] == " " and res.resname in AA_ABR_TO_CODE:
+              res_type = "AMINO_ACID"
+            elif res.id[0] == " " and res.resname in STANDARD_NUCLEOTIDES:
+              res_type = "NUCLEOTIDE"
+            df["model"].append(model.id)
+            df["chain"].append(chain.id)
+            df["res_id"].append(res.id[1])
+            df["res_name"].append(res.resname)
+            df["res_type"].append(res_type)
+            df["atom"].append(atom.serial_number)
+            df["atom_name"].append(atom.name)
+            df["bfactor"].append(atom.bfactor)
+            df["x"].append(atom.coord[0])
+            df["y"].append(atom.coord[1])
+            df["z"].append(atom.coord[2])
+            df["mass"].append(atom.mass)
+    self.df = pd.DataFrame(df)
+
   def get_aas(self, model, chain):
     """
     -------------------------------------------------------
@@ -282,6 +295,8 @@ class Protein():
     aux(-100000)
     # perform actual renumbering
     aux(start)
+    # update the pandas dataframe
+    self.generate_df()
 
   def remove_waters(self):
     """
@@ -299,6 +314,8 @@ class Protein():
         # Remove water molecules
         for res in residues_to_remove:
           chain.detach_child(res.id)
+    # update the pandas dataframe
+    self.generate_df()
 
   def remove_non_biopolymers(self, model=None, chain=None):
     """
@@ -331,6 +348,8 @@ class Protein():
             # Remove non-biopolymer residues
             for res in residues_to_remove:
               c.detach_child(res.id)
+    # update the pandas dataframe
+    self.generate_df()
 
   def get_backbone(self, model=None, chain=None):
     """
@@ -508,6 +527,8 @@ class Protein():
       sup = Superimposer()
       sup.set_atoms(aux(self.structure[model1]), aux(other_protein.structure[model2]))
       sup.apply(other_protein.structure)  # Apply the transformation to the other protein
+      # update the pandas dataframe
+      other_protein.generate_df()
 
     # Get new backbone coordinates of both structures
     backbone1 = self.get_backbone(model=model1, chain=chain1)

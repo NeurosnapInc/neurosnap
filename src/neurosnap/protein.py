@@ -595,6 +595,41 @@ class Protein():
       raise ValueError("No atoms with mass found in the selected structure.")
     
     return weighted_coords / total_mass
+  
+  def distances_from_com(self, model=None, chain=None):
+    """
+    Calculate the distances of all atoms from the center of mass (COM) of the protein.
+
+    This method computes the Euclidean distance between the coordinates of each atom
+    and the center of mass of the structure. The center of mass is calculated for the
+    specified model and chain, or for all models and chains if none are provided.
+
+    Parameters:
+    ----------
+    model : int, optional
+        The model ID to calculate for. If not provided, calculates for all models.
+    chain : str, optional
+        The chain ID to calculate for. If not provided, calculates for all chains.
+
+    Returns:
+    -------
+    distances : numpy.ndarray
+        A 1D NumPy array containing the distances (in Ångströms) between each atom 
+        and the center of mass.
+    """
+    com = self.calculate_center_of_mass(model=model, chain=chain)
+    distances = []
+
+    for m in self.structure:
+        if model is None or m.id == model:
+            for c in m:
+                if chain is None or c.id == chain:
+                    for res in c:
+                        for atom in res:
+                            distance = np.linalg.norm(atom.coord - com)
+                            distances.append(distance)
+    
+    return np.array(distances)  # Convert the list of distances to a NumPy array
 
   def calculate_surface_area(self, model=0, level="R"):
     """

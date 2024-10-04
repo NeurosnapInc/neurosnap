@@ -90,42 +90,42 @@ class NeurosnapAPI:
             print(json.dumps(jobs, indent=2))
         return jobs
     
-def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str]) -> str: 
-    """
-    Submit a Neurosnap job.
-    Parameters:
-    -----------
-    service_name : str
-        The name of the service to run.
-    files : Dict[str, str]
-        A dictionary mapping file names to file paths.
-    data : Dict[str, str]
-        A dictionary of additional data to be passed to the service.
-    Returns:
-    --------
-    str
-        The job ID of the submitted job.
-    --------
-    HTTPError: If the API request fails.
-    """
-    # Filter out data fields with value 'false'
-    filtered_data = {k: v for k, v in data.items() if v != 'false'}
-    
-    # Open the files in binary mode
-    files_dict = {k: open(v, 'rb') for k, v in files.items()}
-    
-    # Make the POST request
-    response = requests.post(
-        f"{self.BASE_URL}/job/submit/{service_name}",
-        headers=self.headers,
-        files=files_dict,
-        data=filtered_data
-    )
-    
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
-    
-    # Return the job ID
-    return response.json()
+    def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str]) -> str: 
+        """
+        Submit a Neurosnap job.
+        Parameters:
+        -----------
+        service_name : str
+            The name of the service to run.
+        files : Dict[str, str]
+            A dictionary mapping file names to file paths.
+        data : Dict[str, str]
+            A dictionary of additional data to be passed to the service.
+        Returns:
+        --------
+        str
+            The job ID of the submitted job.
+        --------
+        HTTPError: If the API request fails.
+        """
+        # Filter out data fields with value 'false'
+        filtered_data = {k: v for k, v in data.items() if v != 'false'}
+        
+        # Open the files in binary mode
+        files_dict = {k: open(v, 'rb') for k, v in files.items()}
+        
+        # Make the POST request
+        response = requests.post(
+            f"{self.BASE_URL}/job/submit/{service_name}",
+            headers=self.headers,
+            files=files_dict,
+            data=filtered_data
+        )
+        
+        assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+        
+        # Return the job ID
+        return response.json()
 
 
     def get_job_status(self, job_id: str) -> str:

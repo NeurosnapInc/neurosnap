@@ -190,7 +190,7 @@ class NeurosnapAPI:
             print(json.dumps(files, indent=2))
         return files
 
-    def get_job_file(self, job_id: str, file_type: str, file_name: str, share_id: str, save_path: str) -> tuple[str, bool]:
+    def get_job_file(self, job_id: str, file_type: str, file_name: str, share_id: str = None, save_path: str) -> tuple[str, bool]:
         """
         Fetches a specific file from a completed Neurosnap job and saves it to the specified path.
         Parameters:

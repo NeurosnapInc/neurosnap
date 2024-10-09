@@ -3,8 +3,11 @@ Provides functions and classes related to processing protein data as well as
 a feature rich wrapper around protein structures using BioPython.
 """
 import io
+import json
 import os
 import tempfile
+import time
+from typing import List, Union
 
 import matplotlib
 import matplotlib.animation as animation
@@ -731,6 +734,128 @@ def getAA(query):
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
 
+def foldseek_search(protein: Union['Protein', str], mode: str = '3diaa',
+                    databases: List[str] = None, max_retries: int = 10,
+                    retry_interval: int = 5, output_format: str = 'json') -> Union[str, pd.DataFrame]:
+    """
+    Perform a protein structure search using the Foldseek API.
+
+    Args:
+        protein: Either a Protein object or a path to a PDB file.
+        mode: Search mode ('3diaa' or 'tm-align').
+        databases: List of databases to search. Defaults to a predefined list if not provided.
+        max_retries: Maximum number of retries to check the job status.
+        retry_interval: Time in seconds between retries for checking job status.
+        output_format: Format of the output, either 'json' or 'dataframe'.
+
+    Returns:
+        Search results in the specified format (JSON string or pandas DataFrame).
+
+    Raises:
+        RuntimeError: If the job fails.
+        TimeoutError: If the job does not complete within the allotted retries.
+        ValueError: If an invalid output_format is specified.
+    """
+
+    BASE_URL = "https://search.foldseek.com/api"
+
+    # Default databases to search
+    if databases is None:
+        databases = [
+            'afdb50', 'afdb-swissprot', 'afdb-proteome', 'bfmd', 'cath50',
+            'mgnify_esm30', 'pdb100', 'gmgcl_id', 'bfvd'
+        ]
+
+    # Handle file input (Protein object or file path)
+    if isinstance(protein, Protein):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as temp_file:
+            protein.save(temp_file.name)
+            file_path = temp_file.name
+    else:
+        file_path = protein
+
+    # Submit the job to the Foldseek API
+    data = {
+        'mode': mode,
+        'database[]': databases
+    }
+    try:
+        with open(file_path, 'rb') as file:
+            files = {'q': file}
+            response = requests.post(f"{BASE_URL}/ticket", data=data, files=files)
+        response.raise_for_status()
+        job_id = response.json()['id']
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to submit job: {e}")
+
+    # Poll for job status until complete or max retries are reached
+    for attempt in range(max_retries):
+        try:
+            status_response = requests.get(f"{BASE_URL}/ticket/{job_id}")
+            status_response.raise_for_status()
+            status = status_response.json().get('status', 'ERROR')
+        except requests.RequestException as e:
+            raise RuntimeError(f"Failed to retrieve job status: {e}")
+
+        if status == 'COMPLETE':
+            break
+        elif status == 'ERROR':
+            raise RuntimeError("Job failed")
+
+        time.sleep(retry_interval)
+    else:
+        raise TimeoutError(f"Job did not complete within {max_retries * retry_interval} seconds")
+
+    # Retrieve and accumulate results
+    results = []
+    entry = 0
+    while True:
+        try:
+            result_response = requests.get(f"{BASE_URL}/result/{job_id}/{entry}")
+            result_response.raise_for_status()
+            result = result_response.json()
+        except requests.RequestException as e:
+            raise RuntimeError(f"Failed to retrieve results: {e}")
+
+        if not result or all(len(db_result['alignments']) == 0 for db_result in result['results']):
+            break
+
+        results.append(result)
+        entry += 1
+
+    # Clean up temporary file if it was created
+    if isinstance(protein, Protein):
+        os.remove(file_path)
+
+    # Return results based on the output format
+    if output_format == 'json':
+        return json.dumps(results, indent=2)
+    elif output_format == 'dataframe':
+        rows = []
+        for result in results:
+            for db_result in result['results']:
+                alignments = db_result['alignments']
+                for alignment in alignments[0]:
+                    rows.append({
+                        'target': alignment['target'],
+                        'db': db_result['db'],
+                        'seqId': alignment.get('seqId', ''),
+                        'alnLength': alignment.get('alnLength', ''),
+                        'missmatches': alignment.get('missmatches', ''),
+                        'gapsopened': alignment.get('gapsopened', ''),
+                        'qStartPos': alignment.get('qStartPos', ''),
+                        'qEndPos': alignment.get('qEndPos', ''),
+                        'dbStartPos': alignment.get('dbStartPos', ''),
+                        'dbEndPos': alignment.get('dbEndPos', ''),
+                        'eval': alignment.get('eval', ''),
+                        'score': alignment.get('score', ''),
+                        'qLen': alignment.get('qLen', ''),
+                        'dbLen': alignment.get('dbLen', ''),
+                        'seq': alignment.get('tSeq', '')
+                    })
+        return pd.DataFrame(rows)
+    else:
+        raise ValueError("Invalid output_format. Choose 'json' or 'dataframe'.")
 
 def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95):
   """

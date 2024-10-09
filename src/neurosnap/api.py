@@ -117,18 +117,25 @@ class NeurosnapAPI:
         --------
         HTTPError: If the API request fails.
         """
+        # Filter out data fields with value 'false'
+        filtered_data = {k: v for k, v in data.items() if v != 'false'}
+        
         # Open the files in binary mode
         files_dict = {k: open(v, 'rb') for k, v in files.items()}
+        
         # Make the POST request
         response = requests.post(
             f"{self.BASE_URL}/job/submit/{service_name}",
             headers=self.headers,
             files=files_dict,
-            data=data
+            data=filtered_data
         )
+        
         assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+        
         # Return the job ID
         return response.json()
+
 
     def get_job_status(self, job_id: str) -> str:
         """
@@ -192,7 +199,7 @@ class NeurosnapAPI:
             print(json.dumps(files, indent=2))
         return files
 
-    def get_job_file(self, job_id: str, file_type: str, file_name: str, share_id: str, save_path: str) -> tuple[str, bool]:
+    def get_job_file(self, job_id: str, file_type: str, file_name: str, save_path: str, share_id: str = None) -> tuple[str, bool]:
         """
         Fetches a specific file from a completed Neurosnap job and saves it to the specified path.
         Parameters:
@@ -203,10 +210,10 @@ class NeurosnapAPI:
             The type of file to fetch.
         file_name : str
             The name of the specific file to fetch.
-        share_id : str, optional
-            The share ID, if any.
         save_path : str
             The path where the file content will be saved.
+        share_id : str, optional
+            The share ID, if any.
         Returns:
         --------
         tuple[str, bool]:

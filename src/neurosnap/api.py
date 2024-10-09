@@ -8,13 +8,22 @@ from tabulate import tabulate
 
 from neurosnap.log import logger
 
+# try to get the version of the user agent
+version = "X"
+try:
+    from importlib.metadata import version
+    version('neurosnap')
+except:
+    pass
+# User agent to use throughout the application
+USER_AGENT = f"Neurosnap-OSS-Tools/v{version}"
 
 class NeurosnapAPI:
     BASE_URL = "https://neurosnap.ai/api"
 
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.headers = {"X-API-KEY": self.api_key}
+        self.headers = {"X-API-KEY": self.api_key, "User-Agent": USER_AGENT}
         # test to ensure authenticated
         r = requests.head(f"{self.BASE_URL}/jobs", headers=self.headers)
         if r.status_code != 200:

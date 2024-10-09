@@ -14,6 +14,7 @@ import requests
 from Bio import SearchIO
 
 from neurosnap.log import logger
+from neurosnap.api import USER_AGENT
 from neurosnap.protein import STANDARD_AAs
 
 
@@ -324,11 +325,10 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
     }
   """)
   # API settings
-  user_agent = "Neurosnap-OSS-Tools/v1" #TODO: Use actual version
   host_url = "https://api.colabfold.com"
   submission_endpoint = "ticket/pair" if pairing else "ticket/msa"
   headers = {}
-  headers["User-Agent"] = user_agent
+  headers["User-Agent"] = USER_AGENT
   timeout = 6.02
 
   # set the mode

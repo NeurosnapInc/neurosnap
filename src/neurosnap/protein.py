@@ -685,6 +685,51 @@ class Protein():
                     volume += (4/3) * np.pi * (radius ** 3)
     return volume
 
+  def remove(self, model, chain=None, resi_start=None, resi_end=None):
+    """
+    -------------------------------------------------------
+    Completely removes all parts of a selection from 
+    self.structure. If a residue range is provided then all
+    residues between resi_start and resi_end will be removed
+    from the structure (inclusively). If a residue range is
+    not provided then all residues in a chain will be removed.
+    -------------------------------------------------------
+    Parameters:
+      model.....: ID of model to remove from (int)
+      chain.....: ID of chain to remove from, if not provided will remove all chains in the model (str, optional)
+      resi_start: Index of first residue in the range you want to remove (int, optional)
+      resi_end..: Index of last residues in the range you want to remove (int, optional)
+    -------------------------------------------------------
+    """
+    # validate input query
+    assert model in self.models(), ValueError(f"Model ID {model} does not exist in your structure. Found models include {self.models()}.")
+    if chain is not None:
+      assert chain in self.chains(model), ValueError(f"Chain ID {chain} does not exist in your structure. Found chains include {self.chains(model)}.")
+    if resi_start is not None or resi_end is not None:
+      assert chain is not None, ValueError("Chain needs to specified if you want to remove residues")
+      assert resi_start is not None and resi_end is not None, ValueError("Both resi_start and resi_end must be provided")
+      assert isinstance(resi_start, int) and isinstance(resi_end, int), ValueError("Both resi_start and resi_end must be valid integers")
+      assert resi_end >= resi_start, ValueError("resi_start start must be less than resi_end")
+      assert resi_start in self.structure[model][chain], ValueError(f"Residue {resi_start} does not exist in the specified part of your structure.")
+      assert resi_end in self.structure[model][chain], ValueError(f"Residue {resi_end} does not exist in the specified part of your structure.")
+
+    # Perform the removal
+    if resi_start is not None and resi_end is not None:
+      # Remove residues in the specified range
+      chain_obj = self.structure[model][chain]
+      residues_to_remove = [res for res in chain_obj if resi_start <= res.id[1] <= resi_end]
+      for res in residues_to_remove:
+        chain_obj.detach_child(res.id)
+    elif chain is not None:
+      # Remove the entire chain
+      self.structure[model].detach_child(chain)
+    else:
+      # Remove the entire model
+      self.structure.detach_child(model)
+
+    # Update the pandas dataframe to reflect the changes
+    self.generate_df()
+
   def save(self, fpath, format="pdb"):
     """
     -------------------------------------------------------

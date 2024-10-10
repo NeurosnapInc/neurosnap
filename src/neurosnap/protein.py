@@ -985,7 +985,6 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
   lines = mcoll.LineCollection(seg_xy[order], colors=colors[order], linewidths=linewidths, path_effects=[matplotlib.patheffects.Stroke(capstyle="round")])
   return ax.add_collection(lines)
 
-
 def animate_pseudo_3D(fig, frames, interval=200, repeat_delay=0, repeat=True):
   """
   -------------------------------------------------------

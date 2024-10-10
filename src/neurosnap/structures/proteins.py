@@ -2,12 +2,10 @@
 Provides functions and classes related to processing protein structure data.
 TODO: Refactor like the rest for consistency or integrate into protein.py.
 """
-import os
-import numpy as np
 import Bio.PDB
+import numpy as np
 from Bio.PDB import PDBParser, PPBuilder
-from openbabel import pybel
-from rdkit import Chem
+
 import neurosnap.lDDT as lDDT
 
 
@@ -120,39 +118,6 @@ def pdb_to_aa(pdb_path):
   full_sequence = ''.join(map(str, sequences))
   
   return full_sequence
-
-
-def pdb_to_sdf(pdb_path, output_path, max_residues=50):
-  """
-  -------------------------------------------------------
-  Converts a protein/peptide in a PDB file to an SDF.
-  PDB file can only include a single entry.
-  Will overwrite existing results.
-  Validates the SDF file with RDkit on completion
-  -------------------------------------------------------
-  Parameters:
-    pdb_path....: Path to input PDB file to convert (str)
-    output_path.: Path to output SDF file, should end with .sdf (str)
-    max_residues: Maximum number of residues, default=50 (int)
-  """
-  # delete output if exists already
-  if os.path.exists(output_path):
-    os.remove(output_path)
-  # stupidly doesn't return an exception if invalid file but will return empty list
-  molecules = list(pybel.readfile("pdb", pdb_path))
-  assert len(molecules), ValueError("Invalid input PDB file.")
-  
-  found = 0
-  for mol in molecules:
-    if mol.atoms: # don't include empty molecules
-      assert len(mol.residues) <= max_residues, ValueError(f"PDB file is too large and exceeds the maximum number of {max_residues} residues.")
-      # print(mol.write("sdf")) #print to stdout
-      mol.write("sdf", filename=output_path, overwrite=True)
-      found += 1
-      assert found <= 1, ValueError("Invalid input PDB file. Contains more than one chain or molecule.")
-  
-  if Chem.MolFromMolFile(output_path) is None:
-    raise ValueError("Invalid input PDB file. Could not convert properly into an SDF.")
 
 
 def align_pdbs(ref_pdb, sample_pdb):

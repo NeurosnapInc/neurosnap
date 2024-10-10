@@ -147,7 +147,7 @@ def pdb_to_sdf(pdb_path, output_path, max_residues=50):
     if mol.atoms: # don't include empty molecules
       assert len(mol.residues) <= max_residues, ValueError(f"PDB file is too large and exceeds the maximum number of {max_residues} residues.")
       # print(mol.write("sdf")) #print to stdout
-      mol.write("sdf", filename=output_path)
+      mol.write("sdf", filename=output_path, overwrite=True)
       found += 1
       assert found <= 1, ValueError("Invalid input PDB file. Contains more than one chain or molecule.")
   

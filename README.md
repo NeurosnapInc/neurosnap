@@ -15,12 +15,6 @@ We welcome contributions to this package. If you have a feature that you want to
 
 # Installation
 ```sh
-## ensure you have openbabel installed for the python bindings
-# debian/ubuntu
-sudo apt-get install openbabel
-# arch
-sudo pacman -S python-openbabel
-
 ## install the package
 pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
 ```

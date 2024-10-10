@@ -23,7 +23,6 @@ dependencies = [
   "numpy>1.0.0",
   "pandas",
   "biopython",
-  "openbabel-wheel",
   "rdkit",
   "scipy",
   "matplotlib",

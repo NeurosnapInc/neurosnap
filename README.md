@@ -15,7 +15,6 @@ We welcome contributions to this package. If you have a feature that you want to
 
 # Installation
 ```sh
-## install the package
 pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
 ```
 

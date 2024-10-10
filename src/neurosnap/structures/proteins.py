@@ -1,4 +1,5 @@
 """
+NOTE: THIS MODULE IS DEPRECATED AND MOST OF IT'S FUNCTIONALITY HAS BEEN MOVED TO neurosnap.protein MODULE.
 Provides functions and classes related to processing protein structure data.
 TODO: Refactor like the rest for consistency or integrate into protein.py.
 """

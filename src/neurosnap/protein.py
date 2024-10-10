@@ -21,6 +21,7 @@ from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
 from matplotlib import collections as mcoll
+from rdkit import Chem
 from scipy.special import expit as sigmoid
 
 from neurosnap.log import logger
@@ -684,6 +685,34 @@ class Protein():
                     radius = vdw_radii[element]
                     volume += (4/3) * np.pi * (radius ** 3)
     return volume
+
+  def to_sdf(self, fpath):
+    """
+    -------------------------------------------------------
+    Save the current protein structure as an SDF file.
+    Will export all models and chains. Use .remove()
+    method to get rid of undesired regions.
+    -------------------------------------------------------
+    Parameters:
+      fpath: Path to the output SDF file (str)
+    -------------------------------------------------------
+    """
+    # Write the current protein structure to a temporary PDB file
+    with tempfile.NamedTemporaryFile(delete=True, suffix=".pdb") as temp_pdb:
+      self.save(temp_pdb.name, format="pdb")
+      pdb_fpath = temp_pdb.name
+
+      # Read the PDB file
+      mol = Chem.MolFromPDBFile(pdb_fpath, sanitize=False)
+      
+      if mol is None:
+        raise ValueError("Unable to parse the PDB file.")
+      
+      # Write the molecule to SDF
+      writer = Chem.SDWriter(fpath)
+      writer.write(mol)
+      writer.close()
+      logger.info(f"Successfully wrote SDF file to {fpath}.")
 
   def remove(self, model, chain=None, resi_start=None, resi_end=None):
     """

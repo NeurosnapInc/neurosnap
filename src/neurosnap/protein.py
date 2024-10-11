@@ -559,20 +559,20 @@ class Protein():
     rmsd = np.sqrt(np.sum(diff ** 2) / backbone1.shape[0])
     return rmsd
 
-  def calculate_distance_matrix(self, model=0, chain=None):
+  def calculate_distance_matrix(self, model=None, chain=None):
     """
     -------------------------------------------------------
     Calculate the distance matrix for all alpha-carbon (CA) atoms in the chain.
     Useful for creating contact maps or proximity analyses.
     -------------------------------------------------------
     Parameters:
-      model: The model ID to calculate the distance matrix for, default 0 (int)
+      model: The model ID to calculate the distance matrix for, if not provided will use first model found (int)
       chain: The chain ID to calculate, if not provided calculates for all chains (str)
     Returns:
       dist_matrix: A 2D numpy array representing the distance matrix (numpy.ndarray)
     -------------------------------------------------------
     """
-    assert model in self.models(), ValueError(f"Model {model} is not currently present.")
+    model =  self.models()[0]
     ca_atoms = []
 
     for m in self.structure:

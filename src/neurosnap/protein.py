@@ -530,11 +530,11 @@ class Protein():
     -------------------------------------------------------
     Parameters:
       other_protein: Another Protein object to compare against (Protein)
-      model1......: Model ID of original protein to compare (int)
-      model2......: Model ID of other protein to compare (int)
-      chain1......: Chain ID of original protein, if not provided compares all chains (str)
-      chain2......: Chain ID of other protein, if not provided compares all chains (str)
-      align.......: Whether to align the structures first using Superimposer (bool)
+      model1.......: Model ID of original protein to compare (int)
+      model2.......: Model ID of other protein to compare (int)
+      chain1.......: Chain ID of original protein, if not provided compares all chains (str)
+      chain2.......: Chain ID of other protein, if not provided compares all chains (str)
+      align........: Whether to align the structures first using Superimposer (bool)
     Returns:
       rmsd: The root-mean-square deviation between the two structures (float)
     -------------------------------------------------------

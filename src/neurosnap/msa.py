@@ -9,12 +9,12 @@ import subprocess
 import tarfile
 import tempfile
 import time
+from collections import Counter
 
 import requests
 from Bio import SearchIO
-
-from neurosnap.log import logger
 from neurosnap.api import USER_AGENT
+from neurosnap.log import logger
 from neurosnap.protein import STANDARD_AAs
 
 
@@ -571,3 +571,166 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     template_paths = template_paths_
 
   return (a3m_lines, template_paths) if use_templates else a3m_lines
+
+def get_msa(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_paired", print_citations=True):
+  """
+  Generate a multiple sequence alignment (MSA) for the given sequence(s)
+  using Colabfold's API.
+  Code originally adapted from: https://github.com/sokrypton/ColabFold/
+
+  Parameters
+  ----------
+  seq : str or list of str
+      Sequence(s) to generate the MSA for. If a list of sequences is
+      provided, they will be considered as a single protein for the MSA.
+  jobname : str
+      Name of the job to run on the MMseqs2 web server.
+  cov : int, optional
+      Coverage of the MSA (default is 50).
+  id : int, optional
+      Identity threshold for the MSA (default is 90).
+  max_msa : int, optional
+      Maximum number of sequences in the MSA (default is 2048).
+  mode : str, optional
+      Mode to run the MSA generation in. Can be "unpaired", "paired", or
+      "unpaired_paired" (default is "unpaired_paired").
+  print_citations : bool, optional
+      Whether to print the citations in the output (default is True).
+  """
+  if print_citations:
+      print("""The MMseqs2 webserver used to generate this MSA is provided as a free service. Please help keep the authors of this service keep things free by appropriately citing them as follows:
+    @article{Mirdita2019,
+      title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
+      author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
+      year         = 2019,
+      journal      = {Bioinformatics},
+      volume       = 35,
+      number       = 16,
+      pages        = {2856--2858},
+      doi          = {10.1093/bioinformatics/bty1057},
+      pmid         = 30615063,
+      comment      = {MMseqs2 search server}
+    }
+    @article{Mirdita2017,
+      title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
+      author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
+      year         = 2017,
+      journal      = {Nucleic Acids Res.},
+      volume       = 45,
+      number       = {D1},
+      pages        = {D170--D176},
+      doi          = {10.1093/nar/gkw1081},
+      pmid         = 27899574,
+      comment      = {Uniclust30/UniRef30 database}
+    }
+    @article{Mitchell2019,
+      title        = {{MGnify: the microbiome analysis resource in 2020}},
+      author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
+      year         = 2019,
+      journal      = {Nucleic Acids Res.},
+      doi          = {10.1093/nar/gkz1035},
+      comment      = {MGnify database}
+    }
+    @article{Mirdita2022,
+      title        = {{ColabFold: making protein folding accessible to all}},
+      author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
+      year         = 2022,
+      journal      = {Nature Methods},
+      doi          = {10.1038/s41592-022-01488-1},
+      comment      = {ColabFold API}
+    }
+  """)
+  # Check if HH-suite is installed and available
+  hhfilter_path = shutil.which("hhfilter")
+  assert hhfilter_path is not None, (
+      "HH-suite not found. Please ensure it is installed and available in your PATH. "
+      "For installation instructions, visit: https://github.com/soedinglab/hh-suite"
+  )
+  # Validate the mode
+  assert mode in ["unpaired", "paired", "unpaired_paired"], "Invalid mode"
+
+  seqs = [seq] if isinstance(seq, str) else seq
+  # Collapse homooligomeric sequences
+  counts = Counter(seqs)
+  u_seqs = list(counts.keys())
+  u_nums = list(counts.values())
+
+  # Expand homooligomeric sequences
+  first_seq = "/".join(sum([[x] * n for x, n in zip(u_seqs, u_nums)], []))
+  msa = [first_seq]
+
+  path = os.path.join(jobname, "msa")
+  os.makedirs(path, exist_ok=True)
+
+  # Handle paired MSA if applicable
+  if mode in ["paired", "unpaired_paired"] and len(u_seqs) > 1:
+      print("Getting paired MSA")
+      out_paired = run_mmseqs2(u_seqs, f"{path}/", pairing="greedy", print_citations=False)
+      headers, sequences = [], []
+      for a3m_lines in out_paired:
+        n = -1
+        for line in a3m_lines.split("\n"):
+          if len(line) > 0:
+            if line.startswith(">"):
+              n += 1
+              if len(headers) < (n + 1):
+                headers.append([])
+                sequences.append([])
+              headers[n].append(line)
+            else:
+              sequences[n].append(line)
+      # Filter MSA
+      with open(f"{path}/paired_in.a3m", "w") as handle:
+          for n, sequence in enumerate(sequences):
+              handle.write(f">n{n}\n{''.join(sequence)}\n")
+
+      os.system(f"hhfilter -i {path}/paired_in.a3m -id {id} -cov {cov} -o {path}/paired_out.a3m")
+
+      with open(f"{path}/paired_out.a3m", "r") as handle:
+          for line in handle:
+              if line.startswith(">"):
+                  n = int(line[2:])
+                  xs = sequences[n]
+                  # Expand homooligomeric sequences
+                  xs = ['/'.join([x] * num) for x, num in zip(xs, u_nums)]
+                  msa.append('/'.join(xs))
+
+  # Handle unpaired MSA if applicable
+  if len(msa) < max_msa and (mode in ["unpaired", "unpaired_paired"] or len(u_seqs) == 1):
+      print("Getting unpaired MSA")
+      out = run_mmseqs2(u_seqs, f"{path}/", pairing=None, print_citations=False)
+      Ls = [len(seq) for seq in u_seqs]
+      sub_idx = []
+      sub_msa = []
+      sub_msa_num = 0
+      for n,a3m_lines in enumerate(out):
+        sub_msa.append([])
+        with open(f"{path}/in_{n}.a3m","w") as handle:
+          handle.write(a3m_lines)
+
+        # Filter
+        os.system(f"hhfilter -i {path}/in_{n}.a3m -id {id} -cov {cov} -o {path}/out_{n}.a3m")
+
+        with open(f"{path}/out_{n}.a3m", "r") as handle:
+            for line in handle:
+                if not line.startswith(">"):
+                    xs = ['-' * l for l in Ls]
+                    xs[n] = line.rstrip()
+                    # Expand homooligomeric sequences
+                    xs = ['/'.join([x] * num) for x, num in zip(xs, u_nums)]
+                    sub_msa[-1].append('/'.join(xs))
+                    sub_msa_num += 1
+            sub_idx.append(list(range(len(sub_msa[-1]))))
+
+      while len(msa) < max_msa and sub_msa_num > 0:
+        for n in range(len(sub_idx)):
+          if len(sub_idx[n]) > 0:
+            msa.append(sub_msa[n][sub_idx[n].pop(0)])
+            sub_msa_num -= 1
+          if len(msa) == max_msa:
+            break
+
+  # Write final MSA to file
+  with open(f"{jobname}/msa.a3m", "w") as handle:
+      for n, sequence in enumerate(msa):
+          handle.write(f">n{n}\n{sequence}\n")

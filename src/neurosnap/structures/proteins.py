@@ -4,7 +4,6 @@ Provides functions and classes related to processing protein structure data.
 TODO: Refactor like the rest for consistency or integrate into protein.py.
 """
 import Bio.PDB
-from Bio.PDB import PDBParser, PPBuilder
 
 
 ### FUNCTIONS ###
@@ -22,29 +21,6 @@ def read_chains(pdb_path):
   parser = Bio.PDB.PDBParser()
   structure = parser.get_structure("pdb", pdb_path)
   return list(set(chain.id for chain in structure[0] if chain.id.strip()))
-
-
-def read_pdb(pdb_path):
-  """
-  -------------------------------------------------------
-  Reads a protein and returns the IDs
-  -------------------------------------------------------
-  Parameters:
-    pdb_path: Input PDB file path (str)
-  Returns:
-    protein: Dictionary where keys are chain IDs and values are lists of residue IDs (dict<str:[str]>)
-  """
-  parser = Bio.PDB.PDBParser()
-  structure = parser.get_structure("pdb", pdb_path)
-  # assume everything is in the first model
-  protein = {}
-  for chain in structure[0]:
-    protein[chain.id] = []
-    for resi in chain:
-      if resi.id[0] == " ": #ensure is not heteroatom
-        protein[chain.id].append(resi.id[1])
-    protein[chain.id] = sorted(set(protein[chain.id])) # in case the PDB is really weird
-  return protein
 
 
 def align_pdbs(ref_pdb, sample_pdb):

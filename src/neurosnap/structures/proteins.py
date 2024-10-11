@@ -47,35 +47,6 @@ def read_pdb(pdb_path):
   return protein
 
 
-def pdb_to_aa(pdb_path):
-  """
-  -------------------------------------------------------
-  Reads a PDB file to and gets its corresponding amino acid sequence.
-  Current implementation uses biopython and ignores all non-standard AA molecules.
-  All chains on all models are concatenated together. 
-  -------------------------------------------------------
-  Parameters:
-    pdb_path: Path to input PDB file to read (str)
-  Returns:
-    seq: Corresponding amino acid sequence of PDB file (str)
-  """
-  parser = PDBParser(QUIET=True)
-  structure = parser.get_structure("structure", pdb_path)
-
-  # Create a Polypeptide builder
-  ppb = PPBuilder()
-  
-  # Extract the amino acid sequence
-  sequences = []
-  for pp in ppb.build_peptides(structure):
-    sequences.append(pp.get_sequence())
-  
-  # Concatenate sequences in case there are multiple chains
-  full_sequence = ''.join(map(str, sequences))
-  
-  return full_sequence
-
-
 def align_pdbs(ref_pdb, sample_pdb):
   """
   -------------------------------------------------------

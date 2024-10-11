@@ -24,7 +24,7 @@ from matplotlib import collections as mcoll
 from rdkit import Chem
 from scipy.special import expit as sigmoid
 
-import neurosnap.lDDT as lDDT
+import neurosnap.algos.lDDT as lDDT
 from neurosnap.log import logger
 
 ### CONSTANTS ###

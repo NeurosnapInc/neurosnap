@@ -358,6 +358,35 @@ class Protein():
     # update the pandas dataframe
     self.generate_df()
 
+  def remove_nucleotides(self, model=None, chain=None):
+    """
+    -------------------------------------------------------
+    Removes all nucleotides (DNA and RNA) from the structure.
+    If no model or chain is provided, it will remove nucleotides
+    from the entire structure.
+    -------------------------------------------------------
+    Parameters:
+      model: The model ID to process, if not provided will use all models (int)
+      chain: The chain ID to process, if not provided will use all chains (str)
+    -------------------------------------------------------
+    """
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            # Identify nucleotide residues (both RNA and DNA)
+            residues_to_remove = [
+              res for res in c
+              if res.get_resname() in STANDARD_NUCLEOTIDES
+            ]
+
+            # Remove nucleotide residues
+            for res in residues_to_remove:
+              c.detach_child(res.id)
+
+    # update the pandas dataframe
+    self.generate_df()
+
   def get_backbone(self, model=None, chain=None):
     """
     -------------------------------------------------------

@@ -24,6 +24,7 @@ from matplotlib import collections as mcoll
 from rdkit import Chem
 from scipy.special import expit as sigmoid
 
+import neurosnap.algos.lDDT as lDDT
 from neurosnap.log import logger
 
 ### CONSTANTS ###
@@ -807,6 +808,21 @@ def getAA(query):
       return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
+
+def calc_lDDT(ref_pdb, sample_pdb):
+  """
+  -------------------------------------------------------
+  Calculates the lDDT (Local Distance Difference Test) between two proteins.
+  -------------------------------------------------------
+  Parameters:
+    ref_pdb...: Filepath for reference protein (str)
+    sample_pdb: Filepath for sample protein (str)
+  Returns:
+    lDDT: The lDDT score of the two proteins which ranges between 0-1 (float)
+  """
+  ref_L, ref_dmap, ref_rnames = lDDT.pdb2dmap(ref_pdb)
+  mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
+  return lDDT.get_LDDT(ref_dmap, mod_dmap)
 
 def foldseek_search(protein: Union['Protein', str], mode: str = '3diaa',
                     databases: List[str] = None, max_retries: int = 10,

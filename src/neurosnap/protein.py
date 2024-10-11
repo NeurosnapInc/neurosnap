@@ -276,7 +276,7 @@ class Protein():
     assert chain in self.structure[model], ValueError(f'Model {model} does not contain chain "{chain}"')
 
     ppb = PPBuilder()
-    return ppb.build_peptides(self.structure[model][chain])[0].get_sequence()
+    return str(ppb.build_peptides(self.structure[model][chain])[0].get_sequence())
 
   def renumber(self, model=None, chain=None, start=1):
     """

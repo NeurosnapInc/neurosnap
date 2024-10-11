@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder
+from Bio.PDB import PDBIO, SASA, Chain, PDBParser, PPBuilder
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -96,6 +96,9 @@ class Protein():
     -------------------------------------------------------
     Class that wraps around a protein structure.
     Utilizes the biopython protein structure under the hood.
+    Atoms that are not part of a chain will automatically be
+    added to a new chain that does not overlap with any
+    existing chains.
     -------------------------------------------------------
     Parameters:
       pdb: Can be either a file handle, PDB filepath, PDB ID, or UniProt ID (str|io.IOBase)
@@ -130,6 +133,38 @@ class Protein():
     parser = PDBParser()
     self.structure = parser.get_structure("structure", pdb)
     assert len(self.structure), ValueError("No models found. Structure appears to be empty.")
+
+    # Adds any missing chains to the structure.
+    # Ensures new chain IDs do not overlap with existing ones.
+    existing_chains = self.chains()
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    numeric_suffix = 1
+    new_chain_id = None
+
+    # Find an available chain ID that does not overlap with existing ones
+    for char in alphabet:
+      if char not in existing_chains:
+        new_chain_id = char
+        break
+    if new_chain_id is None:
+      # If all single-letter chain IDs are used, append a numeric suffix
+      while new_chain_id is None:
+        for char in alphabet:
+          candidate_id = f"{char}{numeric_suffix}"
+          if candidate_id not in existing_chains:
+            new_chain_id = candidate_id
+            break
+        numeric_suffix += 1
+
+    if new_chain_id:
+      # rename chain
+      for model in self.structure:
+        for chain in model:
+          if chain.id is None or chain.id == " ":
+            chain.id = new_chain_id
+            logger.info(f"Assigned ID '{new_chain_id}' to chain with missing ID in model '{model.id}'.")
+    else:
+      logger.warning(f"No chain IDs available. Could not rename chain with missing ID in model '{model.id}'.")
 
     # generate the pandas dataframe similar to that of biopandas
     self.generate_df()
@@ -810,6 +845,7 @@ class Protein():
     """
     -------------------------------------------------------
     Save the structure as a PDB or mmCIF file.
+    Will overwrite any existing files.
     -------------------------------------------------------
     Parameters:
       fpath: File path where you want to save the structure (str)

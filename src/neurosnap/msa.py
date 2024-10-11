@@ -274,7 +274,7 @@ def run_phmmer_mafft(query, ref_db_path, size=float("inf"), in_name="input_seque
   return align_mafft(unaligned_seqs)
 
 
-def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None):
+def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None):
   """
   -------------------------------------------------------
   Generate an a3m MSA using the ColabFold API. Will write
@@ -283,7 +283,7 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
   Code originally adapted from: https://github.com/sokrypton/ColabFold/
   -------------------------------------------------------
   Parameters:
-    seq..........: Amino acid sequence for protein to generate an MSA of (str)
+    seqs..........: Amino acid sequences for protein to generate an MSA of (str)
     output.......: Output directory path, will overwrite existing results (str)
     database.....: Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref" (str)
     use_filter...: Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper) (bool)
@@ -323,6 +323,14 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
       doi          = {10.1093/nar/gkz1035},
       comment      = {MGnify database}
     }
+    @article{Mirdita2022,
+      title        = {{ColabFold: making protein folding accessible to all}},
+      author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
+      year         = 2022,
+      journal      = {Nature Methods},
+      doi          = {10.1038/s41592-022-01488-1},
+      comment      = {ColabFold API}
+    }
   """)
   # API settings
   host_url = "https://api.colabfold.com"
@@ -352,8 +360,11 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
     shutil.rmtree(output)
   os.mkdir(output)
 
-  def submit(seq, mode):
-    query = f">query\n{seq}\n"
+  def submit(seqs, mode, N=101):
+    n, query = N, ""
+    for seq in seqs:
+      query += f">{n}\n{seq}\n"
+      n += 1
     while True:
       error_count = 0
       try:
@@ -404,12 +415,17 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
 
   ## call mmseqs2 api
   # Resubmit job until it goes through
-  out = submit(seq, mode)
+  seqs = [seqs] if isinstance(seqs, str) else seqs
+  seqs_unique = []
+  [seqs_unique.append(x) for x in seqs if x not in seqs_unique]
+  Ms = [101 + seqs_unique.index(seq) for seq in seqs]
+
+  out = submit(seqs_unique, mode)
   while out["status"] in ["UNKNOWN", "RATELIMIT"]:
     print(f"Sleeping for {timeout}s. Reason: {out['status']}")
     # resubmit
     time.sleep(timeout)
-    out = submit(seq, mode)
+    out = submit(seqs_unique, mode)
 
   if out["status"] == "ERROR":
     raise Exception('MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
@@ -449,6 +465,29 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
   with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
     tar.extractall(path=output, filter="data")
 
+  if pairing:
+    a3m_files = [f"{output}/pair.a3m"]
+  else:
+    a3m_files = [f"{output}/uniref.a3m"]
+    if mode == "env": a3m_files.append(f"{output}/bfd.mgnify30.metaeuk30.smag30.a3m")
+  
+   # gather a3m lines
+  a3m_lines = {}
+  for a3m_file in a3m_files:
+    update_M,M = True,None
+    for line in open(a3m_file,"r"):
+      if len(line) > 0:
+        if "\x00" in line:
+          line = line.replace("\x00","")
+          update_M = True
+        if line.startswith(">") and update_M:
+          M = int(line[1:].rstrip())
+          update_M = False
+          if M not in a3m_lines: a3m_lines[M] = []
+        a3m_lines[M].append(line)
+  
+  a3m_lines = ["".join(a3m_lines[n]) for n in Ms]
+ 
   # remove null bytes from all files including pair files
   for fname in os.listdir(output):
     if fname in ["uniref.a3m", "bfd.mgnify30.metaeuk30.smag30.a3m", "pair.a3m"]:
@@ -472,37 +511,58 @@ def run_mmseqs2(seq, output, database="mmseqs2_uniref_env", use_filter=True, use
         f.readline()
         for line in f:
           fout.write(line)
-
+  
   # templates
   if use_templates:
-    templates = []
-    # .m8 file description: https://linsalrob.github.io/ComputationalGenomicsManual/SequenceFileFormats/#blast-m8
-    # print("seq\tpdb\tcid\tevalue")
+    templates = {}
+    #print("seq\tpdb\tcid\tevalue")
     for line in open(f"{output}/pdb70.m8","r"):
-      line = line.rstrip().split()
-      name, pdb, qid, e_value = line[0], line[1], line[2], line[10]
-      templates.append(pdb)
-      # if len(templates) <= 20:
-      #  print(f"{name}\t{pdb}\t{qid}\t{e_value}")
+      p = line.rstrip().split()
+      M,pdb,qid,e_value = p[0],p[1],p[2],p[10]
+      M = int(M)
+      if M not in templates: templates[M] = []
+      templates[M].append(pdb)
+      #if len(templates[M]) <= 20:
+      #  print(f"{int(M)-N}\t{pdb}\t{qid}\t{e_value}")
 
-    template_path = f"{output}/templates"
-    os.mkdir(f"{output}/templates")
-    for template in templates:
-      error_count = 0
-      while True:
-        try:
-          r = requests.get(f"{host_url}/template/{template[:20]}", stream=True, timeout=timeout, headers=headers)
-        except requests.exceptions.Timeout:
-          print("Timeout while submitting to template server. Retrying...")
-          continue
-        except Exception as e:
-          error_count += 1
-          print(f"Error while fetching result from template server. Retrying... ({error_count}/5)")
-          print(f"Error: {e}")
-          time.sleep(timeout)
-          if error_count > 5:
-            raise
-          continue
-        break
-      with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
-        tar.extractall(path=template_path, filter="data")
+    template_paths = {}
+    for k,TMPL in templates.items():
+      TMPL_PATH = f"{output}/templates_{k}"
+      if not os.path.isdir(TMPL_PATH):
+        os.mkdir(TMPL_PATH)
+        TMPL_LINE = ",".join(TMPL[:20])
+        response = None
+        while True:
+          error_count = 0
+          try:
+            # https://requests.readthedocs.io/en/latest/user/advanced/#advanced
+            # "good practice to set connect timeouts to slightly larger than a multiple of 3"
+            response = requests.get(f"{host_url}/template/{TMPL_LINE}", stream=True, timeout=6.02, headers=headers)
+          except requests.exceptions.Timeout:
+            logger.warning("Timeout while submitting to template server. Retrying...")
+            continue
+          except Exception as e:
+            error_count += 1
+            logger.warning(f"Error while fetching result from template server. Retrying... ({error_count}/5)")
+            logger.warning(f"Error: {e}")
+            time.sleep(5)
+            if error_count > 5:
+              raise
+            continue
+          break
+        with tarfile.open(fileobj=response.raw, mode="r|gz") as tar:
+          tar.extractall(path=TMPL_PATH, filter="data")
+        os.symlink("pdb70_a3m.ffindex", f"{TMPL_PATH}/pdb70_cs219.ffindex")
+        with open(f"{TMPL_PATH}/pdb70_cs219.ffdata", "w") as f:
+          f.write("")
+      template_paths[k] = TMPL_PATH
+  template_paths_ = []
+  for n in Ms:
+    if n not in template_paths:
+      template_paths_.append(None)
+      #print(f"{n-N}\tno_templates_found")
+    else:
+      template_paths_.append(template_paths[n])
+  template_paths = template_paths_
+
+  return (a3m_lines, template_paths) if use_templates else a3m_lines

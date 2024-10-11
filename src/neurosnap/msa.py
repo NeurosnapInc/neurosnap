@@ -290,6 +290,9 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     use_templates: Download templates as well using the mmseqs2 results (bool)
     pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
     print_citations: Prints citations (bool)
+  Returns:
+    a3m_lines: List of a3m lines (list<str>)
+    template_paths: List of template paths (list<str>), returned only if use_templates is True.
   """
   if print_citations:
     print("""The MMseqs2 webserver used to generate this MSA is provided as a free service. Please help keep the authors of this service keep things free by appropriately citing them as follows:

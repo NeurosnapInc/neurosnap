@@ -556,13 +556,13 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
         with open(f"{TMPL_PATH}/pdb70_cs219.ffdata", "w") as f:
           f.write("")
       template_paths[k] = TMPL_PATH
-  template_paths_ = []
-  for n in Ms:
-    if n not in template_paths:
-      template_paths_.append(None)
-      #print(f"{n-N}\tno_templates_found")
-    else:
-      template_paths_.append(template_paths[n])
-  template_paths = template_paths_
+    template_paths_ = []
+    for n in Ms:
+      if n not in template_paths:
+        template_paths_.append(None)
+        #print(f"{n-N}\tno_templates_found")
+      else:
+        template_paths_.append(template_paths[n])
+    template_paths = template_paths_
 
   return (a3m_lines, template_paths) if use_templates else a3m_lines

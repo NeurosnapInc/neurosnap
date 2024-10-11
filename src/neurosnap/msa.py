@@ -274,7 +274,7 @@ def run_phmmer_mafft(query, ref_db_path, size=float("inf"), in_name="input_seque
   return align_mafft(unaligned_seqs)
 
 
-def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None):
+def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None, print_citations=True):
   """
   -------------------------------------------------------
   Generate an a3m MSA using the ColabFold API. Will write
@@ -289,49 +289,51 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     use_filter...: Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper) (bool)
     use_templates: Download templates as well using the mmseqs2 results (bool)
     pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
+    print_citations: Prints citations (bool)
   """
-  print("""The MMseqs2 webserver used to generate this MSA is provided as a free service. Please help keep the authors of this service keep things free by appropriately citing them as follows:
-    @article{Mirdita2019,
-      title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
-      author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
-      year         = 2019,
-      journal      = {Bioinformatics},
-      volume       = 35,
-      number       = 16,
-      pages        = {2856--2858},
-      doi          = {10.1093/bioinformatics/bty1057},
-      pmid         = 30615063,
-      comment      = {MMseqs2 search server}
-    }
-    @article{Mirdita2017,
-      title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
-      author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
-      year         = 2017,
-      journal      = {Nucleic Acids Res.},
-      volume       = 45,
-      number       = {D1},
-      pages        = {D170--D176},
-      doi          = {10.1093/nar/gkw1081},
-      pmid         = 27899574,
-      comment      = {Uniclust30/UniRef30 database}
-    }
-    @article{Mitchell2019,
-      title        = {{MGnify: the microbiome analysis resource in 2020}},
-      author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
-      year         = 2019,
-      journal      = {Nucleic Acids Res.},
-      doi          = {10.1093/nar/gkz1035},
-      comment      = {MGnify database}
-    }
-    @article{Mirdita2022,
-      title        = {{ColabFold: making protein folding accessible to all}},
-      author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
-      year         = 2022,
-      journal      = {Nature Methods},
-      doi          = {10.1038/s41592-022-01488-1},
-      comment      = {ColabFold API}
-    }
-  """)
+  if print_citations:
+    print("""The MMseqs2 webserver used to generate this MSA is provided as a free service. Please help keep the authors of this service keep things free by appropriately citing them as follows:
+      @article{Mirdita2019,
+        title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
+        author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
+        year         = 2019,
+        journal      = {Bioinformatics},
+        volume       = 35,
+        number       = 16,
+        pages        = {2856--2858},
+        doi          = {10.1093/bioinformatics/bty1057},
+        pmid         = 30615063,
+        comment      = {MMseqs2 search server}
+      }
+      @article{Mirdita2017,
+        title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
+        author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
+        year         = 2017,
+        journal      = {Nucleic Acids Res.},
+        volume       = 45,
+        number       = {D1},
+        pages        = {D170--D176},
+        doi          = {10.1093/nar/gkw1081},
+        pmid         = 27899574,
+        comment      = {Uniclust30/UniRef30 database}
+      }
+      @article{Mitchell2019,
+        title        = {{MGnify: the microbiome analysis resource in 2020}},
+        author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
+        year         = 2019,
+        journal      = {Nucleic Acids Res.},
+        doi          = {10.1093/nar/gkz1035},
+        comment      = {MGnify database}
+      }
+      @article{Mirdita2022,
+        title        = {{ColabFold: making protein folding accessible to all}},
+        author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
+        year         = 2022,
+        journal      = {Nature Methods},
+        doi          = {10.1038/s41592-022-01488-1},
+        comment      = {ColabFold API}
+      }
+    """)
   # API settings
   host_url = "https://api.colabfold.com"
   submission_endpoint = "ticket/pair" if pairing else "ticket/msa"
@@ -556,13 +558,13 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
         with open(f"{TMPL_PATH}/pdb70_cs219.ffdata", "w") as f:
           f.write("")
       template_paths[k] = TMPL_PATH
-  template_paths_ = []
-  for n in Ms:
-    if n not in template_paths:
-      template_paths_.append(None)
-      #print(f"{n-N}\tno_templates_found")
-    else:
-      template_paths_.append(template_paths[n])
-  template_paths = template_paths_
+    template_paths_ = []
+    for n in Ms:
+      if n not in template_paths:
+        template_paths_.append(None)
+        #print(f"{n-N}\tno_templates_found")
+      else:
+        template_paths_.append(template_paths[n])
+    template_paths = template_paths_
 
   return (a3m_lines, template_paths) if use_templates else a3m_lines

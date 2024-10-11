@@ -7,8 +7,6 @@ import Bio.PDB
 import numpy as np
 from Bio.PDB import PDBParser, PPBuilder
 
-import neurosnap.lDDT as lDDT
-
 
 ### FUNCTIONS ###
 def read_chains(pdb_path):
@@ -184,22 +182,6 @@ def align_pdbs(ref_pdb, sample_pdb):
   io = Bio.PDB.PDBIO()
   io.set_structure(sample_structure) 
   io.save(sample_pdb)
-
-
-def calc_lDDT(ref_pdb, sample_pdb):
-  """
-  -------------------------------------------------------
-  Calculates the lDDT (Local Distance Difference Test) between two proteins.
-  -------------------------------------------------------
-  Parameters:
-    ref_pdb...: Filepath for reference protein (str)
-    sample_pdb: Filepath for sample protein (str)
-  Returns:
-    lDDT: The lDDT score of the two proteins which ranges between 0-1 (float)
-  """
-  ref_L, ref_dmap, ref_rnames = lDDT.pdb2dmap(ref_pdb)
-  mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
-  return lDDT.get_LDDT(ref_dmap, mod_dmap)
 
 
 def score_af2m_binding(af2m_dict: str, binder_len: int, target_len: int = None) -> dict:

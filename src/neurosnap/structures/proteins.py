@@ -48,48 +48,6 @@ def read_pdb(pdb_path):
   return protein
 
 
-def calc_pdm(pdb_path, chain=None):
-  """
-  -------------------------------------------------------
-  Calculates distance matrix for a given input protein using
-  the C-Alpha distances between residues.
-  TODO: REMOVE, replaced by Protein.calculate_distance_matrix()
-  -------------------------------------------------------
-  Parameters:
-    pdb_path: Path to PDB file you want to calculate the distance matrix of (str)
-    chain...: The chain to use. By default will just use the longest chain (str)
-  Returns:
-    dm: Distance matrix of the PDB file (np.array)
-  """
-  def calc_residue_dist(residue_one, residue_two) :
-    """Returns the C-alpha distance between two residues"""
-    diff_vector  = residue_one["CA"].coord - residue_two["CA"].coord
-    return np.sqrt(np.sum(diff_vector * diff_vector))
-
-  # load structure and load first model
-  # NOTE: If a PDB contains multiple models this solution will just use the first model
-  structure = Bio.PDB.PDBParser().get_structure("null", pdb_path)
-  model = structure[0]
-  
-  # get the desired chain
-  max_len = float("-inf")
-  if chain is None:
-    for x in model.get_chains():
-      if len(x) > max_len:
-        max_len = len(x)
-        chain = x.id
-
-  chain = model[chain]
-
-  # calculate distance matrix
-  # NOTE: This is redundant since the upper triangle is identical to the lower one.
-  dm = np.zeros((len(chain), len(chain)), float)
-  for row, residue_one in enumerate(chain):
-    for col, residue_two in enumerate(chain):
-      dm[row, col] = calc_residue_dist(residue_one, residue_two)
-  return dm
-
-
 def pdb_to_aa(pdb_path):
   """
   -------------------------------------------------------

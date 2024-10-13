@@ -570,7 +570,6 @@ class Protein():
     -------------------------------------------------------
     """
     # Use the Superimposer to align the structures
-    # TODO: Might make sense to replace this with self.get_backbone() and also add option to support chains
     def aux(sample_model):
       atoms = []
       for sample_chain in sample_model:

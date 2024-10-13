@@ -1,7 +1,7 @@
 """
 Implementation of the ClusterProt algorithm from https://neurosnap.ai/service/ClusterProt.
 ClusterProt is an algorithm for clustering proteins by their structure similarity.
-"""1f
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 

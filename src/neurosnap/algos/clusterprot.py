@@ -19,7 +19,7 @@ except Exception as e:
   exit(1)
 
 
-def ClusterProt(proteins, model=None, chain=None, proj_1d_algo="umap"):
+def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
   """
   -------------------------------------------------------
   Run the ClusterProt algorithm on some input proteins.
@@ -35,7 +35,7 @@ def ClusterProt(proteins, model=None, chain=None, proj_1d_algo="umap"):
   -------------------------------------------------------
   Parameters:
     proteins....: List of proteins to cluster, can be either neurosnap Protein objects of filepaths to proteins that will get loaded as Protein objects (list)
-    model.......: Model ID to for ClusterProt to use (must be consistent across all structures), if not provided will use first model found (int)
+    model.......: Model ID to for ClusterProt to use (must be consistent across all structures) (int)
     chain.......: Chain ID to for ClusterProt to use (must be consistent across all structures), if not provided calculates for all chains (str)
     proj_1d_algo: Algorithm to use for the 1D projection. Can be either "umap" or "pca" (str)
   Returns:

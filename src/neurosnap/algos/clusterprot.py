@@ -1,7 +1,7 @@
 """
 Implementation of the ClusterProt algorithm from https://neurosnap.ai/service/ClusterProt.
 ClusterProt is an algorithm for clustering proteins by their structure similarity.
-"""
+"""1f
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -151,7 +151,7 @@ def create_figure_plotly(cp_results):
     labels={"color": "Conformation Clusters", "0":"x", "1":"y", "2":"z"},
     color=["outlier" if x == -1 else f"cluster {x}" for x in cp_results["cluster_labels"]],
     hover_name=titles,
-    text=titles,
+    # text=titles,
   )
   fig.update_layout(xaxis_title="", yaxis_title="")
   fig.show()

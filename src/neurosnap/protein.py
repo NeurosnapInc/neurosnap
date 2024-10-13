@@ -120,8 +120,11 @@ class Protein():
             logger.info("Found matching structure in RCSB PDB, downloading and using that.")
         else: # check if provided a uniprot ID and fetch from AF2
           r = requests.get(f"https://alphafold.ebi.ac.uk/api/prediction/{pdb.upper()}")
+          if r.status_code != 200:
+            raise ValueError("Invalid input type provided. Can be either a file handle, PDB filepath, PDB ID, or UniProt ID")
           r = requests.get(r.json()[0]["pdbUrl"])
-          r.raise_for_status()
+          if r.status_code != 200:
+            raise ValueError("Invalid input type provided. Can be either a file handle, PDB filepath, PDB ID, or UniProt ID")
           with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as temp_file:
             temp_file.write(r.content)
             pdb = temp_file.name

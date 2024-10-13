@@ -1149,6 +1149,8 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
     ax.set_ylim(xy_min,xy_max)
 
   ax.set_aspect("equal")
+  ax.set_xlabel("Distance (Å)", fontsize=12)
+  ax.set_ylabel("Distance (Å)", fontsize=12)
     
   # determine linewidths
   width = fig.bbox_inches.width * ax.get_position().width
@@ -1157,20 +1159,71 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
   lines = mcoll.LineCollection(seg_xy[order], colors=colors[order], linewidths=linewidths, path_effects=[matplotlib.patheffects.Stroke(capstyle="round")])
   return ax.add_collection(lines)
 
-def animate_pseudo_3D(fig, frames, interval=200, repeat_delay=0, repeat=True):
+def animate_pseudo_3D(fig, ax, frames, titles="Protein Animation", interval=200, repeat_delay=0, repeat=True):
   """
   -------------------------------------------------------
   Animate multiple Pseudo 3D LineCollection objects.
   -------------------------------------------------------
   Parameters:
     fig.........: Matplotlib figure that contains all the frames (matplotlib.figure.Figure)
+    ax..........: Matplotlib axes for the figure that contains all the frames (matplotlib.figure.Figure)
     frames......: List of LineCollection objects (matplotlib.collections.LineCollection)
+    titles......: Single title or list of titles corresponding to each frame (str or list<str>)
     interval....: Delay between frames in milliseconds (int)
     repeat_delay: The delay in milliseconds between consecutive animation runs, if repeat is True (int)
     repeat......: Whether the animation repeats when the sequence of frames is completed (bool)
   Returns:
     ani: Animation of all the different frames (matplotlib.animation.ArtistAnimation)
   """
-  frames = [[frame] for frame in frames]
-  ani = animation.ArtistAnimation(fig, frames, interval=interval, repeat_delay=repeat_delay, repeat=repeat, blit=True)
+  # check titles
+  if isinstance(titles, str):
+    titles = [f"{titles} ({i+1}/{len(frames)})" for i in range(len(frames))]
+  elif len(titles) == len(frames):
+    ValueError(f"The number of titles ({len(titles)}) does not match the number of frames ({len(frames)}).")
+
+  if isinstance(titles, str):
+    titles = [f"{titles} ({i+1}/{len(frames)})" for i in range(len(frames))]
+  elif len(titles) == len(frames):
+    ValueError(f"The number of titles ({len(titles)}) does not match the number of frames ({len(frames)}).")
+
+  # Gather all vertices safely across multiple paths per frame
+  all_x = np.concatenate([
+    path.vertices[:, 0] 
+    for frame in frames for path in frame.get_paths()
+  ])
+  all_y = np.concatenate([
+    path.vertices[:, 1] 
+    for frame in frames for path in frame.get_paths()
+  ])
+  # Calculate limits with optional padding
+  x_min, x_max = all_x.min(), all_x.max()
+  y_min, y_max = all_y.min(), all_y.max()
+  # Apply padding to the limits
+  padding = 4
+  ax.set_xlim(x_min - padding, x_max + padding)
+  ax.set_ylim(y_min - padding, y_max + padding)
+  # disable axes
+  ax.axis("off")
+
+  def init():
+    # hide all frames
+    for frame in frames:
+      frame.set_visible(False)
+    # Initialize the plot with the first frame
+    collection = frames[0]
+    ax.add_collection(collection)
+    ax.set_title(titles[0])
+    return collection,
+
+  def animate(i):
+    frames[i-1].set_visible(False)
+    frames[i].set_visible(True)
+    ax.add_collection(frames[i])
+    ax.set_title(titles[i])
+    return frames[i],
+
+  ani = animation.FuncAnimation(
+    fig, animate, init_func=init, frames=len(frames),
+    interval=interval, repeat_delay=repeat_delay, repeat=repeat
+  )
   return ani

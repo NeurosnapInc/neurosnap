@@ -123,7 +123,7 @@ def animate_results(cp_results, animation_fpath="cluster_prot.gif"):
     titles.append(f"{prot.title} ({i}/{len(sorted_proteins)})")
   print()
   ani = animate_pseudo_3D(fig, ax, frames, titles)
-  ani.save(animation_fpath, writer="ffmpeg", fps=5)
+  ani.save(animation_fpath, writer="ffmpeg", fps=7)
 
 def create_figure_plotly(cp_results):
   """

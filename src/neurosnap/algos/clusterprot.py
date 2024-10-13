@@ -2,8 +2,6 @@
 Implementation of the ClusterProt algorithm from https://neurosnap.ai/service/ClusterProt.
 ClusterProt is an algorithm for clustering proteins by their structure similarity.
 """
-
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -15,8 +13,8 @@ try:
   from sklearn.decomposition import PCA
   from umap import UMAP
 except Exception as e:
-  logger.critical(f"Unable to import sklearn and umap. The ClusterProt algorithm depends on these two packages to function. Please add them to your environment using something like $ pip install umap-learn scikit-learn\nFull Error: {e}")
-  exit(1)
+  logger.critical("Unable to import sklearn and umap. The ClusterProt algorithm depends on these two packages to function. Please add them to your environment using something like $ pip install umap-learn scikit-learn")
+  raise e
 
 
 def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
@@ -126,3 +124,34 @@ def animate_results(cp_results, animation_fpath="cluster_prot.gif"):
   print()
   ani = animate_pseudo_3D(fig, ax, frames, titles)
   ani.save(animation_fpath, writer="ffmpeg", fps=5)
+
+def create_figure_plotly(cp_results):
+  """
+  -------------------------------------------------------
+  Create a scatter plot of the 2D projection from ClusterProt
+  using plotly express. NOTE: The plotly package will need
+  to be installed for this
+  -------------------------------------------------------
+  Parameters:
+    cp_results: Results object from ClusterProt run (dict)
+  """
+  try:
+    import plotly.express as px
+  except Exception as e:
+    logger.critical("Unable to import plotly. This function depends on plotly express. Please add it to your environment using something like $ pip install plotly")
+    raise e
+  
+  titles = [prot.title for prot in cp_results["proteins"]]
+  fig = px.scatter(
+    cp_results["projection_2d"],
+    x=0,
+    y=1,
+    # z=2,
+    title="ClusterProt: Protein Clustering by Structural Similarity",
+    labels={"color": "Conformation Clusters", "0":"x", "1":"y", "2":"z"},
+    color=["outlier" if x == -1 else f"cluster {x}" for x in cp_results["cluster_labels"]],
+    hover_name=titles,
+    text=titles,
+  )
+  fig.update_layout(xaxis_title="", yaxis_title="")
+  fig.show()

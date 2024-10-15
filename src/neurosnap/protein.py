@@ -572,6 +572,8 @@ class Protein():
       model2......: Model ID of other protein to transform and align to reference (int)
     -------------------------------------------------------
     """
+    assert model1 in self.models(), ValueError("Specified model needs to be present in the reference structure.")
+    assert model2 in other_protein.models(), ValueError("Specified model needs to be present in the other structure.")
     # Use the Superimposer to align the structures
     def aux(sample_model):
       atoms = []

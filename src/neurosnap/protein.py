@@ -584,7 +584,7 @@ class Protein():
 
     sup = Superimposer()
     sup.set_atoms(aux(self.structure[model1]), aux(other_protein.structure[model2]))
-    sup.apply(other_protein.structure)  # Apply the transformation to the other protein
+    sup.apply(other_protein.structure[model2])  # Apply the transformation to the other protein
     # update the pandas dataframe
     other_protein.generate_df()
 

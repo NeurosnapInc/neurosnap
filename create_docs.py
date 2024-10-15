@@ -6,8 +6,9 @@ filenames = [
   # "src/neurosnap/log.py",
   "src/neurosnap/protein.py",
   "src/neurosnap/conformers.py",
-  "src/neurosnap/structures/proteins.py",
   "src/neurosnap/msa.py",
+  "src/neurosnap/algos/clusterprot.py",
+  # "src/neurosnap/algos/alphafold.py",
 ]
 
 print() #  required

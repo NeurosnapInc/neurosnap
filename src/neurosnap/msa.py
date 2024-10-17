@@ -577,10 +577,11 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
 
   return (a3m_lines, template_paths) if use_templates else a3m_lines
 
-def get_msa(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_paired", print_citations=True):
+def run_mmseqs2_modes(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_paired", print_citations=True):
   """
   Generate a multiple sequence alignment (MSA) for the given sequence(s)
-  using Colabfold's API.
+  using Colabfold's API. Key difference between this function and 
+  run_mmseqs2 is that this function supports different modes.
   Code originally adapted from: https://github.com/sokrypton/ColabFold/
 
   Parameters

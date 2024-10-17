@@ -13,11 +13,57 @@ from collections import Counter
 
 import requests
 from Bio import SearchIO
+
 from neurosnap.api import USER_AGENT
 from neurosnap.log import logger
 from neurosnap.protein import STANDARD_AAs
 
+### CONSTANTS ###
+MMSEQS2_CITATION = """The MMseqs2 webserver used to generate this MSA is offered as a free service. Please support the authors in maintaining this free resource by citing them appropriately as follows:
+@article{Mirdita2019,
+  title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
+  author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
+  year         = 2019,
+  journal      = {Bioinformatics},
+  volume       = 35,
+  number       = 16,
+  pages        = {2856--2858},
+  doi          = {10.1093/bioinformatics/bty1057},
+  pmid         = 30615063,
+  comment      = {MMseqs2 search server}
+}
+@article{Mirdita2017,
+  title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
+  author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
+  year         = 2017,
+  journal      = {Nucleic Acids Res.},
+  volume       = 45,
+  number       = {D1},
+  pages        = {D170--D176},
+  doi          = {10.1093/nar/gkw1081},
+  pmid         = 27899574,
+  comment      = {Uniclust30/UniRef30 database}
+}
+@article{Mitchell2019,
+  title        = {{MGnify: the microbiome analysis resource in 2020}},
+  author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
+  year         = 2019,
+  journal      = {Nucleic Acids Res.},
+  doi          = {10.1093/nar/gkz1035},
+  comment      = {MGnify database}
+}
+@article{Mirdita2022,
+  title        = {{ColabFold: making protein folding accessible to all}},
+  author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
+  year         = 2022,
+  journal      = {Nature Methods},
+  doi          = {10.1038/s41592-022-01488-1},
+  comment      = {ColabFold API}
+}
+"""
 
+
+### FUNCTIONS ###
 def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True):
   """
   -------------------------------------------------------
@@ -295,48 +341,7 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     template_paths: List of template paths (list<str>), returned only if use_templates is True.
   """
   if print_citations:
-    print("""The MMseqs2 webserver used to generate this MSA is provided as a free service. Please help keep the authors of this service keep things free by appropriately citing them as follows:
-      @article{Mirdita2019,
-        title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
-        author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
-        year         = 2019,
-        journal      = {Bioinformatics},
-        volume       = 35,
-        number       = 16,
-        pages        = {2856--2858},
-        doi          = {10.1093/bioinformatics/bty1057},
-        pmid         = 30615063,
-        comment      = {MMseqs2 search server}
-      }
-      @article{Mirdita2017,
-        title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
-        author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
-        year         = 2017,
-        journal      = {Nucleic Acids Res.},
-        volume       = 45,
-        number       = {D1},
-        pages        = {D170--D176},
-        doi          = {10.1093/nar/gkw1081},
-        pmid         = 27899574,
-        comment      = {Uniclust30/UniRef30 database}
-      }
-      @article{Mitchell2019,
-        title        = {{MGnify: the microbiome analysis resource in 2020}},
-        author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
-        year         = 2019,
-        journal      = {Nucleic Acids Res.},
-        doi          = {10.1093/nar/gkz1035},
-        comment      = {MGnify database}
-      }
-      @article{Mirdita2022,
-        title        = {{ColabFold: making protein folding accessible to all}},
-        author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
-        year         = 2022,
-        journal      = {Nature Methods},
-        doi          = {10.1038/s41592-022-01488-1},
-        comment      = {ColabFold API}
-      }
-    """)
+    print(MMSEQS2_CITATION)
   # API settings
   host_url = "https://api.colabfold.com"
   submission_endpoint = "ticket/pair" if pairing else "ticket/msa"
@@ -598,48 +603,7 @@ def get_msa(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_paired", p
     Whether to print the citations in the output (default is True).
   """
   if print_citations:
-      print("""The MMseqs2 webserver used to generate this MSA is provided as a free service. Please help keep the authors of this service keep things free by appropriately citing them as follows:
-    @article{Mirdita2019,
-      title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
-      author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
-      year         = 2019,
-      journal      = {Bioinformatics},
-      volume       = 35,
-      number       = 16,
-      pages        = {2856--2858},
-      doi          = {10.1093/bioinformatics/bty1057},
-      pmid         = 30615063,
-      comment      = {MMseqs2 search server}
-    }
-    @article{Mirdita2017,
-      title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
-      author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
-      year         = 2017,
-      journal      = {Nucleic Acids Res.},
-      volume       = 45,
-      number       = {D1},
-      pages        = {D170--D176},
-      doi          = {10.1093/nar/gkw1081},
-      pmid         = 27899574,
-      comment      = {Uniclust30/UniRef30 database}
-    }
-    @article{Mitchell2019,
-      title        = {{MGnify: the microbiome analysis resource in 2020}},
-      author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
-      year         = 2019,
-      journal      = {Nucleic Acids Res.},
-      doi          = {10.1093/nar/gkz1035},
-      comment      = {MGnify database}
-    }
-    @article{Mirdita2022,
-      title        = {{ColabFold: making protein folding accessible to all}},
-      author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
-      year         = 2022,
-      journal      = {Nature Methods},
-      doi          = {10.1038/s41592-022-01488-1},
-      comment      = {ColabFold API}
-    }
-  """)
+    print(MMSEQS2_CITATION)
   # Check if HH-suite is installed and available
   hhfilter_path = shutil.which("hhfilter")
   assert hhfilter_path is not None, (

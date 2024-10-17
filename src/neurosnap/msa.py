@@ -732,5 +732,5 @@ def get_msa(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_paired", p
 
   # Write final MSA to file
   with open(f"{jobname}/msa.a3m", "w") as handle:
-      for n, sequence in enumerate(msa):
-          handle.write(f">n{n}\n{sequence}\n")
+    for n, sequence in enumerate(msa):
+      handle.write(f">n{n}\n{sequence}\n")

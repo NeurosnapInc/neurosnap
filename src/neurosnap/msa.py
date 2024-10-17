@@ -577,11 +577,12 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
 
   return (a3m_lines, template_paths) if use_templates else a3m_lines
 
-def run_mmseqs2_modes(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_paired", print_citations=True):
+def run_mmseqs2_modes(seq, output, cov=50, id=90, max_msa=2048, mode="unpaired_paired", print_citations=True):
   """
   Generate a multiple sequence alignment (MSA) for the given sequence(s)
   using Colabfold's API. Key difference between this function and 
   run_mmseqs2 is that this function supports different modes.
+  The final a3m and most useful a3m file will be written as "output/final.a3m".
   Code originally adapted from: https://github.com/sokrypton/ColabFold/
 
   Parameters
@@ -589,8 +590,8 @@ def run_mmseqs2_modes(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_
   seq : str or list of str
     Sequence(s) to generate the MSA for. If a list of sequences is
     provided, they will be considered as a single protein for the MSA.
-  jobname : str
-    Name of the job to run on the MMseqs2 web server.
+  output : str
+    Output directory path, will overwrite existing results.
   cov : int, optional
     Coverage of the MSA (default is 50).
   id : int, optional
@@ -624,13 +625,10 @@ def run_mmseqs2_modes(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_
   first_seq = "/".join(sum([[x] * n for x, n in zip(u_seqs, u_nums)], []))
   msa = [first_seq]
 
-  path = os.path.join(jobname, "msa")
-  os.makedirs(path, exist_ok=True)
-
   # Handle paired MSA if applicable
   if mode in ["paired", "unpaired_paired"] and len(u_seqs) > 1:
     print("Getting paired MSA")
-    out_paired = run_mmseqs2(u_seqs, f"{path}/", pairing="greedy", print_citations=False)
+    out_paired = run_mmseqs2(u_seqs, output, pairing="greedy", print_citations=False)
     headers, sequences = [], []
     for a3m_lines in out_paired:
       n = -1
@@ -645,14 +643,16 @@ def run_mmseqs2_modes(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_
           else:
             sequences[n].append(line)
     # Filter MSA
-    with open(f"{path}/paired_in.a3m", "w") as handle:
+    paired_in_fpath = os.path.join(output, "paired_in.a3m")
+    paired_out_fpath = os.path.join(output, "paired_out.a3m")
+    with open(paired_in_fpath, "w") as f:
       for n, sequence in enumerate(sequences):
-        handle.write(f">n{n}\n{''.join(sequence)}\n")
+        f.write(f">n{n}\n{''.join(sequence)}\n")
 
-    os.system(f"hhfilter -i {path}/paired_in.a3m -id {id} -cov {cov} -o {path}/paired_out.a3m")
+    os.system(f"hhfilter -i {paired_in_fpath} -id {id} -cov {cov} -o {paired_out_fpath}")
 
-    with open(f"{path}/paired_out.a3m", "r") as handle:
-      for line in handle:
+    with open(paired_out_fpath, "r") as f:
+      for line in f:
         if line.startswith(">"):
           n = int(line[2:])
           xs = sequences[n]
@@ -663,21 +663,23 @@ def run_mmseqs2_modes(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_
   # Handle unpaired MSA if applicable
   if len(msa) < max_msa and (mode in ["unpaired", "unpaired_paired"] or len(u_seqs) == 1):
     print("Getting unpaired MSA")
-    out = run_mmseqs2(u_seqs, f"{path}/", pairing=None, print_citations=False)
+    out = run_mmseqs2(u_seqs, output, pairing=None, print_citations=False)
     Ls = [len(seq) for seq in u_seqs]
     sub_idx = []
     sub_msa = []
     sub_msa_num = 0
     for n,a3m_lines in enumerate(out):
       sub_msa.append([])
-      with open(f"{path}/in_{n}.a3m","w") as handle:
-        handle.write(a3m_lines)
+      in_fpath = os.path.join(output, f"in_{n}.a3m")
+      out_fpath = os.path.join(output, f"out_{n}.a3m")
+      with open(in_fpath,"w") as f:
+        f.write(a3m_lines)
 
       # Filter
-      os.system(f"hhfilter -i {path}/in_{n}.a3m -id {id} -cov {cov} -o {path}/out_{n}.a3m")
+      os.system(f"hhfilter -i {in_fpath} -id {id} -cov {cov} -o {out_fpath}")
 
-      with open(f"{path}/out_{n}.a3m", "r") as handle:
-        for line in handle:
+      with open(out_fpath, "r") as f:
+        for line in f:
           if not line.startswith(">"):
             xs = ['-' * l for l in Ls]
             xs[n] = line.rstrip()
@@ -696,6 +698,6 @@ def run_mmseqs2_modes(seq, jobname, cov=50, id=90, max_msa=2048, mode="unpaired_
           break
 
   # Write final MSA to file
-  with open(f"{jobname}/msa.a3m", "w") as handle:
+  with open(os.path.join(output, "final.a3m"), "w") as f:
     for n, sequence in enumerate(msa):
-      handle.write(f">n{n}\n{sequence}\n")
+      f.write(f">n{n}\n{sequence}\n")

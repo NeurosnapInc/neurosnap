@@ -141,6 +141,10 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
   # Add hydrogens to molecule to generate a more accurate 3D structure
   my_mol = Chem.AddHs(my_mol)
 
+  # Check if the number of atoms exceeds max_atoms
+  if my_mol.GetNumAtoms() > max_atoms:
+    raise ValueError(f"Input molecule exceeds the maximum allowed atoms ({max_atoms}). It has {my_mol.GetNumAtoms()} atoms. For proteins try using a different service such as the AFcluster and AlphaFlow tools on Neurosnap.")
+
   ### Generate 3D conformers
   params = AllChem.ETKDGv3()
   params.numThreads = 0

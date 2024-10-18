@@ -98,7 +98,7 @@ def minimize(mol, method="MMFF94", e_delta=5):
   return mol_filtered, energies_filtered
 
 
-def generate(input_mol, output_name="unique_conformers", write_multi=False, num_confs=1000, min_method="MMFF94"):
+def generate(input_mol, output_name="unique_conformers", write_multi=False, num_confs=1000, min_method="MMFF94", max_atoms=500):
   """
   -------------------------------------------------------
   Generate conformers for an input molecule.
@@ -115,6 +115,7 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
     write_multi: If True will write all unique conformers to a single SDF file, if False will write all unique conformers in separate SDF files in output_name (bool)
     num_confs..: Number of conformers to generate (int)
     min_method.: Method for minimization, can be either UFF, MMFF94, MMFF94s, or None for no minimization (str)
+    max_atoms..: Maximum number of atoms allowed for the input molecule (int)
   Returns:
     df_out....: Output pandas dataframe with all conformer statistics (pandas.core.frame.DataFrame)
   """

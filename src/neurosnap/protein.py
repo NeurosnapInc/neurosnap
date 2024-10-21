@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from typing import List, Union
 
 import matplotlib
@@ -22,6 +23,7 @@ from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
 from matplotlib import collections as mcoll
 from rdkit import Chem
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 from scipy.special import expit as sigmoid
 
 import neurosnap.algos.lDDT as lDDT
@@ -88,6 +90,15 @@ for code,abr,name in AAs_FULL_TABLE:
   AA_NAME_TO_ABR[name] = abr
   AA_NAME_TO_CODE[name] = code
 
+# Get the version of the user agent
+version = "X"
+try:
+    from importlib.metadata import version
+    version = version('neurosnap')
+except:
+    pass
+
+USER_AGENT = f"Neurosnap-OSS-Tools/v{version}"
 
 ### CLASSES ###
 class Protein():
@@ -1032,6 +1043,214 @@ def foldseek_search(protein: Union['Protein', str], mode: str = '3diaa',
         return pd.DataFrame(rows)
     else:
         raise ValueError("Invalid output_format. Choose 'json' or 'dataframe'.")
+    
+def run_blast(sequence, email, matrix="BLOSUM62", alignments=250, scores=250, evalue=10, filter=False, gapalign=True, database="uniprotkb_refprotswissprot", output_format=None, output_path=None, return_df=True):    
+    """
+    Submits a BLAST job to the EBI NCBI BLAST web service, checks the status periodically, and retrieves the result.
+    The result can be saved either as an XML or FASTA file. Optionally, a DataFrame with alignment details can be returned.
+
+    Parameters:
+    -----------
+    sequence : str or Protein
+        The input amino acid sequence as a string or a Protein object. If a Protein object is provided with multiple chains,
+        an error will be raised, and the user will be prompted to provide a single chain sequence using the `get_aas` method.
+    
+    email : str
+        The email address to use for communication if there is a problem.
+    
+    matrix : str, optional
+        The scoring matrix to use (default is "BLOSUM62"). Must be one of ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
+    
+    alignments : int, optional
+        The number of alignments to display in the result (default is 250). the number alignments must be 
+    
+    scores : int, optional
+        The number of scores to display in the result (default is 250).
+    
+    evalue : float, optional
+        The E  threshold for alignments (default is 10). must be one of the following: 50, 100, 250, 500, 750, 1000.
+    
+    filter : bool, optional
+        Whether to filter low complexity regions (default is False).
+    
+    gapalign : bool, optional
+        Whether to allow gap alignments (default is True).
+    
+    database : str, optional
+        The database to search in (default is "uniprotkb_refprotswissprot"). Must be one of:
+        ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes", 
+        "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"].
+    
+    output_format : str, optional
+        The format in which to save the result. Either "xml" or "fasta". If None, no file will be saved (default is None).
+    
+    output_path : str, optional
+        The file path to save the output. This is required if `output_format` is specified.
+    
+    return_df : bool, optional
+        Whether to return a DataFrame with alignment details (default is True).
+
+    Returns:
+    --------
+    pd.DataFrame or None:
+        A pandas DataFrame with BLAST hit and alignment information, if `return_df` is True.
+        The DataFrame contains the following columns:
+        - "Hit ID": The identifier of the hit sequence.
+        - "Accession": The accession number of the hit sequence.
+        - "Description": The description of the hit sequence.
+        - "Length": The length of the hit sequence.
+        - "Score": The score of the alignment.
+        - "Bits": The bit score of the alignment.
+        - "Expectation": The E-value of the alignment.
+        - "Identity (%)": The percentage identity of the alignment.
+        - "Gaps": The number of gaps in the alignment.
+        - "Query Sequence": The query sequence in the alignment.
+        - "Match Sequence": The matched sequence in the alignment.
+    """
+    valid_databases = ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes", 
+                        "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"]
+    assert database in valid_databases, f"Invalid database. Choose from: {', '.join(valid_databases)}"
+    
+    valid_matrices = ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"]
+    assert matrix in valid_matrices, f"Invalid matrix. Choose from: {', '.join(valid_matrices)}"
+    
+    assert evalue in [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000], "E-threshold must be one of the following: 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000"
+    evalue = 1.0 if evalue == 1 else evalue
+
+    assert alignments in [50, 100, 250, 500, 750, 1000], "Number of alignments must be one of the following: 50, 100, 250, 500, 750, 1000"
+
+    assert output_format in ["xml", "fasta", None], "Output format must be one of the following: 'xml', 'fasta', or None"
+    if output_format is not None:
+        assert output_path is not None, "Output path must be specified if output format is not None"
+    # Handle Protein object input
+    if isinstance(sequence, Protein):
+        if len(sequence.chains()) > 1:
+            raise AssertionError("The protein has multiple chains. Use '.get_aas(model, chain)' to obtain the sequence for a specific chain.")
+        
+        model = sequence.models()[0]
+        chain = sequence.chains()[0]
+        sequence = sequence.get_aas(model, chain)
+
+    # Step 1: Submit the BLAST job
+    url = "https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/run"
+    
+    multipart_data = MultipartEncoder(
+        fields={
+            "email": email,
+            "program": "blastp",
+            "matrix": matrix,
+            "alignments": str(alignments),
+            "scores": str(scores),
+            "exp": str(evalue),
+            "filter": 'T' if filter else 'F',
+            "gapalign": str(gapalign).lower(),
+            "stype": "protein",
+            "sequence": sequence,
+            "database": database
+        }
+    )
+
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/plain,application/json",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Content-Type": multipart_data.content_type
+    }
+
+    response = requests.post(url, headers=headers, data=multipart_data)
+    
+    if response.status_code == 200:
+        job_id = response.text.strip()
+        print(f"Job submitted successfully. Job ID: {job_id}")
+    else:
+        response.raise_for_status()
+    
+    # Step 2: Check job status
+    status_url = f"https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/status/{job_id}"
+    
+    while True:
+        status_response = requests.get(status_url)
+        status = status_response.text.strip()
+        
+        if status_response.status_code == 200:
+            print(f"Job status: {status}")
+            if status == "FINISHED":
+                break
+            elif status in ["RUNNING", "PENDING", "QUEUED"]:
+                time.sleep(20)
+            else:
+                raise Exception(f"Job failed with status: {status}")
+        else:
+            status_response.raise_for_status()
+    
+    # Step 3: Retrieve XML result
+    xml_url = f"https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/result/{job_id}/xml"
+    xml_response = requests.get(xml_url)
+    
+    if xml_response.status_code == 200:
+        xml_content = xml_response.text
+        # Save XML if output format is XML
+        if output_format == 'xml' and output_path:
+            with open(output_path, "w") as xml_file:
+                xml_file.write(xml_content)
+            print(f"XML result saved as {output_path}")
+        elif output_format == 'fasta' and output_path:
+            return parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format, output_path, return_df)
+        elif return_df:
+            return parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format, output_path, return_df)
+    else:
+        xml_response.raise_for_status()
+
+    def parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format=None, output_path=None, return_df=True):
+        """Parses the XML content, saves it as a FASTA file, or returns a DataFrame if requested."""
+        root = ET.fromstring(xml_content)
+        hits = []
+        fasta_content = ""
+        
+        for hit in root.findall(".//{http://www.ebi.ac.uk/schema}hit"):
+            hit_id = hit.attrib['id']
+            hit_ac = hit.attrib['ac']
+            hit_description = hit.attrib['description']
+            hit_length = hit.attrib['length']
+            
+            for alignment in hit.findall(".//{http://www.ebi.ac.uk/schema}alignment"):
+                score = alignment.find("{http://www.ebi.ac.uk/schema}score").text
+                bits = alignment.find("{http://www.ebi.ac.uk/schema}bits").text
+                expectation = alignment.find("{http://www.ebi.ac.uk/schema}expectation").text
+                identity = alignment.find("{http://www.ebi.ac.uk/schema}identity").text
+                gaps = alignment.find("{http://www.ebi.ac.uk/schema}gaps").text
+                query_seq = alignment.find("{http://www.ebi.ac.uk/schema}querySeq").text
+                match_seq = alignment.find("{http://www.ebi.ac.uk/schema}matchSeq").text
+
+                # Enrich FASTA format with additional information
+                fasta_content += (f">{hit_id} | Accession: {hit_ac} | Description: {hit_description} | "
+                                  f"Length: {hit_length} | Score: {score} | Bits: {bits} | "
+                                  f"Expectation: {expectation} | Identity: {identity}% | Gaps: {gaps}\n"
+                                  f"{match_seq}\n\n")
+                
+                hits.append({
+                    "Hit ID": hit_id,
+                    "Accession": hit_ac,
+                    "Description": hit_description,
+                    "Length": hit_length,
+                    "Score": score,
+                    "Bits": bits,
+                    "Expectation": expectation,
+                    "Identity (%)": identity,
+                    "Gaps": gaps,
+                    "Query Sequence": query_seq,
+                    "Match Sequence": match_seq
+                })
+
+        # Step 4: Save or return results
+        if output_format == 'fasta' and output_path:
+          with open(output_path, "w") as fasta_file:
+              fasta_file.write(fasta_content)
+          print(f"FASTA result saved as {output_path}")
+        
+        if return_df:
+          df = pd.DataFrame(hits)
+          return df
 
 def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95):
   """

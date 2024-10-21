@@ -1222,7 +1222,6 @@ def run_blast(sequence, email, matrix="BLOSUM62", alignments=250, scores=250, ev
                 query_seq = alignment.find("{http://www.ebi.ac.uk/schema}querySeq").text
                 match_seq = alignment.find("{http://www.ebi.ac.uk/schema}matchSeq").text
 
-                # Enrich FASTA format with additional information
                 fasta_content += (f">{hit_id} | Accession: {hit_ac} | Description: {hit_description} | "
                                   f"Length: {hit_length} | Score: {score} | Bits: {bits} | "
                                   f"Expectation: {expectation} | Identity: {identity}% | Gaps: {gaps}\n"

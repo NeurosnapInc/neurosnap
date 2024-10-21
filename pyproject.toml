@@ -27,6 +27,7 @@ dependencies = [
   "scipy",
   "matplotlib",
   "tabulate",
+  "requests_toolbelt",
   # "rdkit-pypi", # can switch this if "rdkit" does not work
 ]
 

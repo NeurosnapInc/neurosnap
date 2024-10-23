@@ -227,7 +227,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert model1 is not None, "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    assert (
+      model1 is not None
+    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self):

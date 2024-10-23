@@ -68,7 +68,9 @@ def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
   protein_length = len(prot_ref.calculate_distance_matrix(model=model, chain=chain))
   for prot in proteins:
     dm = prot.calculate_distance_matrix()  # compute protein distance matrix
-    assert len(dm) == protein_length, f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
+    assert (
+      len(dm) == protein_length
+    ), f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
     # get the upper triangle without the diagonal as a flattened vector
     triu_vect = dm[np.triu_indices(len(dm), k=1)]
     proteins_vects.append(triu_vect)

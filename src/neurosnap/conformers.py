@@ -1,6 +1,7 @@
 """
 Provides functions and classes related to processing and generating conformers.
 """
+
 import os
 
 import numpy as np
@@ -40,7 +41,7 @@ def find_LCS(mol):
 
   # Check if a core substructure was found
   assert core is not None and core.GetNumAtoms(), "No core substructure detected. Aligning using first conformer."
-  
+
   logger.debug("Core substructure detected. Aligning using core.")
   AllChem.AlignMolConformers(mol, mol.GetSubstructMatch(core))
   return mol
@@ -72,19 +73,19 @@ def minimize(mol, method="MMFF94", e_delta=5):
       raise ValueError(f'Invalid minimization method passed {method}. Must be either "UFF", "MMFF94", or "MMFF94s".')
 
   ## Energy Filters
-  energies = {} # keys are conformer IDs, values are calculated energies.
+  energies = {}  # keys are conformer IDs, values are calculated energies.
   energies_filtered = {}
   for i in range(mol.GetNumConformers()):
     ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=i)
     energies[i] = ff.CalcEnergy()
 
   # Filter out conformers above a certain energy threshold (e.g., 5 kcal/mol above the lowest energy conformer)
-  energy_threshold = min(energies.values()) + e_delta # kcal/mol
+  energy_threshold = min(energies.values()) + e_delta  # kcal/mol
   num_filtered = 0
 
   # Create a new molecule object with only the filtered conformers
-  mol_filtered = Chem.Mol(mol) # Copy the molecule structure
-  mol_filtered.RemoveAllConformers() # Remove all conformers from the copy
+  mol_filtered = Chem.Mol(mol)  # Copy the molecule structure
+  mol_filtered.RemoveAllConformers()  # Remove all conformers from the copy
   for conf_id, energy in energies.items():
     if energy <= energy_threshold:
       num_filtered += 1
@@ -127,28 +128,32 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
     if input_mol.endswith(".pdb"):
       my_mol = Chem.MolFromPDBFile(input_mol)
     elif input_mol.endswith(".sdf"):
-      for mol in Chem.SDMolSupplier(input_mol): # get first valid molecule if exists
+      for mol in Chem.SDMolSupplier(input_mol):  # get first valid molecule if exists
         if mol is not None:
           my_mol = mol
           break
       assert my_mol is not None, "Unable to find a valid molecule in the provided SDF file."
-    else: # assume smiles
+    else:  # assume smiles
       my_mol = Chem.MolFromSmiles(input_mol)
       assert my_mol is not None, f"Invalid smiles string provided {input_mol}"
   else:
-    raise ValueError("Invalid input type for input_mol. Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol")
+    raise ValueError(
+      "Invalid input type for input_mol. Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol"
+    )
 
   # Add hydrogens to molecule to generate a more accurate 3D structure
   my_mol = Chem.AddHs(my_mol)
 
   # Check if the number of atoms exceeds max_atoms
   if my_mol.GetNumAtoms() > max_atoms:
-    raise ValueError(f"Input molecule exceeds the maximum allowed atoms ({max_atoms}). It has {my_mol.GetNumAtoms()} atoms. For proteins try using a different service such as the AFcluster and AlphaFlow tools on Neurosnap.")
+    raise ValueError(
+      f"Input molecule exceeds the maximum allowed atoms ({max_atoms}). It has {my_mol.GetNumAtoms()} atoms. For proteins try using a different service such as the AFcluster and AlphaFlow tools on Neurosnap."
+    )
 
   ### Generate 3D conformers
   params = AllChem.ETKDGv3()
   params.numThreads = 0
-  rdDistGeom.EmbedMultipleConfs(my_mol, numConfs=num_confs, params=params) # NOTE: maxAttempts=100 was removed as does not work with ETKDGv3
+  rdDistGeom.EmbedMultipleConfs(my_mol, numConfs=num_confs, params=params)  # NOTE: maxAttempts=100 was removed as does not work with ETKDGv3
   logger.info(f"Generated {my_mol.GetNumConformers():,} 3D conformers.")
 
   ### Minimize energy of each conformer
@@ -159,7 +164,7 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
   ## Calculate the RMSD matrix between all pairs of conformers
   dists = []
   num_conformers = my_mol.GetNumConformers()
-  my_mol_nh = Chem.RemoveHs(my_mol) # remove hydrogens as it interferes with following steps
+  my_mol_nh = Chem.RemoveHs(my_mol)  # remove hydrogens as it interferes with following steps
   for i in range(num_conformers):
     for j in range(i):
       dists.append(rdMolAlign.GetBestRMS(my_mol_nh, my_mol_nh, i, j))
@@ -199,11 +204,11 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
   print(df)
 
   ## Write output
-  if write_multi: # write to single SDF file
+  if write_multi:  # write to single SDF file
     with Chem.SDWriter(f"{output_name}.sdf") as w:
       for conf_id in output["conformer_id"]:
         w.write(my_mol, confId=conf_id)
-  else: # write to single separate SDF files
+  else:  # write to single separate SDF files
     os.makedirs(output_name, exist_ok=True)
     for conf_id in output["conformer_id"]:
       with Chem.SDWriter(os.path.join(output_name, f"conformer_{conf_id}.sdf")) as w:

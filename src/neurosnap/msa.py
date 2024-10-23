@@ -1,6 +1,7 @@
 """
 Provides functions and classes related to processing protein sequence data.
 """
+
 import io
 import os
 import re
@@ -102,7 +103,7 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
       if line.startswith(">"):
         if seqs and seqs[-1] == "":
           raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
-        if len(seqs) >= size+1:
+        if len(seqs) >= size + 1:
           break
         match = re.search(r"^>([\w-]*)", line)
         assert match is not None, f"Invalid MSA/fasta. {line} is not a valid header."
@@ -123,10 +124,12 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
             names.pop()
             seqs.pop()
             continue
-        
+
         match = re.search(f"^[{STANDARD_AAs+allow_chars}]*$", line)
         if match is None:
-          raise ValueError(f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'")
+          raise ValueError(
+            f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'"
+          )
         seqs[-1] += line
 
   f.close()
@@ -192,7 +195,7 @@ def get_seqid(seq1, seq2):
   """
   assert len(seq1) == len(seq2), "Sequences are not the same length."
   num_matches = 0
-  for a,b in zip(seq1, seq2):
+  for a, b in zip(seq1, seq2):
     if a == b:
       num_matches += 1
   return 100 * num_matches / len(seq1)
@@ -223,13 +226,13 @@ def run_phmmer(query, database, evalue=10, cpu=2):
 
     search_args = ["phmmer", "--noali", "--notextw", "--cpu", str(cpu), "-E", str(evalue), queryfa_path, database]
     out = subprocess.run(search_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
-    
+
     if out.returncode != 0:
       raise Exception(f"Error in hmmer execution: \n{out.stdout}\n{out.stderr}")
 
     hits = SearchIO.read(io.StringIO(out.stdout), "hmmer3-text")
     hit_names = [x.id for x in hits]
-  
+
   return hit_names
 
 
@@ -247,9 +250,11 @@ def align_mafft(seqs, ep=0.0, op=1.53):
     out_seqs.: List of corresponding protein sequences (list<str>)
   """
   # check if mafft is actually present
-  assert shutil.which("mafft") is not None, "Cannot create alignment without mafft being installed. Please install mafft either using a package manager or from https://mafft.cbrc.jp/alignment/software/"
+  assert (
+    shutil.which("mafft") is not None
+  ), "Cannot create alignment without mafft being installed. Please install mafft either using a package manager or from https://mafft.cbrc.jp/alignment/software/"
   with tempfile.TemporaryDirectory() as tmp_dir:
-    tmp_fasta_path =  f"{tmp_dir}/tmp.fasta"
+    tmp_fasta_path = f"{tmp_dir}/tmp.fasta"
     if isinstance(seqs, str):
       tmp_fasta_path = seqs
     elif isinstance(seqs, list):
@@ -261,10 +266,16 @@ def align_mafft(seqs, ep=0.0, op=1.53):
         for name, seq in seqs.items():
           f.write(f">{name}\n{seq}\n")
     else:
-      raise ValueError(f"Input seqs cannot be of type {type(seqs)}. Can be fasta file path, list of sequences, or dictionary where values are AA sequences and keys are their corresponding names/IDs.")
+      raise ValueError(
+        f"Input seqs cannot be of type {type(seqs)}. Can be fasta file path, list of sequences, or dictionary where values are AA sequences and keys are their corresponding names/IDs."
+      )
 
     # logger.info(f"[*] Generating alignment with {len(seqs)} using mafft.")
-    align_out = subprocess.run(["mafft", "--thread", "8", "--maxiterate", "1000", "--globalpair", "--ep", str(ep), "--op", str(op), tmp_fasta_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    align_out = subprocess.run(
+      ["mafft", "--thread", "8", "--maxiterate", "1000", "--globalpair", "--ep", str(ep), "--op", str(op), tmp_fasta_path],
+      stdout=subprocess.PIPE,
+      stderr=subprocess.PIPE,
+    )
     try:
       align_out.check_returncode()
     except:  # noqa: E722
@@ -289,7 +300,7 @@ def run_phmmer_mafft(query, ref_db_path, size=float("inf"), in_name="input_seque
     out_seqs.: List of corresponding protein sequences (list<str>)
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
-    tmp_fasta_path =  f"{tmp_dir}/tmp.fasta"
+    tmp_fasta_path = f"{tmp_dir}/tmp.fasta"
     # clean input fasta
     names, seqs = read_msa(ref_db_path, remove_chars="*-", drop_chars="X")
     # ensure no duplicate IDs
@@ -301,14 +312,14 @@ def run_phmmer_mafft(query, ref_db_path, size=float("inf"), in_name="input_seque
         reference_seqs[f"{name}_{i}"] = seq
     # write cleaned fasta
     write_msa(tmp_fasta_path, reference_seqs.keys(), reference_seqs.values())
-    
+
     # find hits
     hits = run_phmmer(query, tmp_fasta_path)
     logger.info(f"Found {len(hits)}/{len(names)} in reference DB for query.")
-    unaligned_seqs = {in_name:query} # keep target sequence at the top
+    unaligned_seqs = {in_name: query}  # keep target sequence at the top
     found_names = set(in_name)
     found_seqs = set(query)
-    for i in range(min(size, len(hits)-1)):
+    for i in range(min(size, len(hits) - 1)):
       hit_name = hits[i]
       hit_seq = reference_seqs[hit_name]
       if hit_name not in found_names and hit_seq not in found_seqs:
@@ -378,7 +389,7 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     while True:
       error_count = 0
       try:
-        r = requests.post(f'{host_url}/{submission_endpoint}', data={'q': query, 'mode':mode}, timeout=timeout, headers=headers)
+        r = requests.post(f"{host_url}/{submission_endpoint}", data={"q": query, "mode": mode}, timeout=timeout, headers=headers)
       except requests.exceptions.Timeout:
         print("Timeout while submitting to MSA server. Retrying...")
         continue
@@ -396,14 +407,14 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
       out = r.json()
     except ValueError:
       print(f"Server didn't reply with json: {r.text}")
-      out = {"status":"ERROR"}
+      out = {"status": "ERROR"}
     return out
 
   def status(ID):
     while True:
       error_count = 0
       try:
-        r = requests.get(f'{host_url}/ticket/{ID}', timeout=timeout, headers=headers)
+        r = requests.get(f"{host_url}/ticket/{ID}", timeout=timeout, headers=headers)
       except requests.exceptions.Timeout:
         print("Timeout while fetching status from MSA server. Retrying...")
         continue
@@ -420,7 +431,7 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
       out = r.json()
     except ValueError:
       print(f"Server didn't reply with json: {r.text}")
-      out = {"status":"ERROR"}
+      out = {"status": "ERROR"}
     return out
 
   ## call mmseqs2 api
@@ -438,27 +449,31 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     out = submit(seqs_unique, mode)
 
   if out["status"] == "ERROR":
-    raise Exception('MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
+    raise Exception(
+      "MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later."
+    )
 
   if out["status"] == "MAINTENANCE":
-    raise Exception('MMseqs2 API is undergoing maintenance. Please try again in a few minutes.')
+    raise Exception("MMseqs2 API is undergoing maintenance. Please try again in a few minutes.")
 
   # wait for job to finish
   ID = out["id"]
-  while out["status"] in ["UNKNOWN","RUNNING","PENDING"]:
+  while out["status"] in ["UNKNOWN", "RUNNING", "PENDING"]:
     print(f"Sleeping for {timeout}s. Reason: {out['status']}")
     time.sleep(timeout)
     out = status(ID)
 
   if out["status"] == "ERROR" or out["status"] != "COMPLETE":
     print(out)
-    raise Exception('MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later.')
+    raise Exception(
+      "MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later."
+    )
 
   # Download results
   error_count = 0
   while True:
     try:
-      r = requests.get(f'{host_url}/result/download/{ID}', stream=True, timeout=timeout, headers=headers)
+      r = requests.get(f"{host_url}/result/download/{ID}", stream=True, timeout=timeout, headers=headers)
     except requests.exceptions.Timeout:
       print("Timeout while fetching result from MSA server. Retrying...")
       continue
@@ -479,25 +494,27 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     a3m_files = [f"{output}/pair.a3m"]
   else:
     a3m_files = [f"{output}/uniref.a3m"]
-    if mode == "env": a3m_files.append(f"{output}/bfd.mgnify30.metaeuk30.smag30.a3m")
-  
-   # gather a3m lines
+    if mode == "env":
+      a3m_files.append(f"{output}/bfd.mgnify30.metaeuk30.smag30.a3m")
+
+  # gather a3m lines
   a3m_lines = {}
   for a3m_file in a3m_files:
-    update_M,M = True,None
-    for line in open(a3m_file,"r"):
+    update_M, M = True, None
+    for line in open(a3m_file, "r"):
       if len(line) > 0:
         if "\x00" in line:
-          line = line.replace("\x00","")
+          line = line.replace("\x00", "")
           update_M = True
         if line.startswith(">") and update_M:
           M = int(line[1:].rstrip())
           update_M = False
-          if M not in a3m_lines: a3m_lines[M] = []
+          if M not in a3m_lines:
+            a3m_lines[M] = []
         a3m_lines[M].append(line)
-  
+
   a3m_lines = ["".join(a3m_lines[n]) for n in Ms]
- 
+
   # remove null bytes from all files including pair files
   for fname in os.listdir(output):
     if fname in ["uniref.a3m", "bfd.mgnify30.metaeuk30.smag30.a3m", "pair.a3m"]:
@@ -507,13 +524,12 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
             fout.write(line.replace("\x00", ""))
       shutil.move(f"{output}/{fname}.tmp", f"{output}/{fname}")
 
-
   if pairing is None:
     # Concatenate to create combined file
     with open(f"{output}/combined.a3m", "w") as fout:
       with open(f"{output}/uniref.a3m") as f:
-          for line in f:
-              fout.write(line)
+        for line in f:
+          fout.write(line)
 
       with open(f"{output}/bfd.mgnify30.metaeuk30.smag30.a3m") as f:
         # skip first two lines
@@ -521,22 +537,23 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
         f.readline()
         for line in f:
           fout.write(line)
-  
+
   # templates
   if use_templates:
     templates = {}
-    #print("seq\tpdb\tcid\tevalue")
-    for line in open(f"{output}/pdb70.m8","r"):
+    # print("seq\tpdb\tcid\tevalue")
+    for line in open(f"{output}/pdb70.m8", "r"):
       p = line.rstrip().split()
-      M,pdb,qid,e_value = p[0],p[1],p[2],p[10]
+      M, pdb, qid, e_value = p[0], p[1], p[2], p[10]
       M = int(M)
-      if M not in templates: templates[M] = []
+      if M not in templates:
+        templates[M] = []
       templates[M].append(pdb)
-      #if len(templates[M]) <= 20:
+      # if len(templates[M]) <= 20:
       #  print(f"{int(M)-N}\t{pdb}\t{qid}\t{e_value}")
 
     template_paths = {}
-    for k,TMPL in templates.items():
+    for k, TMPL in templates.items():
       TMPL_PATH = f"{output}/templates_{k}"
       if not os.path.isdir(TMPL_PATH):
         os.mkdir(TMPL_PATH)
@@ -570,17 +587,18 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
     for n in Ms:
       if n not in template_paths:
         template_paths_.append(None)
-        #print(f"{n-N}\tno_templates_found")
+        # print(f"{n-N}\tno_templates_found")
       else:
         template_paths_.append(template_paths[n])
     template_paths = template_paths_
 
   return (a3m_lines, template_paths) if use_templates else a3m_lines
 
+
 def run_mmseqs2_modes(seq, output, cov=50, id=90, max_msa=2048, mode="unpaired_paired", print_citations=True):
   """
   Generate a multiple sequence alignment (MSA) for the given sequence(s)
-  using Colabfold's API. Key difference between this function and 
+  using Colabfold's API. Key difference between this function and
   run_mmseqs2 is that this function supports different modes.
   The final a3m and most useful a3m file will be written as "output/final.a3m".
   Code originally adapted from: https://github.com/sokrypton/ColabFold/
@@ -657,8 +675,8 @@ def run_mmseqs2_modes(seq, output, cov=50, id=90, max_msa=2048, mode="unpaired_p
           n = int(line[2:])
           xs = sequences[n]
           # Expand homooligomeric sequences
-          xs = ['/'.join([x] * num) for x, num in zip(xs, u_nums)]
-          msa.append('/'.join(xs))
+          xs = ["/".join([x] * num) for x, num in zip(xs, u_nums)]
+          msa.append("/".join(xs))
 
   # Handle unpaired MSA if applicable
   if len(msa) < max_msa and (mode in ["unpaired", "unpaired_paired"] or len(u_seqs) == 1):
@@ -668,11 +686,11 @@ def run_mmseqs2_modes(seq, output, cov=50, id=90, max_msa=2048, mode="unpaired_p
     sub_idx = []
     sub_msa = []
     sub_msa_num = 0
-    for n,a3m_lines in enumerate(out):
+    for n, a3m_lines in enumerate(out):
       sub_msa.append([])
       in_fpath = os.path.join(output, f"in_{n}.a3m")
       out_fpath = os.path.join(output, f"out_{n}.a3m")
-      with open(in_fpath,"w") as f:
+      with open(in_fpath, "w") as f:
         f.write(a3m_lines)
 
       # Filter
@@ -681,11 +699,11 @@ def run_mmseqs2_modes(seq, output, cov=50, id=90, max_msa=2048, mode="unpaired_p
       with open(out_fpath, "r") as f:
         for line in f:
           if not line.startswith(">"):
-            xs = ['-' * l for l in Ls]
+            xs = ["-" * l for l in Ls]
             xs[n] = line.rstrip()
             # Expand homooligomeric sequences
-            xs = ['/'.join([x] * num) for x, num in zip(xs, u_nums)]
-            sub_msa[-1].append('/'.join(xs))
+            xs = ["/".join([x] * num) for x, num in zip(xs, u_nums)]
+            sub_msa[-1].append("/".join(xs))
             sub_msa_num += 1
         sub_idx.append(list(range(len(sub_msa[-1]))))
 

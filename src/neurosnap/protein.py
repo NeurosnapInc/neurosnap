@@ -2,6 +2,7 @@
 Provides functions and classes related to processing protein data as well as
 a feature rich wrapper around protein structures using BioPython.
 """
+
 import io
 import json
 import os
@@ -34,7 +35,7 @@ from neurosnap.log import logger
 # Names of atoms that are part of a protein's backbone structure
 BACKBONE_ATOMS = {"N", "CA", "C"}
 # Codes for both RNA and DNA
-STANDARD_NUCLEOTIDES = {'A', 'T', 'C', 'G', 'U', 'DA', 'DT', 'DC', 'DG', 'DU'}
+STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG", "DU"}
 ## Standard amino acids excluding the unknown character ("X")
 ## Currently excludes
 # O | pyl | pyrrolysine
@@ -50,32 +51,32 @@ HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
 
 ## Full amino acids table
 AAs_FULL_TABLE = [
-  ['A', 'ALA', 'ALANINE'],
-  ['R', 'ARG', 'ARGININE'],
-  ['N', 'ASN', 'ASPARAGINE'],
-  ['D', 'ASP', 'ASPARTIC ACID'],
-  ['C', 'CYS', 'CYSTEINE'],
-  ['Q', 'GLN', 'GLUTAMINE'],
-  ['E', 'GLU', 'GLUTAMIC ACID'],
-  ['G', 'GLY', 'GLYCINE'],
-  ['H', 'HIS', 'HISTIDINE'],
-  ['I', 'ILE', 'ISOLEUCINE'],
-  ['L', 'LEU', 'LEUCINE'],
-  ['K', 'LYS', 'LYSINE'],
-  ['M', 'MET', 'METHIONINE'],
-  ['F', 'PHE', 'PHENYLALANINE'],
-  ['P', 'PRO', 'PROLINE'],
-  ['S', 'SER', 'SERINE'],
-  ['T', 'THR', 'THREONINE'],
-  ['W', 'TRP', 'TRYPTOPHAN'],
-  ['Y', 'TYR', 'TYROSINE'],
-  ['V', 'VAL', 'VALINE'],
-  ['O', 'PYL', 'PYRROLYSINE'],
-  ['U', 'SEC', 'SELENOCYSTEINE'],
-  ['B', 'ASX', 'ASPARAGINE/ASPARTIC ACID'],
-  ['Z', 'GLX', 'GLUTAMINE/GLUTAMIC ACID'],
-  ['J', 'XLE', 'LEUCINE/ISOLEUCINE'],
-  ['X', 'UNK', 'UNKNOWN CODON'],
+  ["A", "ALA", "ALANINE"],
+  ["R", "ARG", "ARGININE"],
+  ["N", "ASN", "ASPARAGINE"],
+  ["D", "ASP", "ASPARTIC ACID"],
+  ["C", "CYS", "CYSTEINE"],
+  ["Q", "GLN", "GLUTAMINE"],
+  ["E", "GLU", "GLUTAMIC ACID"],
+  ["G", "GLY", "GLYCINE"],
+  ["H", "HIS", "HISTIDINE"],
+  ["I", "ILE", "ISOLEUCINE"],
+  ["L", "LEU", "LEUCINE"],
+  ["K", "LYS", "LYSINE"],
+  ["M", "MET", "METHIONINE"],
+  ["F", "PHE", "PHENYLALANINE"],
+  ["P", "PRO", "PROLINE"],
+  ["S", "SER", "SERINE"],
+  ["T", "THR", "THREONINE"],
+  ["W", "TRP", "TRYPTOPHAN"],
+  ["Y", "TYR", "TYROSINE"],
+  ["V", "VAL", "VALINE"],
+  ["O", "PYL", "PYRROLYSINE"],
+  ["U", "SEC", "SELENOCYSTEINE"],
+  ["B", "ASX", "ASPARAGINE/ASPARTIC ACID"],
+  ["Z", "GLX", "GLUTAMINE/GLUTAMIC ACID"],
+  ["J", "XLE", "LEUCINE/ISOLEUCINE"],
+  ["X", "UNK", "UNKNOWN CODON"],
 ]
 AA_CODE_TO_ABR = {}
 AA_CODE_TO_NAME = {}
@@ -83,7 +84,7 @@ AA_ABR_TO_CODE = {}
 AA_ABR_TO_NAME = {}
 AA_NAME_TO_CODE = {}
 AA_NAME_TO_ABR = {}
-for code,abr,name in AAs_FULL_TABLE:
+for code, abr, name in AAs_FULL_TABLE:
   AA_CODE_TO_ABR[code] = abr
   AA_CODE_TO_NAME[code] = name
   AA_ABR_TO_CODE[abr] = code
@@ -91,8 +92,9 @@ for code,abr,name in AAs_FULL_TABLE:
   AA_NAME_TO_ABR[name] = abr
   AA_NAME_TO_CODE[name] = code
 
+
 ### CLASSES ###
-class Protein():
+class Protein:
   def __init__(self, pdb):
     """
     -------------------------------------------------------
@@ -113,21 +115,21 @@ class Protein():
         self.title = pdb.split("/")[-1]
       else:
         self.title = pdb.upper()
-        if len(pdb) == 4: # check if a valid PDB ID
+        if len(pdb) == 4:  # check if a valid PDB ID
           r = requests.get(f"https://files.rcsb.org/download/{pdb.upper()}.pdb")
           r.raise_for_status()
-          with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as temp_file:
+          with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb") as temp_file:
             temp_file.write(r.content)
             pdb = temp_file.name
             logger.info("Found matching structure in RCSB PDB, downloading and using that.")
-        else: # check if provided a uniprot ID and fetch from AF2
+        else:  # check if provided a uniprot ID and fetch from AF2
           r = requests.get(f"https://alphafold.ebi.ac.uk/api/prediction/{pdb.upper()}")
           if r.status_code != 200:
             raise ValueError("Invalid input type provided. Can be either a file handle, PDB filepath, PDB ID, or UniProt ID")
           r = requests.get(r.json()[0]["pdbUrl"])
           if r.status_code != 200:
             raise ValueError("Invalid input type provided. Can be either a file handle, PDB filepath, PDB ID, or UniProt ID")
-          with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as temp_file:
+          with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb") as temp_file:
             temp_file.write(r.content)
             pdb = temp_file.name
             logger.info("Found matching structure in AF-DB, downloading and using that.")
@@ -177,7 +179,7 @@ class Protein():
   def __repr__(self):
     return f"<Neurosnap Protein: Title={self.title} Models={self.models()}, Chains=[{', '.join(self.chains())}], Atoms={len(self.df)}>"
 
-  def __call__(self, model = None, chain = None, res_type = None):
+  def __call__(self, model=None, chain=None, res_type=None):
     """
     -------------------------------------------------------
     Returns a selection of a copy of the internal dataframe
@@ -224,8 +226,10 @@ class Protein():
           model1 = m1.id
           model2 = m2.id
           break
-    
-    assert model1 is not None, ValueError("Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided.")
+
+    assert model1 is not None, ValueError(
+      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    )
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self):
@@ -238,7 +242,7 @@ class Protein():
     """
     return [model.id for model in self.structure]
 
-  def chains(self, model = 0):
+  def chains(self, model=0):
     """
     -------------------------------------------------------
     Returns a list of all the chain names/IDs.
@@ -250,7 +254,7 @@ class Protein():
       chains: Chain names/IDs found within the PDB file (list<str>)
     """
     return [chain.id for chain in self.structure[model] if chain.id.strip()]
-  
+
   def generate_df(self):
     """
     -------------------------------------------------------
@@ -329,6 +333,7 @@ class Protein():
       chain: The chain ID to renumber, if not provided will use all chains (str)
       start: Starting value to increment from, default 1 (int)
     """
+
     def aux(start):
       for m in self.structure:
         if model is None or m.id == model:
@@ -338,6 +343,7 @@ class Protein():
                 # Renumber residue
                 res.id = (res.id[0], start, res.id[2])
                 start += 1
+
     # perform initial renumbering to avoid collisions
     aux(-100000)
     # perform actual renumbering
@@ -348,7 +354,7 @@ class Protein():
   def remove_waters(self):
     """
     -------------------------------------------------------
-    Removes all water molecules (residues named 'WAT' or 'HOH') 
+    Removes all water molecules (residues named 'WAT' or 'HOH')
     from the structure. It is suggested to call .renumber()
     afterwards as well.
     -------------------------------------------------------
@@ -356,7 +362,7 @@ class Protein():
     for model in self.structure:
       for chain in model:
         # Identify water molecules and mark them for removal
-        residues_to_remove = [res for res in chain if res.get_resname() in ['WAT', 'HOH']]
+        residues_to_remove = [res for res in chain if res.get_resname() in ["WAT", "HOH"]]
 
         # Remove water molecules
         for res in residues_to_remove:
@@ -381,16 +387,13 @@ class Protein():
     """
     # List of standard amino acids and nucleotides (biopolymer residues)
     biopolymer_residues = set(AA_ABR_TO_CODE.keys()).union(STANDARD_NUCLEOTIDES)
-    
+
     for m in self.structure:
       if model is None or m.id == model:
         for c in m:
           if chain is None or c.id == chain:
             # Identify non-biopolymer residues (ligands, heteroatoms, etc.)
-            residues_to_remove = [
-              res for res in c
-              if res.get_resname() not in biopolymer_residues
-            ]
+            residues_to_remove = [res for res in c if res.get_resname() not in biopolymer_residues]
 
             # Remove non-biopolymer residues
             for res in residues_to_remove:
@@ -415,10 +418,7 @@ class Protein():
         for c in m:
           if chain is None or c.id == chain:
             # Identify nucleotide residues (both RNA and DNA)
-            residues_to_remove = [
-              res for res in c
-              if res.get_resname() in STANDARD_NUCLEOTIDES
-            ]
+            residues_to_remove = [res for res in c if res.get_resname() in STANDARD_NUCLEOTIDES]
 
             # Remove nucleotide residues
             for res in residues_to_remove:
@@ -440,7 +440,7 @@ class Protein():
       backbone: A numpy array of backbone coordinates (Nx3) (numpy.ndarray)
     """
     backbone_coords = []
-    
+
     for m in self.structure:
       if model is None or m.id == model:
         for c in m:
@@ -465,15 +465,15 @@ class Protein():
     -------------------------------------------------------
     """
     disulfide_pairs = []
-    
+
     for model in self.structure:
       for chain in model:
-        cysteines = [res for res in chain if res.get_resname() == 'CYS']
+        cysteines = [res for res in chain if res.get_resname() == "CYS"]
         for i, res1 in enumerate(cysteines):
-          for res2 in cysteines[i+1:]:
+          for res2 in cysteines[i + 1 :]:
             try:
-              sg1 = res1['SG']
-              sg2 = res2['SG']
+              sg1 = res1["SG"]
+              sg2 = res2["SG"]
               distance = sg1 - sg2
               if distance < threshold:
                 disulfide_pairs.append((res1, res2))
@@ -497,8 +497,8 @@ class Protein():
       salt_bridges: List of residue pairs forming salt bridges (list<tuple>)
     -------------------------------------------------------
     """
-    positive_residues = {'LYS', 'ARG'}
-    negative_residues = {'ASP', 'GLU'}
+    positive_residues = {"LYS", "ARG"}
+    negative_residues = {"ASP", "GLU"}
     salt_bridges = []
 
     for m in self.structure:
@@ -509,7 +509,7 @@ class Protein():
             neg_residues = [res for res in c if res.get_resname() in negative_residues]
             for pos_res in pos_residues:
               for neg_res in neg_residues:
-                dist = pos_res['CA'] - neg_res['CA']  # Use alpha-carbon distance as a proxy
+                dist = pos_res["CA"] - neg_res["CA"]  # Use alpha-carbon distance as a proxy
                 if dist < cutoff:
                   salt_bridges.append((pos_res, neg_res))
     return salt_bridges
@@ -551,14 +551,14 @@ class Protein():
     -------------------------------------------------------
     """
     missing_residues = []
-    
+
     for model in self.structure:
       for chain in model:
         residues = sorted(res.id[1] for res in chain)
         for i in range(len(residues) - 1):
-          if residues[i+1] != residues[i] + 1:
-            missing_residues.extend(range(residues[i] + 1, residues[i+1]))
-    
+          if residues[i + 1] != residues[i] + 1:
+            missing_residues.extend(range(residues[i] + 1, residues[i + 1]))
+
     return missing_residues
 
   def align(self, other_protein, model1=0, model2=0):
@@ -576,6 +576,7 @@ class Protein():
     """
     assert model1 in self.models(), ValueError("Specified model needs to be present in the reference structure.")
     assert model2 in other_protein.models(), ValueError("Specified model needs to be present in the other structure.")
+
     # Use the Superimposer to align the structures
     def aux(sample_model):
       atoms = []
@@ -617,16 +618,16 @@ class Protein():
     backbone1 = self.get_backbone(model=model1, chain=chain1)
     backbone2 = other_protein.get_backbone(model=model2, chain=chain2)
     assert backbone1.shape == backbone2.shape, "Structures must have the same number of backbone atoms for RMSD calculation."
-    
+
     if align:
       self.align(other_protein, model1=model1, model2=model2)
 
     # Get new backbone coordinates of both structures
     backbone1 = self.get_backbone(model=model1, chain=chain1)
     backbone2 = other_protein.get_backbone(model=model2, chain=chain2)
-    
+
     diff = backbone1 - backbone2
-    rmsd = np.sqrt(np.sum(diff ** 2) / backbone1.shape[0])
+    rmsd = np.sqrt(np.sum(diff**2) / backbone1.shape[0])
     return rmsd
 
   def calculate_distance_matrix(self, model=None, chain=None):
@@ -642,7 +643,7 @@ class Protein():
       dist_matrix: A 2D numpy array representing the distance matrix (numpy.ndarray)
     -------------------------------------------------------
     """
-    model =  self.models()[0]
+    model = self.models()[0]
     ca_atoms = []
 
     for m in self.structure:
@@ -650,8 +651,8 @@ class Protein():
         for c in m:
           if chain is None or c.id == chain:
             for res in c:
-              if 'CA' in res:
-                ca_atoms.append(res['CA'].coord)
+              if "CA" in res:
+                ca_atoms.append(res["CA"].coord)
 
     ca_atoms = np.array(ca_atoms)
     dist_matrix = np.sqrt(np.sum((ca_atoms[:, np.newaxis] - ca_atoms[np.newaxis, :]) ** 2, axis=-1))
@@ -682,12 +683,12 @@ class Protein():
                 if atom.mass is not None:
                   total_mass += atom.mass
                   weighted_coords += atom.mass * atom.coord
-    
+
     if total_mass == 0:
       raise ValueError("No atoms with mass found in the selected structure.")
-    
+
     return weighted_coords / total_mass
-  
+
   def distances_from_com(self, model=None, chain=None):
     """
     Calculate the distances of all atoms from the center of mass (COM) of the protein.
@@ -706,21 +707,21 @@ class Protein():
     Returns:
     -------
     distances : numpy.ndarray
-        A 1D NumPy array containing the distances (in Ångströms) between each atom 
+        A 1D NumPy array containing the distances (in Ångströms) between each atom
         and the center of mass.
     """
     com = self.calculate_center_of_mass(model=model, chain=chain)
     distances = []
 
     for m in self.structure:
-        if model is None or m.id == model:
-            for c in m:
-                if chain is None or c.id == chain:
-                    for res in c:
-                        for atom in res:
-                            distance = np.linalg.norm(atom.coord - com)
-                            distances.append(distance)
-    
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            for res in c:
+              for atom in res:
+                distance = np.linalg.norm(atom.coord - com)
+                distances.append(distance)
+
     return np.array(distances)  # Convert the list of distances to a NumPy array
 
   def calculate_surface_area(self, model=0, level="R"):
@@ -756,9 +757,7 @@ class Protein():
       volume: Estimated volume in Å³ (float)
     -------------------------------------------------------
     """
-    vdw_radii = {
-        "H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8
-    }  # Example radii in Å
+    vdw_radii = {"H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8}  # Example radii in Å
     volume = 0
 
     for m in self.structure:
@@ -771,7 +770,7 @@ class Protein():
                   element = atom.element
                   if element in vdw_radii:
                     radius = vdw_radii[element]
-                    volume += (4/3) * np.pi * (radius ** 3)
+                    volume += (4 / 3) * np.pi * (radius**3)
     return volume
 
   def to_sdf(self, fpath):
@@ -792,10 +791,10 @@ class Protein():
 
       # Read the PDB file
       mol = Chem.MolFromPDBFile(pdb_fpath, sanitize=False)
-      
+
       if mol is None:
         raise ValueError("Unable to parse the PDB file.")
-      
+
       # Write the molecule to SDF
       writer = Chem.SDWriter(fpath)
       writer.write(mol)
@@ -805,7 +804,7 @@ class Protein():
   def remove(self, model, chain=None, resi_start=None, resi_end=None):
     """
     -------------------------------------------------------
-    Completely removes all parts of a selection from 
+    Completely removes all parts of a selection from
     self.structure. If a residue range is provided then all
     residues between resi_start and resi_end will be removed
     from the structure (inclusively). If a residue range is
@@ -897,6 +896,7 @@ def getAA(query):
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
 
+
 def calc_lDDT(ref_pdb, sample_pdb):
   """
   -------------------------------------------------------
@@ -912,337 +912,381 @@ def calc_lDDT(ref_pdb, sample_pdb):
   mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
   return lDDT.get_LDDT(ref_dmap, mod_dmap)
 
-def foldseek_search(protein: Union['Protein', str], mode: str = '3diaa',
-                    databases: List[str] = None, max_retries: int = 10,
-                    retry_interval: int = 5, output_format: str = 'json') -> Union[str, pd.DataFrame]:
-    """
-    Perform a protein structure search using the Foldseek API.
 
-    Args:
-        protein: Either a Protein object or a path to a PDB file.
-        mode: Search mode ('3diaa' or 'tm-align').
-        databases: List of databases to search. Defaults to a predefined list if not provided.
-        max_retries: Maximum number of retries to check the job status.
-        retry_interval: Time in seconds between retries for checking job status.
-        output_format: Format of the output, either 'json' or 'dataframe'.
+def foldseek_search(
+  protein: Union["Protein", str],
+  mode: str = "3diaa",
+  databases: List[str] = None,
+  max_retries: int = 10,
+  retry_interval: int = 5,
+  output_format: str = "json",
+) -> Union[str, pd.DataFrame]:
+  """
+  Perform a protein structure search using the Foldseek API.
 
-    Returns:
-        Search results in the specified format (JSON string or pandas DataFrame).
+  Args:
+      protein: Either a Protein object or a path to a PDB file.
+      mode: Search mode ('3diaa' or 'tm-align').
+      databases: List of databases to search. Defaults to a predefined list if not provided.
+      max_retries: Maximum number of retries to check the job status.
+      retry_interval: Time in seconds between retries for checking job status.
+      output_format: Format of the output, either 'json' or 'dataframe'.
 
-    Raises:
-        RuntimeError: If the job fails.
-        TimeoutError: If the job does not complete within the allotted retries.
-        ValueError: If an invalid output_format is specified.
-    """
+  Returns:
+      Search results in the specified format (JSON string or pandas DataFrame).
 
-    BASE_URL = "https://search.foldseek.com/api"
+  Raises:
+      RuntimeError: If the job fails.
+      TimeoutError: If the job does not complete within the allotted retries.
+      ValueError: If an invalid output_format is specified.
+  """
 
-    # Default databases to search
-    if databases is None:
-        databases = [
-            'afdb50', 'afdb-swissprot', 'afdb-proteome', 'bfmd', 'cath50',
-            'mgnify_esm30', 'pdb100', 'gmgcl_id', 'bfvd'
-        ]
+  BASE_URL = "https://search.foldseek.com/api"
 
-    # Handle file input (Protein object or file path)
-    if isinstance(protein, Protein):
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as temp_file:
-            protein.save(temp_file.name)
-            file_path = temp_file.name
-    else:
-        file_path = protein
+  # Default databases to search
+  if databases is None:
+    databases = ["afdb50", "afdb-swissprot", "afdb-proteome", "bfmd", "cath50", "mgnify_esm30", "pdb100", "gmgcl_id", "bfvd"]
 
-    # Submit the job to the Foldseek API
-    data = {
-        'mode': mode,
-        'database[]': databases
-    }
+  # Handle file input (Protein object or file path)
+  if isinstance(protein, Protein):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb") as temp_file:
+      protein.save(temp_file.name)
+      file_path = temp_file.name
+  else:
+    file_path = protein
+
+  # Submit the job to the Foldseek API
+  data = {"mode": mode, "database[]": databases}
+  try:
+    with open(file_path, "rb") as file:
+      files = {"q": file}
+      response = requests.post(f"{BASE_URL}/ticket", data=data, files=files)
+    response.raise_for_status()
+    job_id = response.json()["id"]
+  except requests.RequestException as e:
+    raise RuntimeError(f"Failed to submit job: {e}")
+
+  # Poll for job status until complete or max retries are reached
+  for attempt in range(max_retries):
     try:
-        with open(file_path, 'rb') as file:
-            files = {'q': file}
-            response = requests.post(f"{BASE_URL}/ticket", data=data, files=files)
-        response.raise_for_status()
-        job_id = response.json()['id']
+      status_response = requests.get(f"{BASE_URL}/ticket/{job_id}")
+      status_response.raise_for_status()
+      status = status_response.json().get("status", "ERROR")
     except requests.RequestException as e:
-        raise RuntimeError(f"Failed to submit job: {e}")
+      raise RuntimeError(f"Failed to retrieve job status: {e}")
 
-    # Poll for job status until complete or max retries are reached
-    for attempt in range(max_retries):
-        try:
-            status_response = requests.get(f"{BASE_URL}/ticket/{job_id}")
-            status_response.raise_for_status()
-            status = status_response.json().get('status', 'ERROR')
-        except requests.RequestException as e:
-            raise RuntimeError(f"Failed to retrieve job status: {e}")
+    if status == "COMPLETE":
+      break
+    elif status == "ERROR":
+      raise RuntimeError("Job failed")
 
-        if status == 'COMPLETE':
-            break
-        elif status == 'ERROR':
-            raise RuntimeError("Job failed")
+    time.sleep(retry_interval)
+  else:
+    raise TimeoutError(f"Job did not complete within {max_retries * retry_interval} seconds")
 
-        time.sleep(retry_interval)
-    else:
-        raise TimeoutError(f"Job did not complete within {max_retries * retry_interval} seconds")
+  # Retrieve and accumulate results
+  results = []
+  entry = 0
+  while True:
+    try:
+      result_response = requests.get(f"{BASE_URL}/result/{job_id}/{entry}")
+      result_response.raise_for_status()
+      result = result_response.json()
+    except requests.RequestException as e:
+      raise RuntimeError(f"Failed to retrieve results: {e}")
 
-    # Retrieve and accumulate results
-    results = []
-    entry = 0
-    while True:
-        try:
-            result_response = requests.get(f"{BASE_URL}/result/{job_id}/{entry}")
-            result_response.raise_for_status()
-            result = result_response.json()
-        except requests.RequestException as e:
-            raise RuntimeError(f"Failed to retrieve results: {e}")
+    if not result or all(len(db_result["alignments"]) == 0 for db_result in result["results"]):
+      break
 
-        if not result or all(len(db_result['alignments']) == 0 for db_result in result['results']):
-            break
+    results.append(result)
+    entry += 1
 
-        results.append(result)
-        entry += 1
+  # Clean up temporary file if it was created
+  if isinstance(protein, Protein):
+    os.remove(file_path)
 
-    # Clean up temporary file if it was created
-    if isinstance(protein, Protein):
-        os.remove(file_path)
+  # Return results based on the output format
+  if output_format == "json":
+    return json.dumps(results, indent=2)
+  elif output_format == "dataframe":
+    rows = []
+    for result in results:
+      for db_result in result["results"]:
+        alignments = db_result["alignments"]
+        for alignment in alignments[0]:
+          rows.append(
+            {
+              "target": alignment["target"],
+              "db": db_result["db"],
+              "seqId": alignment.get("seqId", ""),
+              "alnLength": alignment.get("alnLength", ""),
+              "missmatches": alignment.get("missmatches", ""),
+              "gapsopened": alignment.get("gapsopened", ""),
+              "qStartPos": alignment.get("qStartPos", ""),
+              "qEndPos": alignment.get("qEndPos", ""),
+              "dbStartPos": alignment.get("dbStartPos", ""),
+              "dbEndPos": alignment.get("dbEndPos", ""),
+              "eval": alignment.get("eval", ""),
+              "score": alignment.get("score", ""),
+              "qLen": alignment.get("qLen", ""),
+              "dbLen": alignment.get("dbLen", ""),
+              "seq": alignment.get("tSeq", ""),
+            }
+          )
+    return pd.DataFrame(rows)
+  else:
+    raise ValueError("Invalid output_format. Choose 'json' or 'dataframe'.")
 
-    # Return results based on the output format
-    if output_format == 'json':
-        return json.dumps(results, indent=2)
-    elif output_format == 'dataframe':
-        rows = []
-        for result in results:
-            for db_result in result['results']:
-                alignments = db_result['alignments']
-                for alignment in alignments[0]:
-                    rows.append({
-                        'target': alignment['target'],
-                        'db': db_result['db'],
-                        'seqId': alignment.get('seqId', ''),
-                        'alnLength': alignment.get('alnLength', ''),
-                        'missmatches': alignment.get('missmatches', ''),
-                        'gapsopened': alignment.get('gapsopened', ''),
-                        'qStartPos': alignment.get('qStartPos', ''),
-                        'qEndPos': alignment.get('qEndPos', ''),
-                        'dbStartPos': alignment.get('dbStartPos', ''),
-                        'dbEndPos': alignment.get('dbEndPos', ''),
-                        'eval': alignment.get('eval', ''),
-                        'score': alignment.get('score', ''),
-                        'qLen': alignment.get('qLen', ''),
-                        'dbLen': alignment.get('dbLen', ''),
-                        'seq': alignment.get('tSeq', '')
-                    })
-        return pd.DataFrame(rows)
-    else:
-        raise ValueError("Invalid output_format. Choose 'json' or 'dataframe'.")
-    
-def run_blast(sequence, email, matrix="BLOSUM62", alignments=250, scores=250, evalue=10, filter=False, gapalign=True, database="uniprotkb_refprotswissprot", output_format=None, output_path=None, return_df=True):    
-    """
-    Submits a BLAST job to the EBI NCBI BLAST web service, checks the status periodically, and retrieves the result.
-    The result can be saved either as an XML or FASTA file. Optionally, a DataFrame with alignment details can be returned.
 
-    Parameters:
-    -----------
-    sequence : str or Protein
-        The input amino acid sequence as a string or a Protein object. If a Protein object is provided with multiple chains,
-        an error will be raised, and the user will be prompted to provide a single chain sequence using the `get_aas` method.
-    
-    email : str
-        The email address to use for communication if there is a problem.
-    
-    matrix : str, optional
-        The scoring matrix to use (default is "BLOSUM62"). Must be one of ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
-    
-    alignments : int, optional
-        The number of alignments to display in the result (default is 250). the number alignments must be 
-    
-    scores : int, optional
-        The number of scores to display in the result (default is 250).
-    
-    evalue : float, optional
-        The E  threshold for alignments (default is 10). must be one of the following: 50, 100, 250, 500, 750, 1000.
-    
-    filter : bool, optional
-        Whether to filter low complexity regions (default is False).
-    
-    gapalign : bool, optional
-        Whether to allow gap alignments (default is True).
-    
-    database : str, optional
-        The database to search in (default is "uniprotkb_refprotswissprot"). Must be one of:
-        ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes", 
-        "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"].
-    
-    output_format : str, optional
-        The format in which to save the result. Either "xml" or "fasta". If None, no file will be saved (default is None).
-    
-    output_path : str, optional
-        The file path to save the output. This is required if `output_format` is specified.
-    
-    return_df : bool, optional
-        Whether to return a DataFrame with alignment details (default is True).
+def run_blast(
+  sequence,
+  email,
+  matrix="BLOSUM62",
+  alignments=250,
+  scores=250,
+  evalue=10,
+  filter=False,
+  gapalign=True,
+  database="uniprotkb_refprotswissprot",
+  output_format=None,
+  output_path=None,
+  return_df=True,
+):
+  """
+  Submits a BLAST job to the EBI NCBI BLAST web service, checks the status periodically, and retrieves the result.
+  The result can be saved either as an XML or FASTA file. Optionally, a DataFrame with alignment details can be returned.
 
-    Returns:
-    --------
-    pd.DataFrame or None:
-        A pandas DataFrame with BLAST hit and alignment information, if `return_df` is True.
-        The DataFrame contains the following columns:
-        - "Hit ID": The identifier of the hit sequence.
-        - "Accession": The accession number of the hit sequence.
-        - "Description": The description of the hit sequence.
-        - "Length": The length of the hit sequence.
-        - "Score": The score of the alignment.
-        - "Bits": The bit score of the alignment.
-        - "Expectation": The E-value of the alignment.
-        - "Identity (%)": The percentage identity of the alignment.
-        - "Gaps": The number of gaps in the alignment.
-        - "Query Sequence": The query sequence in the alignment.
-        - "Match Sequence": The matched sequence in the alignment.
-    """
-    def parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format=None, output_path=None, return_df=True):
-        """Parses the XML content, saves it as a FASTA file, or returns a DataFrame if requested."""
-        root = ET.fromstring(xml_content)
-        hits = []
-        fasta_content = ""
-        
-        for hit in root.findall(".//{http://www.ebi.ac.uk/schema}hit"):
-            hit_id = hit.attrib['id']
-            hit_ac = hit.attrib['ac']
-            hit_description = hit.attrib['description']
-            hit_length = hit.attrib['length']
-            
-            for alignment in hit.findall(".//{http://www.ebi.ac.uk/schema}alignment"):
-                score = alignment.find("{http://www.ebi.ac.uk/schema}score").text
-                bits = alignment.find("{http://www.ebi.ac.uk/schema}bits").text
-                expectation = alignment.find("{http://www.ebi.ac.uk/schema}expectation").text
-                identity = alignment.find("{http://www.ebi.ac.uk/schema}identity").text
-                gaps = alignment.find("{http://www.ebi.ac.uk/schema}gaps").text
-                query_seq = alignment.find("{http://www.ebi.ac.uk/schema}querySeq").text
-                match_seq = alignment.find("{http://www.ebi.ac.uk/schema}matchSeq").text
+  Parameters:
+  -----------
+  sequence : str or Protein
+      The input amino acid sequence as a string or a Protein object. If a Protein object is provided with multiple chains,
+      an error will be raised, and the user will be prompted to provide a single chain sequence using the `get_aas` method.
 
-                fasta_content += (f">{hit_id} | Accession: {hit_ac} | Description: {hit_description} | "
-                                  f"Length: {hit_length} | Score: {score} | Bits: {bits} | "
-                                  f"Expectation: {expectation} | Identity: {identity}% | Gaps: {gaps}\n"
-                                  f"{match_seq}\n\n")
-                
-                hits.append({
-                    "Hit ID": hit_id,
-                    "Accession": hit_ac,
-                    "Description": hit_description,
-                    "Length": hit_length,
-                    "Score": score,
-                    "Bits": bits,
-                    "Expectation": expectation,
-                    "Identity (%)": identity,
-                    "Gaps": gaps,
-                    "Query Sequence": query_seq,
-                    "Match Sequence": match_seq
-                })
+  email : str
+      The email address to use for communication if there is a problem.
 
-        # Step 4: Save or return results
-        if output_format == 'fasta' and output_path:
-          with open(output_path, "w") as fasta_file:
-              fasta_file.write(fasta_content)
-          print(f"FASTA result saved as {output_path}")
-        
-        if return_df:
-          df = pd.DataFrame(hits)
-          return df
+  matrix : str, optional
+      The scoring matrix to use (default is "BLOSUM62"). Must be one of ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
 
-    valid_databases = ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes", 
-                        "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"]
-    assert database in valid_databases, f"Invalid database. Choose from: {', '.join(valid_databases)}"
-    
-    valid_matrices = ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"]
-    assert matrix in valid_matrices, f"Invalid matrix. Choose from: {', '.join(valid_matrices)}"
-    
-    assert evalue in [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000], "E-threshold must be one of the following: 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000"
-    evalue = 1.0 if evalue == 1 else evalue
+  alignments : int, optional
+      The number of alignments to display in the result (default is 250). the number alignments must be
 
-    assert alignments in [50, 100, 250, 500, 750, 1000], "Number of alignments must be one of the following: 50, 100, 250, 500, 750, 1000"
+  scores : int, optional
+      The number of scores to display in the result (default is 250).
 
-    assert output_format in ["xml", "fasta", None], "Output format must be one of the following: 'xml', 'fasta', or None"
-    if output_format is not None:
-        assert output_path is not None, "Output path must be specified if output format is not None"
-    # Handle Protein object input
-    if isinstance(sequence, Protein):
-        if len(sequence.chains()) > 1:
-            raise AssertionError("The protein has multiple chains. Use '.get_aas(model, chain)' to obtain the sequence for a specific chain.")
-        
-        model = sequence.models()[0]
-        chain = sequence.chains()[0]
-        sequence = sequence.get_aas(model, chain)
+  evalue : float, optional
+      The E  threshold for alignments (default is 10). must be one of the following: 50, 100, 250, 500, 750, 1000.
 
-    # Step 1: Submit the BLAST job
-    url = "https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/run"
-    
-    multipart_data = MultipartEncoder(
-        fields={
-            "email": email,
-            "program": "blastp",
-            "matrix": matrix,
-            "alignments": str(alignments),
-            "scores": str(scores),
-            "exp": str(evalue),
-            "filter": 'T' if filter else 'F',
-            "gapalign": str(gapalign).lower(),
-            "stype": "protein",
-            "sequence": sequence,
-            "database": database
-        }
-    )
+  filter : bool, optional
+      Whether to filter low complexity regions (default is False).
 
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "text/plain,application/json",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Content-Type": multipart_data.content_type
+  gapalign : bool, optional
+      Whether to allow gap alignments (default is True).
+
+  database : str, optional
+      The database to search in (default is "uniprotkb_refprotswissprot"). Must be one of:
+      ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes",
+      "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"].
+
+  output_format : str, optional
+      The format in which to save the result. Either "xml" or "fasta". If None, no file will be saved (default is None).
+
+  output_path : str, optional
+      The file path to save the output. This is required if `output_format` is specified.
+
+  return_df : bool, optional
+      Whether to return a DataFrame with alignment details (default is True).
+
+  Returns:
+  --------
+  pd.DataFrame or None:
+      A pandas DataFrame with BLAST hit and alignment information, if `return_df` is True.
+      The DataFrame contains the following columns:
+      - "Hit ID": The identifier of the hit sequence.
+      - "Accession": The accession number of the hit sequence.
+      - "Description": The description of the hit sequence.
+      - "Length": The length of the hit sequence.
+      - "Score": The score of the alignment.
+      - "Bits": The bit score of the alignment.
+      - "Expectation": The E-value of the alignment.
+      - "Identity (%)": The percentage identity of the alignment.
+      - "Gaps": The number of gaps in the alignment.
+      - "Query Sequence": The query sequence in the alignment.
+      - "Match Sequence": The matched sequence in the alignment.
+  """
+
+  def parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format=None, output_path=None, return_df=True):
+    """Parses the XML content, saves it as a FASTA file, or returns a DataFrame if requested."""
+    root = ET.fromstring(xml_content)
+    hits = []
+    fasta_content = ""
+
+    for hit in root.findall(".//{http://www.ebi.ac.uk/schema}hit"):
+      hit_id = hit.attrib["id"]
+      hit_ac = hit.attrib["ac"]
+      hit_description = hit.attrib["description"]
+      hit_length = hit.attrib["length"]
+
+      for alignment in hit.findall(".//{http://www.ebi.ac.uk/schema}alignment"):
+        score = alignment.find("{http://www.ebi.ac.uk/schema}score").text
+        bits = alignment.find("{http://www.ebi.ac.uk/schema}bits").text
+        expectation = alignment.find("{http://www.ebi.ac.uk/schema}expectation").text
+        identity = alignment.find("{http://www.ebi.ac.uk/schema}identity").text
+        gaps = alignment.find("{http://www.ebi.ac.uk/schema}gaps").text
+        query_seq = alignment.find("{http://www.ebi.ac.uk/schema}querySeq").text
+        match_seq = alignment.find("{http://www.ebi.ac.uk/schema}matchSeq").text
+
+        fasta_content += (
+          f">{hit_id} | Accession: {hit_ac} | Description: {hit_description} | "
+          f"Length: {hit_length} | Score: {score} | Bits: {bits} | "
+          f"Expectation: {expectation} | Identity: {identity}% | Gaps: {gaps}\n"
+          f"{match_seq}\n\n"
+        )
+
+        hits.append(
+          {
+            "Hit ID": hit_id,
+            "Accession": hit_ac,
+            "Description": hit_description,
+            "Length": hit_length,
+            "Score": score,
+            "Bits": bits,
+            "Expectation": expectation,
+            "Identity (%)": identity,
+            "Gaps": gaps,
+            "Query Sequence": query_seq,
+            "Match Sequence": match_seq,
+          }
+        )
+
+    # Step 4: Save or return results
+    if output_format == "fasta" and output_path:
+      with open(output_path, "w") as fasta_file:
+        fasta_file.write(fasta_content)
+      print(f"FASTA result saved as {output_path}")
+
+    if return_df:
+      df = pd.DataFrame(hits)
+      return df
+
+  valid_databases = [
+    "uniprotkb_refprotswissprot",
+    "uniprotkb_pdb",
+    "uniprotkb",
+    "afdb",
+    "uniprotkb_reference_proteomes",
+    "uniprotkb_swissprot",
+    "uniref100",
+    "uniref90",
+    "uniref50",
+    "uniparc",
+  ]
+  assert database in valid_databases, f"Invalid database. Choose from: {', '.join(valid_databases)}"
+
+  valid_matrices = ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"]
+  assert matrix in valid_matrices, f"Invalid matrix. Choose from: {', '.join(valid_matrices)}"
+
+  assert evalue in [
+    0.00001,
+    0.0001,
+    0.001,
+    0.01,
+    0.1,
+    1.0,
+    10,
+    100,
+    1000,
+  ], "E-threshold must be one of the following: 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000"
+  evalue = 1.0 if evalue == 1 else evalue
+
+  assert alignments in [50, 100, 250, 500, 750, 1000], "Number of alignments must be one of the following: 50, 100, 250, 500, 750, 1000"
+
+  assert output_format in ["xml", "fasta", None], "Output format must be one of the following: 'xml', 'fasta', or None"
+  if output_format is not None:
+    assert output_path is not None, "Output path must be specified if output format is not None"
+  # Handle Protein object input
+  if isinstance(sequence, Protein):
+    if len(sequence.chains()) > 1:
+      raise AssertionError("The protein has multiple chains. Use '.get_aas(model, chain)' to obtain the sequence for a specific chain.")
+
+    model = sequence.models()[0]
+    chain = sequence.chains()[0]
+    sequence = sequence.get_aas(model, chain)
+
+  # Step 1: Submit the BLAST job
+  url = "https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/run"
+
+  multipart_data = MultipartEncoder(
+    fields={
+      "email": email,
+      "program": "blastp",
+      "matrix": matrix,
+      "alignments": str(alignments),
+      "scores": str(scores),
+      "exp": str(evalue),
+      "filter": "T" if filter else "F",
+      "gapalign": str(gapalign).lower(),
+      "stype": "protein",
+      "sequence": sequence,
+      "database": database,
     }
+  )
 
-    response = requests.post(url, headers=headers, data=multipart_data)
-    
-    if response.status_code == 200:
-        job_id = response.text.strip()
-        print(f"Job submitted successfully. Job ID: {job_id}")
-    else:
-        response.raise_for_status()
-    
-    # Step 2: Check job status
-    status_url = f"https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/status/{job_id}"
-    
-    while True:
-        status_response = requests.get(status_url)
-        status = status_response.text.strip()
-        
-        if status_response.status_code == 200:
-            print(f"Job status: {status}")
-            if status == "FINISHED":
-                break
-            elif status in ["RUNNING", "PENDING", "QUEUED"]:
-                time.sleep(20)
-            else:
-                raise Exception(f"Job failed with status: {status}")
-        else:
-            status_response.raise_for_status()
-    
-    # Step 3: Retrieve XML result
-    xml_url = f"https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/result/{job_id}/xml"
-    xml_response = requests.get(xml_url)
-    
-    if xml_response.status_code == 200:
-        xml_content = xml_response.text
-        # Save XML if output format is XML
-        if output_format == 'xml' and output_path:
-            with open(output_path, "w") as xml_file:
-                xml_file.write(xml_content)
-            print(f"XML result saved as {output_path}")
-        elif output_format == 'fasta' and output_path:
-            return parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format, output_path, return_df)
-        elif return_df:
-            return parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format, output_path, return_df)
-    else:
-        xml_response.raise_for_status()
+  headers = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/plain,application/json",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Content-Type": multipart_data.content_type,
+  }
 
-def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95):
+  response = requests.post(url, headers=headers, data=multipart_data)
+
+  if response.status_code == 200:
+    job_id = response.text.strip()
+    print(f"Job submitted successfully. Job ID: {job_id}")
+  else:
+    response.raise_for_status()
+
+  # Step 2: Check job status
+  status_url = f"https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/status/{job_id}"
+
+  while True:
+    status_response = requests.get(status_url)
+    status = status_response.text.strip()
+
+    if status_response.status_code == 200:
+      print(f"Job status: {status}")
+      if status == "FINISHED":
+        break
+      elif status in ["RUNNING", "PENDING", "QUEUED"]:
+        time.sleep(20)
+      else:
+        raise Exception(f"Job failed with status: {status}")
+    else:
+      status_response.raise_for_status()
+
+  # Step 3: Retrieve XML result
+  xml_url = f"https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/result/{job_id}/xml"
+  xml_response = requests.get(xml_url)
+
+  if xml_response.status_code == 200:
+    xml_content = xml_response.text
+    # Save XML if output format is XML
+    if output_format == "xml" and output_path:
+      with open(output_path, "w") as xml_file:
+        xml_file.write(xml_content)
+      print(f"XML result saved as {output_path}")
+    elif output_format == "fasta" and output_path:
+      return parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format, output_path, return_df)
+    elif return_df:
+      return parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format, output_path, return_df)
+  else:
+    xml_response.raise_for_status()
+
+
+def plot_pseudo_3D(
+  xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95
+):
   """
   -------------------------------------------------------
   Plot the famous Pseudo 3D projection of a protein.
@@ -1265,6 +1309,7 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
   Returns:
     lc: LineCollection object of whats been drawn (matplotlib.collections.LineCollection)
   """
+
   def rescale(a, amin=None, amax=None):
     a = np.copy(a)
     if amin is None:
@@ -1273,7 +1318,7 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
       amax = a.max()
     a[a < amin] = amin
     a[a > amax] = amax
-    return (a - amin)/(amax - amin)
+    return (a - amin) / (amax - amin)
 
   # clip color values and produce warning if necesarry
   if c is not None and cmin is not None and cmax is not None:
@@ -1286,33 +1331,33 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
   # make segments and colors for each segment
   xyz = np.asarray(xyz)
   if Ls is None:
-    seg = np.concatenate([xyz[:,None],np.roll(xyz,1,0)[:,None]],axis=1)
-    c_seg = np.arange(len(seg))[::-1] if c is None else (c + np.roll(c,1,0))/2
+    seg = np.concatenate([xyz[:, None], np.roll(xyz, 1, 0)[:, None]], axis=1)
+    c_seg = np.arange(len(seg))[::-1] if c is None else (c + np.roll(c, 1, 0)) / 2
   else:
     Ln = 0
     seg = []
     c_seg = []
     for L in Ls:
-      sub_xyz = xyz[Ln:Ln+L]
-      seg.append(np.concatenate([sub_xyz[:,None],np.roll(sub_xyz,1,0)[:,None]],axis=1))
+      sub_xyz = xyz[Ln : Ln + L]
+      seg.append(np.concatenate([sub_xyz[:, None], np.roll(sub_xyz, 1, 0)[:, None]], axis=1))
       if c is not None:
-        sub_c = c[Ln:Ln+L]
-        c_seg.append((sub_c + np.roll(sub_c,1,0))/2)
+        sub_c = c[Ln : Ln + L]
+        c_seg.append((sub_c + np.roll(sub_c, 1, 0)) / 2)
       Ln += L
-    seg = np.concatenate(seg,0)
-    c_seg = np.arange(len(seg))[::-1] if c is None else np.concatenate(c_seg,0)
-  
+    seg = np.concatenate(seg, 0)
+    c_seg = np.arange(len(seg))[::-1] if c is None else np.concatenate(c_seg, 0)
+
   # set colors
-  c_seg = rescale(c_seg,cmin,cmax)  
+  c_seg = rescale(c_seg, cmin, cmax)
   if isinstance(cmap, str):
-    if cmap == "gist_rainbow": 
+    if cmap == "gist_rainbow":
       c_seg *= 0.75
     colors = matplotlib.colormaps[cmap](c_seg)
   else:
     colors = cmap(c_seg)
-  
+
   # remove segments that aren't connected
-  seg_len = np.sqrt(np.square(seg[:,0] - seg[:,1]).sum(-1))
+  seg_len = np.sqrt(np.square(seg[:, 0] - seg[:, 1]).sum(-1))
   if chainbreak is not None:
     idx = seg_len < chainbreak
     seg = seg[idx]
@@ -1320,29 +1365,29 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
     colors = colors[idx]
 
   seg_mid = seg.mean(1)
-  seg_xy = seg[...,:2]
-  seg_z = seg[...,2].mean(-1)
+  seg_xy = seg[..., :2]
+  seg_z = seg[..., 2].mean(-1)
   order = seg_z.argsort()
 
   # add shade/tint based on z-dimension
-  z = rescale(seg_z,zmin,zmax)[:,None]
+  z = rescale(seg_z, zmin, zmax)[:, None]
 
   # add shadow (make lines darker if they are behind other lines)
-  seg_len_cutoff = (seg_len[:,None] + seg_len[None,:]) / 2
-  seg_mid_z = seg_mid[:,2]
-  seg_mid_dist = np.sqrt(np.square(seg_mid[:,None] - seg_mid[None,:]).sum(-1))
-  shadow_mask = sigmoid(seg_len_cutoff * 2.0 - seg_mid_dist) * (seg_mid_z[:,None] < seg_mid_z[None,:])
-  np.fill_diagonal(shadow_mask,0.0)
-  shadow_mask = shadow ** shadow_mask.sum(-1,keepdims=True)
+  seg_len_cutoff = (seg_len[:, None] + seg_len[None, :]) / 2
+  seg_mid_z = seg_mid[:, 2]
+  seg_mid_dist = np.sqrt(np.square(seg_mid[:, None] - seg_mid[None, :]).sum(-1))
+  shadow_mask = sigmoid(seg_len_cutoff * 2.0 - seg_mid_dist) * (seg_mid_z[:, None] < seg_mid_z[None, :])
+  np.fill_diagonal(shadow_mask, 0.0)
+  shadow_mask = shadow ** shadow_mask.sum(-1, keepdims=True)
 
-  seg_mid_xz = seg_mid[:,:2]
-  seg_mid_xydist = np.sqrt(np.square(seg_mid_xz[:,None] - seg_mid_xz[None,:]).sum(-1))
-  tint_mask = sigmoid(seg_len_cutoff/2 - seg_mid_xydist) * (seg_mid_z[:,None] < seg_mid_z[None,:])
-  np.fill_diagonal(tint_mask,0.0)
-  tint_mask = 1 - tint_mask.max(-1,keepdims=True)
+  seg_mid_xz = seg_mid[:, :2]
+  seg_mid_xydist = np.sqrt(np.square(seg_mid_xz[:, None] - seg_mid_xz[None, :]).sum(-1))
+  tint_mask = sigmoid(seg_len_cutoff / 2 - seg_mid_xydist) * (seg_mid_z[:, None] < seg_mid_z[None, :])
+  np.fill_diagonal(tint_mask, 0.0)
+  tint_mask = 1 - tint_mask.max(-1, keepdims=True)
 
-  colors[:,:3] = colors[:,:3] + (1 - colors[:,:3]) * (0.50 * z + 0.50 * tint_mask) / 3
-  colors[:,:3] = colors[:,:3] * (0.20 + 0.25 * z + 0.55 * shadow_mask)
+  colors[:, :3] = colors[:, :3] + (1 - colors[:, :3]) * (0.50 * z + 0.50 * tint_mask) / 3
+  colors[:, :3] = colors[:, :3] * (0.20 + 0.25 * z + 0.55 * shadow_mask)
 
   set_lim = False
   if ax is None:
@@ -1352,25 +1397,28 @@ def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainb
     set_lim = True
   else:
     fig = ax.get_figure()
-    if ax.get_xlim() == (0,1):
+    if ax.get_xlim() == (0, 1):
       set_lim = True
-      
+
   if set_lim:
-    xy_min = xyz[:,:2].min() - line_w
-    xy_max = xyz[:,:2].max() + line_w
-    ax.set_xlim(xy_min,xy_max)
-    ax.set_ylim(xy_min,xy_max)
+    xy_min = xyz[:, :2].min() - line_w
+    xy_max = xyz[:, :2].max() + line_w
+    ax.set_xlim(xy_min, xy_max)
+    ax.set_ylim(xy_min, xy_max)
 
   ax.set_aspect("equal")
   ax.set_xlabel("Distance (Å)", fontsize=12)
   ax.set_ylabel("Distance (Å)", fontsize=12)
-    
+
   # determine linewidths
   width = fig.bbox_inches.width * ax.get_position().width
   linewidths = line_w * 72 * width / np.diff(ax.get_xlim())
 
-  lines = mcoll.LineCollection(seg_xy[order], colors=colors[order], linewidths=linewidths, path_effects=[matplotlib.patheffects.Stroke(capstyle="round")])
+  lines = mcoll.LineCollection(
+    seg_xy[order], colors=colors[order], linewidths=linewidths, path_effects=[matplotlib.patheffects.Stroke(capstyle="round")]
+  )
   return ax.add_collection(lines)
+
 
 def animate_pseudo_3D(fig, ax, frames, titles="Protein Animation", interval=200, repeat_delay=0, repeat=True):
   """
@@ -1400,14 +1448,8 @@ def animate_pseudo_3D(fig, ax, frames, titles="Protein Animation", interval=200,
     ValueError(f"The number of titles ({len(titles)}) does not match the number of frames ({len(frames)}).")
 
   # Gather all vertices safely across multiple paths per frame
-  all_x = np.concatenate([
-    path.vertices[:, 0] 
-    for frame in frames for path in frame.get_paths()
-  ])
-  all_y = np.concatenate([
-    path.vertices[:, 1] 
-    for frame in frames for path in frame.get_paths()
-  ])
+  all_x = np.concatenate([path.vertices[:, 0] for frame in frames for path in frame.get_paths()])
+  all_y = np.concatenate([path.vertices[:, 1] for frame in frames for path in frame.get_paths()])
   # Calculate limits with optional padding
   x_min, x_max = all_x.min(), all_x.max()
   y_min, y_max = all_y.min(), all_y.max()
@@ -1426,17 +1468,14 @@ def animate_pseudo_3D(fig, ax, frames, titles="Protein Animation", interval=200,
     collection = frames[0]
     ax.add_collection(collection)
     ax.set_title(titles[0])
-    return collection,
+    return (collection,)
 
   def animate(i):
-    frames[i-1].set_visible(False)
+    frames[i - 1].set_visible(False)
     frames[i].set_visible(True)
     ax.add_collection(frames[i])
     ax.set_title(titles[i])
-    return frames[i],
+    return (frames[i],)
 
-  ani = animation.FuncAnimation(
-    fig, animate, init_func=init, frames=len(frames),
-    interval=interval, repeat_delay=repeat_delay, repeat=repeat
-  )
+  ani = animation.FuncAnimation(fig, animate, init_func=init, frames=len(frames), interval=interval, repeat_delay=repeat_delay, repeat=repeat)
   return ani

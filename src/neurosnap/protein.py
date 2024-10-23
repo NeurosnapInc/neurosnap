@@ -139,7 +139,7 @@ class Protein:
     # load structure
     parser = PDBParser()
     self.structure = parser.get_structure("structure", pdb)
-    assert len(self.structure), ValueError("No models found. Structure appears to be empty.")
+    assert len(self.structure), "No models found. Structure appears to be empty."
 
     # Adds any missing chains to the structure.
     # Ensures new chain IDs do not overlap with existing ones.
@@ -227,9 +227,7 @@ class Protein:
           model2 = m2.id
           break
 
-    assert model1 is not None, ValueError(
-      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
-    )
+    assert model1 is not None, "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self):
@@ -316,8 +314,8 @@ class Protein:
     Returns:
       seq: The amino acid sequence of the found chain (str)
     """
-    assert model in self.structure, ValueError(f'Protein does not contain model "{model}"')
-    assert chain in self.structure[model], ValueError(f'Model {model} does not contain chain "{chain}"')
+    assert model in self.structure, f'Protein does not contain model "{model}"'
+    assert chain in self.structure[model], f'Model {model} does not contain chain "{chain}"'
 
     ppb = PPBuilder()
     return str(ppb.build_peptides(self.structure[model][chain])[0].get_sequence())
@@ -574,8 +572,8 @@ class Protein:
       model2......: Model ID of other protein to transform and align to reference (int)
     -------------------------------------------------------
     """
-    assert model1 in self.models(), ValueError("Specified model needs to be present in the reference structure.")
-    assert model2 in other_protein.models(), ValueError("Specified model needs to be present in the other structure.")
+    assert model1 in self.models(), "Specified model needs to be present in the reference structure."
+    assert model2 in other_protein.models(), "Specified model needs to be present in the other structure."
 
     # Use the Superimposer to align the structures
     def aux(sample_model):
@@ -611,8 +609,8 @@ class Protein:
     -------------------------------------------------------
     """
     # ensure models are present
-    assert model1 in self.models(), ValueError(f"Model {model1} was not found in current protein.")
-    assert model2 in other_protein.models(), ValueError(f"Model {model2} was not found in other protein.")
+    assert model1 in self.models(), f"Model {model1} was not found in current protein."
+    assert model2 in other_protein.models(), f"Model {model2} was not found in other protein."
 
     # Get backbone coordinates of both structures
     backbone1 = self.get_backbone(model=model1, chain=chain1)
@@ -737,7 +735,7 @@ class Protein:
       sasa: Solvent-accessible surface area in Å² (float)
     -------------------------------------------------------
     """
-    assert model in self.models(), ValueError(f"Model {model} is not currently present.")
+    assert model in self.models(), f"Model {model} is not currently present."
     structure_model = self.structure[model]
     sasa_calculator = SASA.ShrakeRupley()
     sasa_calculator.compute(structure_model, level=level)
@@ -757,7 +755,7 @@ class Protein:
       volume: Estimated volume in Å³ (float)
     -------------------------------------------------------
     """
-    assert model in self.models(), ValueError(f"Model {model} is not currently present.")
+    assert model in self.models(), f"Model {model} is not currently present."
     vdw_radii = {"H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8}  # Example radii in Å
     volume = 0
 
@@ -818,16 +816,16 @@ class Protein:
     -------------------------------------------------------
     """
     # validate input query
-    assert model in self.models(), ValueError(f"Model ID {model} does not exist in your structure. Found models include {self.models()}.")
+    assert model in self.models(), f"Model ID {model} does not exist in your structure. Found models include {self.models()}."
     if chain is not None:
-      assert chain in self.chains(model), ValueError(f"Chain ID {chain} does not exist in your structure. Found chains include {self.chains(model)}.")
+      assert chain in self.chains(model), f"Chain ID {chain} does not exist in your structure. Found chains include {self.chains(model)}."
     if resi_start is not None or resi_end is not None:
-      assert chain is not None, ValueError("Chain needs to specified if you want to remove residues")
-      assert resi_start is not None and resi_end is not None, ValueError("Both resi_start and resi_end must be provided")
-      assert isinstance(resi_start, int) and isinstance(resi_end, int), ValueError("Both resi_start and resi_end must be valid integers")
-      assert resi_end >= resi_start, ValueError("resi_start start must be less than resi_end")
-      assert resi_start in self.structure[model][chain], ValueError(f"Residue {resi_start} does not exist in the specified part of your structure.")
-      assert resi_end in self.structure[model][chain], ValueError(f"Residue {resi_end} does not exist in the specified part of your structure.")
+      assert chain is not None, "Chain needs to specified if you want to remove residues"
+      assert resi_start is not None and resi_end is not None, "Both resi_start and resi_end must be provided"
+      assert isinstance(resi_start, int) and isinstance(resi_end, int), "Both resi_start and resi_end must be valid integers"
+      assert resi_end >= resi_start, "resi_start start must be less than resi_end"
+      assert resi_start in self.structure[model][chain], f"Residue {resi_start} does not exist in the specified part of your structure."
+      assert resi_end in self.structure[model][chain], f"Residue {resi_end} does not exist in the specified part of your structure."
 
     # Perform the removal
     if resi_start is not None and resi_end is not None:

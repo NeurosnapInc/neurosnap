@@ -39,7 +39,7 @@ def find_LCS(mol):
   core = Chem.MolFromSmarts(mcs_result.smartsString)
 
   # Check if a core substructure was found
-  assert core is not None and core.GetNumAtoms(), ValueError("No core substructure detected. Aligning using first conformer.")
+  assert core is not None and core.GetNumAtoms(), "No core substructure detected. Aligning using first conformer."
   
   logger.debug("Core substructure detected. Aligning using core.")
   AllChem.AlignMolConformers(mol, mol.GetSubstructMatch(core))
@@ -131,10 +131,10 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
         if mol is not None:
           my_mol = mol
           break
-      assert my_mol is not None, ValueError("Unable to find a valid molecule in the provided SDF file.")
+      assert my_mol is not None, "Unable to find a valid molecule in the provided SDF file."
     else: # assume smiles
       my_mol = Chem.MolFromSmiles(input_mol)
-      assert my_mol is not None, ValueError(f"Invalid smiles string provided {input_mol}")
+      assert my_mol is not None, f"Invalid smiles string provided {input_mol}"
   else:
     raise ValueError("Invalid input type for input_mol. Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol")
 

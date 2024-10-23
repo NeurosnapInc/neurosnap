@@ -47,20 +47,20 @@ def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
   """
   # ensure input data is valid
   logger.debug(f"Loading {len(proteins)} for clustering")
-  assert len(proteins) > 3, ValueError(f"Input proteins should have a length of at least 3, found length of {len(proteins)}")
+  assert len(proteins) > 3, f"Input proteins should have a length of at least 3, found length of {len(proteins)}"
   for i, protein in enumerate(proteins):
     if isinstance(protein, Protein):
       pass
     elif isinstance(protein, str):
       proteins[i] = Protein(protein)
     else:
-      raise ValueError(f"One of the provided proteins was not Neurosnap Protein object or a path to an existing PDB file.\nprotein: {protein}")
+      raise f"One of the provided proteins was not Neurosnap Protein object or a path to an existing PDB file.\nprotein: {protein}"
 
   proteins_vects = []
   logger.debug(f"Clustering {len(proteins)} proteins")
 
   if len(proteins) < 5:
-    raise ValueError("ClusterProt requires at least 5 proteins in order to work.")
+    raise "ClusterProt requires at least 5 proteins in order to work."
 
   # compute distance matrices
   logger.debug("Computing distance matrices")
@@ -68,9 +68,7 @@ def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
   protein_length = len(prot_ref.calculate_distance_matrix(model=model, chain=chain))
   for prot in proteins:
     dm = prot.calculate_distance_matrix()  # compute protein distance matrix
-    assert len(dm) == protein_length, ValueError(
-      f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
-    )
+    assert len(dm) == protein_length, f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
     # get the upper triangle without the diagonal as a flattened vector
     triu_vect = dm[np.triu_indices(len(dm), k=1)]
     proteins_vects.append(triu_vect)

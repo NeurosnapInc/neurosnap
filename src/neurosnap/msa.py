@@ -105,9 +105,9 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
         if len(seqs) >= size+1:
           break
         match = re.search(r"^>([\w-]*)", line)
-        assert match is not None, ValueError(f"Invalid MSA/fasta. {line} is not a valid header.")
+        assert match is not None, f"Invalid MSA/fasta. {line} is not a valid header."
         name = match.group(1)
-        assert len(name), ValueError(f"Invalid MSA/fasta. line {i} has an empty header.")
+        assert len(name), f"Invalid MSA/fasta. line {i} has an empty header."
         names.append(name)
         seqs.append("")
       else:
@@ -130,7 +130,7 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
         seqs[-1] += line
 
   f.close()
-  assert len(names) == len(seqs), ValueError("Invalid MSA/fasta. The number sequences and headers found do not match.")
+  assert len(names) == len(seqs), "Invalid MSA/fasta. The number sequences and headers found do not match."
   return names, seqs
 
 
@@ -146,7 +146,7 @@ def write_msa(output_path, names, seqs):
     names......: List of proteins names from the file (list<str>)
     seqs.......: List of proteins sequences from the file (list<str>)
   """
-  assert len(names) == len(seqs), ValueError("The number of names and sequences do not match.")
+  assert len(names) == len(seqs), "The number of names and sequences do not match."
   with open(output_path, "w") as f:
     for name, seq in zip(names, seqs):
       f.write(f">{name}\n{seq}\n")
@@ -168,7 +168,7 @@ def pad_seqs(seqs, char="-", truncate=False):
   if truncate is True:
     longest_seq = len(seqs[0])
   elif type(truncate) is int:
-    assert truncate >= 1, ValueError("truncate must be either a boolean value or an integer greater than or equal to 1.")
+    assert truncate >= 1, "truncate must be either a boolean value or an integer greater than or equal to 1."
     longest_seq = truncate
   else:
     longest_seq = max(len(x) for x in seqs)
@@ -190,7 +190,7 @@ def get_seqid(seq1, seq2):
   Returns:
     seq_id: The pairwise sequence identity. Will return None  (float)
   """
-  assert len(seq1) == len(seq2), ValueError("Sequences are not the same length.")
+  assert len(seq1) == len(seq2), "Sequences are not the same length."
   num_matches = 0
   for a,b in zip(seq1, seq2):
     if a == b:
@@ -213,7 +213,7 @@ def run_phmmer(query, database, evalue=10, cpu=2):
   Returns:
     hits: List of hits ranked by how good the hits are (list<str>)
   """
-  assert shutil.which("phmmer") is not None, Exception("Cannot find phmmer. Please ensure phmmer is installed and added to your PATH.")
+  assert shutil.which("phmmer") is not None, "Cannot find phmmer. Please ensure phmmer is installed and added to your PATH."
 
   # Create a fasta file containing the query protein sequence. The fasta file name is based on input genbank file name
   with tempfile.TemporaryDirectory() as tmp:
@@ -247,7 +247,7 @@ def align_mafft(seqs, ep=0.0, op=1.53):
     out_seqs.: List of corresponding protein sequences (list<str>)
   """
   # check if mafft is actually present
-  assert shutil.which("mafft") is not None, Exception("Cannot create alignment without mafft being installed. Please install mafft either using a package manager or from https://mafft.cbrc.jp/alignment/software/")
+  assert shutil.which("mafft") is not None, "Cannot create alignment without mafft being installed. Please install mafft either using a package manager or from https://mafft.cbrc.jp/alignment/software/"
   with tempfile.TemporaryDirectory() as tmp_dir:
     tmp_fasta_path =  f"{tmp_dir}/tmp.fasta"
     if isinstance(seqs, str):
@@ -350,7 +350,7 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
   timeout = 6.02
 
   # set the mode
-  assert database in ["mmseqs2_uniref_env", "mmseqs2_uniref"], ValueError('database must be either "mmseqs2_uniref_env" or "mmseqs2_uniref"')
+  assert database in ["mmseqs2_uniref_env", "mmseqs2_uniref"], 'database must be either "mmseqs2_uniref_env" or "mmseqs2_uniref"'
   if use_filter:
     mode = "env" if database == "mmseqs2_uniref_env" else "all"
   else:
@@ -359,7 +359,7 @@ def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, us
   if pairing:
     use_templates = False
     # greedy is default, complete was the previous behavior
-    assert pairing in ["greedy", "complete"], ValueError('pairing must be either "greedy", "complete", or None')
+    assert pairing in ["greedy", "complete"], 'pairing must be either "greedy", "complete", or None'
     if pairing == "greedy":
       mode = "pairgreedy"
     elif pairing == "complete":

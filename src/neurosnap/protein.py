@@ -1098,6 +1098,56 @@ def run_blast(sequence, email, matrix="BLOSUM62", alignments=250, scores=250, ev
         - "Query Sequence": The query sequence in the alignment.
         - "Match Sequence": The matched sequence in the alignment.
     """
+    def parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format=None, output_path=None, return_df=True):
+        """Parses the XML content, saves it as a FASTA file, or returns a DataFrame if requested."""
+        root = ET.fromstring(xml_content)
+        hits = []
+        fasta_content = ""
+        
+        for hit in root.findall(".//{http://www.ebi.ac.uk/schema}hit"):
+            hit_id = hit.attrib['id']
+            hit_ac = hit.attrib['ac']
+            hit_description = hit.attrib['description']
+            hit_length = hit.attrib['length']
+            
+            for alignment in hit.findall(".//{http://www.ebi.ac.uk/schema}alignment"):
+                score = alignment.find("{http://www.ebi.ac.uk/schema}score").text
+                bits = alignment.find("{http://www.ebi.ac.uk/schema}bits").text
+                expectation = alignment.find("{http://www.ebi.ac.uk/schema}expectation").text
+                identity = alignment.find("{http://www.ebi.ac.uk/schema}identity").text
+                gaps = alignment.find("{http://www.ebi.ac.uk/schema}gaps").text
+                query_seq = alignment.find("{http://www.ebi.ac.uk/schema}querySeq").text
+                match_seq = alignment.find("{http://www.ebi.ac.uk/schema}matchSeq").text
+
+                fasta_content += (f">{hit_id} | Accession: {hit_ac} | Description: {hit_description} | "
+                                  f"Length: {hit_length} | Score: {score} | Bits: {bits} | "
+                                  f"Expectation: {expectation} | Identity: {identity}% | Gaps: {gaps}\n"
+                                  f"{match_seq}\n\n")
+                
+                hits.append({
+                    "Hit ID": hit_id,
+                    "Accession": hit_ac,
+                    "Description": hit_description,
+                    "Length": hit_length,
+                    "Score": score,
+                    "Bits": bits,
+                    "Expectation": expectation,
+                    "Identity (%)": identity,
+                    "Gaps": gaps,
+                    "Query Sequence": query_seq,
+                    "Match Sequence": match_seq
+                })
+
+        # Step 4: Save or return results
+        if output_format == 'fasta' and output_path:
+          with open(output_path, "w") as fasta_file:
+              fasta_file.write(fasta_content)
+          print(f"FASTA result saved as {output_path}")
+        
+        if return_df:
+          df = pd.DataFrame(hits)
+          return df
+
     valid_databases = ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes", 
                         "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"]
     assert database in valid_databases, f"Invalid database. Choose from: {', '.join(valid_databases)}"
@@ -1191,56 +1241,6 @@ def run_blast(sequence, email, matrix="BLOSUM62", alignments=250, scores=250, ev
             return parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format, output_path, return_df)
     else:
         xml_response.raise_for_status()
-
-    def parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format=None, output_path=None, return_df=True):
-        """Parses the XML content, saves it as a FASTA file, or returns a DataFrame if requested."""
-        root = ET.fromstring(xml_content)
-        hits = []
-        fasta_content = ""
-        
-        for hit in root.findall(".//{http://www.ebi.ac.uk/schema}hit"):
-            hit_id = hit.attrib['id']
-            hit_ac = hit.attrib['ac']
-            hit_description = hit.attrib['description']
-            hit_length = hit.attrib['length']
-            
-            for alignment in hit.findall(".//{http://www.ebi.ac.uk/schema}alignment"):
-                score = alignment.find("{http://www.ebi.ac.uk/schema}score").text
-                bits = alignment.find("{http://www.ebi.ac.uk/schema}bits").text
-                expectation = alignment.find("{http://www.ebi.ac.uk/schema}expectation").text
-                identity = alignment.find("{http://www.ebi.ac.uk/schema}identity").text
-                gaps = alignment.find("{http://www.ebi.ac.uk/schema}gaps").text
-                query_seq = alignment.find("{http://www.ebi.ac.uk/schema}querySeq").text
-                match_seq = alignment.find("{http://www.ebi.ac.uk/schema}matchSeq").text
-
-                fasta_content += (f">{hit_id} | Accession: {hit_ac} | Description: {hit_description} | "
-                                  f"Length: {hit_length} | Score: {score} | Bits: {bits} | "
-                                  f"Expectation: {expectation} | Identity: {identity}% | Gaps: {gaps}\n"
-                                  f"{match_seq}\n\n")
-                
-                hits.append({
-                    "Hit ID": hit_id,
-                    "Accession": hit_ac,
-                    "Description": hit_description,
-                    "Length": hit_length,
-                    "Score": score,
-                    "Bits": bits,
-                    "Expectation": expectation,
-                    "Identity (%)": identity,
-                    "Gaps": gaps,
-                    "Query Sequence": query_seq,
-                    "Match Sequence": match_seq
-                })
-
-        # Step 4: Save or return results
-        if output_format == 'fasta' and output_path:
-          with open(output_path, "w") as fasta_file:
-              fasta_file.write(fasta_content)
-          print(f"FASTA result saved as {output_path}")
-        
-        if return_df:
-          df = pd.DataFrame(hits)
-          return df
 
 def plot_pseudo_3D(xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95):
   """

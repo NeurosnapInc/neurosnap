@@ -34,3 +34,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/NeurosnapInc/neurosnap"
 Issues = "https://github.com/NeurosnapInc/neurosnap/issues"
+
+[tool.ruff]
+line-length = 150
+indent-width = 2

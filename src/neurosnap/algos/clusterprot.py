@@ -2,6 +2,7 @@
 Implementation of the ClusterProt algorithm from https://neurosnap.ai/service/ClusterProt.
 ClusterProt is an algorithm for clustering proteins by their structure similarity.
 """
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -13,7 +14,9 @@ try:
   from sklearn.decomposition import PCA
   from umap import UMAP
 except Exception as e:
-  logger.critical("Unable to import sklearn and umap. The ClusterProt algorithm depends on these two packages to function. Please add them to your environment using something like $ pip install umap-learn scikit-learn")
+  logger.critical(
+    "Unable to import sklearn and umap. The ClusterProt algorithm depends on these two packages to function. Please add them to your environment using something like $ pip install umap-learn scikit-learn"
+  )
   raise e
 
 
@@ -64,8 +67,10 @@ def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
   prot_ref = proteins[0]
   protein_length = len(prot_ref.calculate_distance_matrix(model=model, chain=chain))
   for prot in proteins:
-    dm = prot.calculate_distance_matrix() # compute protein distance matrix
-    assert len(dm) == protein_length, ValueError(f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths.")
+    dm = prot.calculate_distance_matrix()  # compute protein distance matrix
+    assert len(dm) == protein_length, ValueError(
+      f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
+    )
     # get the upper triangle without the diagonal as a flattened vector
     triu_vect = dm[np.triu_indices(len(dm), k=1)]
     proteins_vects.append(triu_vect)
@@ -100,6 +105,7 @@ def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
     "cluster_labels": cluster_labels.tolist(),
   }
 
+
 def animate_results(cp_results, animation_fpath="cluster_prot.gif"):
   """
   -------------------------------------------------------
@@ -115,7 +121,7 @@ def animate_results(cp_results, animation_fpath="cluster_prot.gif"):
   frames = []
   titles = []
   cp_results["proteins"]
-  sorted_proteins = sorted([[prot, x] for prot,x in zip(cp_results["proteins"], cp_results["projection_1d"])], key=lambda x: x[1])
+  sorted_proteins = sorted([[prot, x] for prot, x in zip(cp_results["proteins"], cp_results["projection_1d"])], key=lambda x: x[1])
   for i, (prot, x) in enumerate(sorted_proteins, start=1):
     print(f"Creating animation frames for {i}/{len(sorted_proteins)} proteins\r", end="", flush=True)
     frame = plot_pseudo_3D(prot.df[["x", "y", "z"]], ax=ax)
@@ -124,6 +130,7 @@ def animate_results(cp_results, animation_fpath="cluster_prot.gif"):
   print()
   ani = animate_pseudo_3D(fig, ax, frames, titles)
   ani.save(animation_fpath, writer="ffmpeg", fps=7)
+
 
 def create_figure_plotly(cp_results):
   """
@@ -138,9 +145,11 @@ def create_figure_plotly(cp_results):
   try:
     import plotly.express as px
   except Exception as e:
-    logger.critical("Unable to import plotly. This function depends on plotly express. Please add it to your environment using something like $ pip install plotly")
+    logger.critical(
+      "Unable to import plotly. This function depends on plotly express. Please add it to your environment using something like $ pip install plotly"
+    )
     raise e
-  
+
   titles = [prot.title for prot in cp_results["proteins"]]
   fig = px.scatter(
     cp_results["projection_2d"],
@@ -148,7 +157,7 @@ def create_figure_plotly(cp_results):
     y=1,
     # z=2,
     title="ClusterProt: Protein Clustering by Structural Similarity",
-    labels={"color": "Conformation Clusters", "0":"x", "1":"y", "2":"z"},
+    labels={"color": "Conformation Clusters", "0": "x", "1": "y", "2": "z"},
     color=["outlier" if x == -1 else f"cluster {x}" for x in cp_results["cluster_labels"]],
     hover_name=titles,
     # text=titles,

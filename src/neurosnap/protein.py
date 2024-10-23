@@ -27,6 +27,7 @@ from requests_toolbelt.multipart.encoder import MultipartEncoder
 from scipy.special import expit as sigmoid
 
 import neurosnap.algos.lDDT as lDDT
+from neurosnap.api import USER_AGENT
 from neurosnap.log import logger
 
 ### CONSTANTS ###
@@ -89,16 +90,6 @@ for code,abr,name in AAs_FULL_TABLE:
   AA_ABR_TO_NAME[abr] = name
   AA_NAME_TO_ABR[name] = abr
   AA_NAME_TO_CODE[name] = code
-
-# Get the version of the user agent
-version = "X"
-try:
-    from importlib.metadata import version
-    version = version('neurosnap')
-except:
-    pass
-
-USER_AGENT = f"Neurosnap-OSS-Tools/v{version}"
 
 ### CLASSES ###
 class Protein():

@@ -757,20 +757,20 @@ class Protein:
       volume: Estimated volume in Å³ (float)
     -------------------------------------------------------
     """
+    assert model in self.models(), ValueError(f"Model {model} is not currently present.")
     vdw_radii = {"H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8}  # Example radii in Å
     volume = 0
 
     for m in self.structure:
-      if model is None or m.id == model:
-        for c in m:
-          if chain is None or c.id == chain:
-            for res in c:
-              if is_aa(res):
-                for atom in res:
-                  element = atom.element
-                  if element in vdw_radii:
-                    radius = vdw_radii[element]
-                    volume += (4 / 3) * np.pi * (radius**3)
+      for c in m:
+        if chain is None or c.id == chain:
+          for res in c:
+            if is_aa(res):
+              for atom in res:
+                element = atom.element
+                if element in vdw_radii:
+                  radius = vdw_radii[element]
+                  volume += (4 / 3) * np.pi * (radius**3)
     return volume
 
   def to_sdf(self, fpath):

@@ -13,6 +13,16 @@ This a package developed by Keaun Amani at [neurosnap.ai](https://neurosnap.ai/)
 # Contributions
 We welcome contributions to this package. If you have a feature that you want to code or have added, submit a pull request or an issue.
 
+```sh
+# set up a virtualenv
+python3.8 -m venv venv
+
+# this step might differ depending on your shell
+source venv/bin/activate
+
+pip install --editable .[dev]
+```
+
 # Installation
 ```sh
 pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git

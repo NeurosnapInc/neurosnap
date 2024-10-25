@@ -23,6 +23,10 @@ source venv/bin/activate
 pip install --editable .[dev]
 ```
 
+# Building documentation
+To build documentation, enter your virtual environment and run `make docs` from
+the root of the repository.
+
 # Installation
 ```sh
 pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git

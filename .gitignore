@@ -5,3 +5,8 @@
 **/.vscode
 neurosnap.egg-info
 test_files/
+
+# sphinx
+docs/build/
+# docs/source/
+# !docs/source/conf.py

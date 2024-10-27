@@ -151,6 +151,7 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
     )
 
   ### Generate 3D conformers
+  logger.debug(f"Generating {num_confs:,} 3D conformers.")
   params = AllChem.ETKDGv3()
   params.numThreads = 0  # Will use all available CPU cores
   params.forceTol = 0.0001  # Indirectly increases embedding attempts
@@ -192,10 +193,15 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
   for i, cluster in enumerate(clusters, start=1):
     best_energy = float("inf")
     best_cid = None
-    for cid in cluster:
-      if energies[cid] < best_energy:
-        best_cid = cid
-        best_energy = energies[cid]
+    if min_method:
+      for cid in cluster:
+        if energies[cid] < best_energy:
+          best_cid = cid
+          best_energy = energies[cid]
+    else: # if no min_method / energies available just take the first cluster
+      best_cid = cluster[0]
+      best_energy = 0
+
     logger.debug(f"Cluster ID: {i}, Best Conformer: {best_cid} ({best_energy:.2f}), Conformers {cluster}")
     output["conformer_id"].append(best_cid)
     output["cluster_id"].append(i)

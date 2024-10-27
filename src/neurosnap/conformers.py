@@ -181,6 +181,7 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
   logger.debug(f"Dynamic RMSD threshold: {threshold:.2f} Å")
 
   # perform clustering
+  logger.debug(f"Clustering {num_conformers:,} conformers.")
   clusters = Butina.ClusterData(dists, num_conformers, threshold, isDistData=True, reordering=True)
 
   # get most favorable representatives for each cluster using calculated energy

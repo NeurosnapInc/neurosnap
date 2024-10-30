@@ -3,6 +3,7 @@ Provides functions and classes related to processing and generating conformers.
 """
 
 import os
+from typing import Dict, Tuple, Optional, Any
 
 import numpy as np
 import pandas as pd
@@ -14,15 +15,15 @@ from rdkit.ML.Cluster import Butina
 from neurosnap.log import logger
 
 
-def find_LCS(mol):
+def find_LCS(mol: Chem.rdchem.Mol) -> Chem.rdchem.Mol:
   """Find the largest common substructure (LCS) between a
   set of conformers and aligns all conformers to the LCS.
 
   Parameters:
-    mol: Input RDkit molecule object, must already have conformers present (rdkit.Chem.rdchem.Mol)
+    mol: Input RDkit molecule object, must already have conformers present
 
   Returns:
-    rdkit.Chem.rdchem.Mol: Resultant molecule object with all conformers aligned to the LCS
+    Resultant molecule object with all conformers aligned to the LCS
 
   Raises:
     Exception: if no LCS is detected
@@ -49,7 +50,7 @@ def find_LCS(mol):
   return mol
 
 
-def minimize(mol, method: str = "MMFF94", e_delta=5):
+def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", e_delta: float = 5.0) -> Tuple[float, Dict[int, float]]:
   """Minimize conformer energy (kcal/mol) using RDkit
   and filter out conformers below a certain threshold.
 
@@ -59,11 +60,14 @@ def minimize(mol, method: str = "MMFF94", e_delta=5):
     e_delta: Filters out conformers that are above a certain energy threshold in kcal/mol. Formula used is >= min_conformer_energy + e_delta (float)
 
   Returns:
-    mol_filtered: The pairwise sequence identity. Will return None (float)
-    energies: Dictionary where keys are conformer IDs and values are calculated energies in kcal/mol (dict<int:float>)
+    A tuple of the form ``(mol_filtered, energies)``
+
+    - ``mol_filtered``: pairwise sequence identity. Will return None
+    - ``energies``: dictionary where keys are conformer IDs and values are calculated energies in kcal/mol
 
   """
-  # FIXME: return type tuple
+  # FIXME(@KeaunAmani): should probably better explain the "Will return None"
+
   logger.info(f"Minimizing energy of all conformers using {method}")
   for i in range(mol.GetNumConformers()):
     if method == "UFF":
@@ -102,7 +106,14 @@ def minimize(mol, method: str = "MMFF94", e_delta=5):
   return mol_filtered, energies_filtered
 
 
-def generate(input_mol, output_name="unique_conformers", write_multi=False, num_confs=1000, min_method="MMFF94", max_atoms=500):
+def generate(
+  input_mol: Any,
+  output_name: str = "unique_conformers",
+  write_multi: bool = False,
+  num_confs: int = 1000,
+  min_method: Optional[str] = "MMFF94",
+  max_atoms: int = 500,
+) -> pd.DataFrame:
   """Generate conformers for an input molecule.
 
   Performs the following actions in order:
@@ -113,15 +124,15 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
   5. Return most energetically favorable conformers in each cluster
 
   Parameters:
-    input_mol: Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol (any)
-    output_name: Output to write SDF files of passing conformers (str)
-    write_multi: If True will write all unique conformers to a single SDF file, if False will write all unique conformers in separate SDF files in output_name (bool)
-    num_confs: Number of conformers to generate (int)
-    min_method: Method for minimization, can be either UFF, MMFF94, MMFF94s, or None for no minimization (str)
-    max_atoms: Maximum number of atoms allowed for the input molecule (int)
+    input_mol: Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol
+    output_name: Output to write SDF files of passing conformers
+    write_multi: If True will write all unique conformers to a single SDF file, if False will write all unique conformers in separate SDF files in output_name
+    num_confs: Number of conformers to generate
+    min_method: Method for minimization, can be either UFF, MMFF94, MMFF94s, or None for no minimization
+    max_atoms: Maximum number of atoms allowed for the input molecule
 
   Returns:
-    pandas.core.frame.DataFrame: Output pandas dataframe with all conformer statistics
+    A dataframe with all conformer statistics
 
   """
   ### parse input and construct corresponding RDkit mol object

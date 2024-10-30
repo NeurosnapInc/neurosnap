@@ -3,9 +3,7 @@ import logging
 
 ### CLASSES ###
 class c:
-  """
-  Terminal colors class
-  """
+  """Terminal colors class"""
 
   _ = "\033[0m"  # reset terminal
   p = "\033[38;5;204m"  # pink
@@ -20,14 +18,18 @@ class c:
 
 
 class CustomLogger(logging.Formatter):
-  """
-  Custom logger with specialized formatting.
+  """Custom logger with specialized formatting.
+
   NOTE:
-    [+] logging.DEBUG....: Used for all general info
-    [*] logging.INFO.....: Used for more important key info that isn't negative
-    [-] logging.WARNING..: Used for non-severe info that is negative
-    [!] logging.ERROR....: Used for errors that require attention but are super concerning
-    [!] logging.CRITICAL.: Used for very severe errors that require immediate attention and are concerning
+    ``[+] logging.DEBUG``: Used for all general info
+
+    ``[*] logging.INFO``: Used for more important key info that isn't negative
+
+    ``[-] logging.WARNING``: Used for non-severe info that is negative
+
+    ``[!] logging.ERROR``: Used for errors that require attention but are super concerning
+
+    ``[!] logging.CRITICAL``: Used for very severe errors that require immediate attention and are concerning
   """
 
   log_format_detailed = f"{c.grey}%(asctime)s{c._} %(message)s {c.p}(%(filename)s:%(lineno)d){c._}"
@@ -40,6 +42,8 @@ class CustomLogger(logging.Formatter):
     logging.ERROR: f"{c.r}[!]{c._} {log_format_detailed}",
     logging.CRITICAL: f"{c.br}[!]{c._} {log_format_detailed}",
   }
+  """:meta private:"""
+  # marking this as private so sphinx doesn't try to document it
 
   def format(self, record):
     log_fmt = self.FORMATS.get(record.levelno)

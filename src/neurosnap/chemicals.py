@@ -7,7 +7,7 @@ from neurosnap.log import logger
 
 
 ### FUNCTIONS ###
-def smiles_to_sdf(smiles: str, output_path: str):
+def smiles_to_sdf(smiles: str, output_path: str) -> None:
   """Converts a SMILES string to an sdf file.
   Will overwrite existing results.
 
@@ -16,8 +16,8 @@ def smiles_to_sdf(smiles: str, output_path: str):
   should be used in most cases.
 
   Parameters:
-    smiles (str): Smiles string to parse and convert
-    output_path (str): Path to output SDF file, should end with .sdf
+    smiles: Smiles string to parse and convert
+    output_path: Path to output SDF file, should end with .sdf
 
   """
   try:

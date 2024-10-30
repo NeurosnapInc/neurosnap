@@ -324,8 +324,8 @@ class Protein:
     exist this function will do absolutely nothing.
 
     Parameters:
-      model: The model ID to renumber. If :obj:`None`, will use all models.
-      chain: The chain ID to renumber. If :obj:`None`, will use all models.
+      model: The model ID to renumber. If ``None``, will use all models.
+      chain: The chain ID to renumber. If ``None``, will use all models.
       start: Starting value to increment from, defaults to 1.
 
     """
@@ -373,8 +373,8 @@ class Protein:
     the entire structure.
 
     Parameters:
-      model: The model ID to process. If :obj:`None`, will use all models.
-      chain: The chain ID to process. If :obj:`None`, will use all chains.
+      model: The model ID to process. If ``None``, will use all models.
+      chain: The chain ID to process. If ``None``, will use all chains.
 
     """
     # List of standard amino acids and nucleotides (biopolymer residues)
@@ -399,8 +399,8 @@ class Protein:
     from the entire structure.
 
     Parameters:
-      model: The model ID to process. If :obj:`None`, will use all models.
-      chain: The chain ID to process. If :obj:`None`, will use all chains.
+      model: The model ID to process. If ``None``, will use all models.
+      chain: The chain ID to process. If ``None``, will use all chains.
 
     """
     for m in self.structure:
@@ -422,8 +422,8 @@ class Protein:
     If model or chain is not provided, extracts from all models/chains.
 
     Parameters:
-      model: Model ID to extract from. If :obj:`None`, all models are included.
-      chain: Chain ID to extract from. If :obj:`None`, all chains are included.
+      model: Model ID to extract from. If ``None``, all models are included.
+      chain: Chain ID to extract from. If ``None``, all chains are included.
 
     Returns:
       A numpy array of backbone coordinates (Nx3)
@@ -478,8 +478,8 @@ class Protein:
     charged residue (Asp, Glu) within a given cutoff distance.
 
     Parameters:
-      model: Model ID to search. If :obj:`None`, all models are searched.
-      chain: Chain ID to search. If :obj:`None`, all chains are searched.
+      model: Model ID to search. If ``None``, all models are searched.
+      chain: Chain ID to search. If ``None``, all chains are searched.
       cutoff: Maximum distance for a salt bridge (float)
 
     Returns:
@@ -507,11 +507,11 @@ class Protein:
     """Identify hydrophobic residues in the structure.
 
     Parameters:
-      model: Model ID to extract from. If :obj:`None`, all models are checked.
-      chain: Chain ID to extract from. If :obj:`None`, all chains are checked.
+      model: Model ID to extract from. If ``None``, all models are checked.
+      chain: Chain ID to extract from. If ``None``, all chains are checked.
 
     Returns:
-      List of tuples :obj:`(model_id, chain_id, residue)` for hydrophobic residues
+      List of tuples ``(model_id, chain_id, residue)`` for hydrophobic residues
 
     """
     hydrophobic_residues = []
@@ -531,7 +531,7 @@ class Protein:
     Useful for identifying gaps in the structure.
 
     Parameters:
-      chain: Chain ID to inspect. If :obj:`None`, all chains are inspected.
+      chain: Chain ID to inspect. If ``None``, all chains are inspected.
 
     Returns:
       missing_residues: List of missing residue positions
@@ -850,11 +850,11 @@ def getAA(query: str) -> Tuple[str, str, str]:
     query: Amino acid code, abbreviation, or name
 
   Returns:
-    A triple of the form :obj:`(code, abr, name)`.
+    A triple of the form ``(code, abr, name)``.
 
-    - :obj:`code` is the amino acid 1 letter abbreviation / code
-    - :obj:`abr` is the amino acid 3 letter abbreviation / code
-    - :obj:`name` is the amino acid full name
+    - ``code`` is the amino acid 1 letter abbreviation / code
+    - ``abr`` is the amino acid 3 letter abbreviation / code
+    - ``name`` is the amino acid full name
 
   """
   query = query.upper()
@@ -1046,7 +1046,7 @@ def run_blast(
       [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
     filter: Whether to filter low complexity regions (default is False).
     gapalign: Whether to allow gap alignments (default is True).
-    database: The database to search in, default is ``"uniprotkb_refprotswissprot"``. 
+    database: The database to search in, default is ``"uniprotkb_refprotswissprot"``.
 
       Must be one of::
 

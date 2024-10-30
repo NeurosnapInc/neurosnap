@@ -6,6 +6,8 @@ ClusterProt is an algorithm for clustering proteins by their structure similarit
 import matplotlib.pyplot as plt
 import numpy as np
 
+from typing import List, Optional, Union, Dict, Any
+
 from neurosnap.log import logger
 from neurosnap.protein import Protein, animate_pseudo_3D, plot_pseudo_3D
 
@@ -20,11 +22,11 @@ except Exception as e:
   raise e
 
 
-def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
-  """
-  -------------------------------------------------------
-  Run the ClusterProt algorithm on some input proteins.
+def ClusterProt(proteins: List[Union["Protein", str]], model: int = 0, chain: Optional[str] = None, proj_1d_algo: str = "umap") -> Dict[str, Any]:
+  """Run the ClusterProt algorithm on some input proteins.
+
   Clusters proteins using their structural similarity.
+
   Algorithm Description:
     1. Ensure all protein structures are fully loaded
     2. Compute the distance matrices of using the alpha carbons of all the loaded proteins from the selected regions
@@ -33,17 +35,20 @@ def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
     5. Create the 2D projection using UMAP
     6. Create clusters for the 2D projection using DBSCAN
     7. Create the 1D projection using either UMAP or PCA (optional but useful for organizing proteins 1-dimensionally)
-  -------------------------------------------------------
+
   Parameters:
-    proteins....: List of proteins to cluster, can be either neurosnap Protein objects of filepaths to proteins that will get loaded as Protein objects (list)
-    model.......: Model ID to for ClusterProt to use (must be consistent across all structures) (int)
-    chain.......: Chain ID to for ClusterProt to use (must be consistent across all structures), if not provided calculates for all chains (str)
-    proj_1d_algo: Algorithm to use for the 1D projection. Can be either "umap" or "pca" (str)
+    proteins: List of proteins to cluster, can be either neurosnap Protein objects of filepaths to proteins that will get loaded as Protein objects
+    model: Model ID to for ClusterProt to use (must be consistent across all structures)
+    chain: Chain ID to for ClusterProt to use (must be consistent across all structures), if not provided calculates for all chains
+    proj_1d_algo: Algorithm to use for the 1D projection. Can be either ``"umap"`` or ``"pca"``
+
   Returns:
-    dict: A dictionary containing the results from the algorithm:
+    A dictionary containing the results from the algorithm:
+
       - proteins (list<Protein>): Sorted list of all the neurosnap Proteins aligned by the reference protein.
       - projection_2d (list<list<float>>): Generated 2D projection of all the proteins.
       - cluster_labels (list<float>): List of the labels for each of the proteins.
+
   """
   # ensure input data is valid
   logger.debug(f"Loading {len(proteins)} for clustering")
@@ -106,15 +111,13 @@ def ClusterProt(proteins, model=0, chain=None, proj_1d_algo="umap"):
   }
 
 
-def animate_results(cp_results, animation_fpath="cluster_prot.gif"):
-  """
-  -------------------------------------------------------
-  Animate the ClusterProt results using the aligned
-  proteins and 1D projections.
-  -------------------------------------------------------
+  def animate_results(cp_results: Dict, animation_fpath: str="cluster_prot.gif"):
+  """Animate the ClusterProt results using the aligned proteins and 1D projections.
+
   Parameters:
-    cp_results.....: Results object from ClusterProt run (dict)
-    animation_fpath: Output filepath for the animation of all the proteins (str)
+    cp_results: Results object from ClusterProt run
+    animation_fpath: Output filepath for the animation of all the proteins
+
   """
   logger.debug("Drawing animation frames")
   fig, ax = plt.subplots()
@@ -132,15 +135,14 @@ def animate_results(cp_results, animation_fpath="cluster_prot.gif"):
   ani.save(animation_fpath, writer="ffmpeg", fps=7)
 
 
-def create_figure_plotly(cp_results):
-  """
-  -------------------------------------------------------
-  Create a scatter plot of the 2D projection from ClusterProt
-  using plotly express. NOTE: The plotly package will need
-  to be installed for this
-  -------------------------------------------------------
+def create_figure_plotly(cp_results: Dict):
+  """Create a scatter plot of the 2D projection from ClusterProt using plotly express.
+
+  NOTE: The plotly package will need to be installed for this
+
   Parameters:
-    cp_results: Results object from ClusterProt run (dict)
+    cp_results: Results object from ClusterProt run
+
   """
   try:
     import plotly.express as px

@@ -15,6 +15,7 @@ documentation for details.
    :maxdepth: 2
    :caption: Contents:
 
+   neurosnap
 
 Indices and tables
 ==================

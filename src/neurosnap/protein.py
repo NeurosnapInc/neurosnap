@@ -1029,20 +1029,31 @@ def run_blast(
 
   Parameters:
     sequence: The input amino acid sequence as a string or a Protein object.
-      If a Protein object is provided with multiple chains, an error will be raised, and the user will be prompted to provide a single chain sequence using the `get_aas` method.
+
+      If a Protein object is provided with multiple chains, an error will be raised, and the user will be prompted to provide a single chain sequence using the :obj:`Protein.get_aas` method.
     email: The email address to use for communication if there is a problem.
-    matrix: The scoring matrix to use (default is "BLOSUM62"). Must be one of ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
-    alignments: The number of alignments to display in the result (default is 250). the number alignments must be one of the following: 50, 100, 250, 500, 750, 1000.
-    scores: The number of scores to display in the result (default is 250).
-    evalue: The E threshold for alignments (default is 10). must be one of the following: 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000.
+    matrix: The scoring matrix to use, default is ``"BLOSUM62"``.
+
+      Must be one of::
+
+      ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
+    alignments: The number of alignments to display in the result (default is 250). the number alignments must be one of the following::
+
+      [50, 100, 250, 500, 750, 1000]
+    scores: The number of scores to display in the result, default is ``250``.
+    evalue: The E threshold for alignments (default is 10.0). Must be one of::
+
+      [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
     filter: Whether to filter low complexity regions (default is False).
     gapalign: Whether to allow gap alignments (default is True).
-    database: The database to search in (default is "uniprotkb_refprotswissprot"). Must be one of::
+    database: The database to search in, default is ``"uniprotkb_refprotswissprot"``. 
+
+      Must be one of::
 
       ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes", "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"]
-    output_format: The format in which to save the result, either "xml" or "fasta". If None, no file will be saved (default is None).
+    output_format: The format in which to save the result, either ``"xml"`` or ``"fasta"``. If ``None``, which is the default, no file will be saved.
     output_path: The file path to save the output. This is required if `output_format` is specified.
-    return_df: Whether to return a DataFrame with alignment details (default is True).
+    return_df: Whether to return a DataFrame with alignment details, default is ``True``.
 
   Returns:
     A pandas DataFrame with BLAST hit and alignment information, if `return_df` is True.
@@ -1059,6 +1070,9 @@ def run_blast(
     - "Gaps": The number of gaps in the alignment.
     - "Query Sequence": The query sequence in the alignment.
     - "Match Sequence": The matched sequence in the alignment.
+
+  Raises:
+    AssertionError: If ``sequence`` is provided as a Protein object with multiple chains.
   """
 
   def parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format=None, output_path=None, return_df=True):
@@ -1127,29 +1141,29 @@ def run_blast(
     "uniref50",
     "uniparc",
   ]
-  assert database in valid_databases, f"Invalid database. Choose from: {', '.join(valid_databases)}"
+  if database not in valid_databases:
+    raise ValueError(f"Database must be one of the following {valid_databases}")
 
   valid_matrices = ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"]
-  assert matrix in valid_matrices, f"Invalid matrix. Choose from: {', '.join(valid_matrices)}"
+  if matrix not in valid_matrices:
+    raise ValueError(f"Matrix must be one of the following {valid_matrices}")
 
-  assert evalue in [
-    0.00001,
-    0.0001,
-    0.001,
-    0.01,
-    0.1,
-    1.0,
-    10,
-    100,
-    1000,
-  ], "E-threshold must be one of the following: 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000"
-  evalue = 1.0 if evalue == 1 else evalue
+  valid_evalues = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
+  if evalue not in valid_evalues:
+    raise ValueError(f"E-threshold must be one of the following {valid_evalues}")
 
-  assert alignments in [50, 100, 250, 500, 750, 1000], "Number of alignments must be one of the following: 50, 100, 250, 500, 750, 1000"
+  # the api is very delicate, we need specific parameters
+  if evalue > 1:
+    evalue = int(evalue)
 
-  assert output_format in ["xml", "fasta", None], "Output format must be one of the following: 'xml', 'fasta', or None"
-  if output_format is not None:
-    assert output_path is not None, "Output path must be specified if output format is not None"
+  valid_alignments = [50, 100, 250, 500, 750, 1000]
+  if alignments not in valid_alignments:
+    raise ValueError(f"Alignments must be one of the following {valid_alignments}")
+
+  valid_output_formats = ["xml", "fasta", None]
+  if output_format not in valid_output_formats:
+    raise ValueError(f"Output format must be one of the following {valid_output_formats}")
+
   # Handle Protein object input
   if isinstance(sequence, Protein):
     if len(sequence.chains()) > 1:

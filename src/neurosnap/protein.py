@@ -1034,7 +1034,7 @@ def run_blast(
     matrix: The scoring matrix to use (default is "BLOSUM62"). Must be one of ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
     alignments: The number of alignments to display in the result (default is 250). the number alignments must be one of the following: 50, 100, 250, 500, 750, 1000.
     scores: The number of scores to display in the result (default is 250).
-    evalue: The E  threshold for alignments (default is 10). must be one of the following: 50, 100, 250, 500, 750, 1000.
+    evalue: The E threshold for alignments (default is 10). must be one of the following: 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000.
     filter: Whether to filter low complexity regions (default is False).
     gapalign: Whether to allow gap alignments (default is True).
     database: The database to search in (default is "uniprotkb_refprotswissprot"). Must be one of::

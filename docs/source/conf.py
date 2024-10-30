@@ -34,6 +34,7 @@ intersphinx_mapping = {
   "numpy": ("https://numpy.org/doc/stable/", None),
   "pandas": ("https://pandas.pydata.org/docs/", None),
   "matplotlib": ("https://matplotlib.org/stable/", None),
+  "rdkit": ("https://rdkit.org/docs/", None),
 }
 
 napoleon_include_init_with_doc = True

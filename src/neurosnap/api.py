@@ -1,7 +1,7 @@
 import json
 import urllib.parse
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from tabulate import tabulate
@@ -38,17 +38,17 @@ class NeurosnapAPI:
         "Successfully connected to the Neurosnap API.\n - For information visit https://neurosnap.ai/blog/post/66b00dacec3f2aa9b4be703a\n - For support visit https://neurosnap.ai/support\n - For bug reports visit https://github.com/NeurosnapInc/neurosnap"
       )
 
-  def get_services(self, format_type: str = None) -> List[Dict]:
+  def get_services(self, format_type: Optional[str] = None) -> List[Dict]:
     """Fetches and returns a list of available Neurosnap services. Optionally prints the services.
 
     Parameters:
-      format_type (str):
+      format_type:
         - "table": Prints services in a tabular format with key fields.
         - "json": Prints services as formatted JSON.
         - None (default): No printing.
 
     Returns:
-      List[Dict]: A list of dictionaries representing available services.
+      A list of dictionaries representing available services.
 
     Raises:
       HTTPError: If the API request fails.
@@ -73,17 +73,17 @@ class NeurosnapAPI:
       print(json.dumps(services, indent=2))
     return services
 
-  def get_jobs(self, format_type: str = None) -> List[Dict]:
+  def get_jobs(self, format_type: Optional[str] = None) -> List[Dict]:
     """Fetches and returns a list of submitted jobs. Optionally prints the jobs.
 
     Parameters:
-      format_type (str):
+      format_type:
         - "table": Prints jobs in tabular format.
         - "json": Prints jobs as formatted JSON.
         - None (default): No printing.
 
     Returns:
-      List[Dict]: Submitted jobs as a list of dictionaries.
+      Submitted jobs as a list of dictionaries.
 
     Raises:
       HTTPError: If the API request fails.
@@ -103,16 +103,16 @@ class NeurosnapAPI:
       print(json.dumps(jobs, indent=2))
     return jobs
 
-  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str]) -> str:
+  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str]) -> Dict:
     """Submit a Neurosnap job.
 
     Parameters:
-      service_name (str): The name of the service to run.
-      files (Dict[str, str]): A dictionary mapping file names to file paths.
-      data (Dict[str, str]): A dictionary of additional data to be passed to the service.
+      service_name: The name of the service to run.
+      files: A dictionary mapping file names to file paths.
+      data: A dictionary of additional data to be passed to the service.
 
     Returns:
-      str: The job ID of the submitted job.
+      The job ID of the submitted job.
 
     Raises:
       HTTPError: If the API request fails.
@@ -132,14 +132,14 @@ class NeurosnapAPI:
     # Return the job ID
     return response.json()
 
-  def get_job_status(self, job_id: str) -> str:
+  def get_job_status(self, job_id: str) -> Dict:
     """Fetches the status of a specified job.
 
     Parameters:
-      job_id (str): The ID of the job.
+      job_id: The ID of the job.
 
     Returns:
-      str: The status of the job.
+      The status of the job.
 
     Raises:
       HTTPError: If the API request fails.
@@ -149,20 +149,20 @@ class NeurosnapAPI:
     assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
     return response.json()
 
-  def get_job_files(self, job_id: str, file_type: str, share_id: str = None, format_type: str = None) -> List[str]:
+  def get_job_files(self, job_id: str, file_type: str, share_id: str = None, format_type: Optional[str] = None) -> List[str]:
     """Fetches all files from a completed Neurosnap job and optionally prints them.
 
     Parameters:
-      job_id (str): The ID of the job.
-      file_type (str): The type of files to fetch.
-      share_id (str): The share ID, if any.
-      format_type (str):
+      job_id: The ID of the job.
+      file_type: The type of files to fetch.
+      share_id: The share ID, if any.
+      format_type:
         - "table": Prints the files in a tabular format.
         - "json": Prints the files in formatted JSON.
         - None (default): No printing.
 
     Returns:
-      List[str]: A list of file names from the job.
+      A list of file names from the job.
 
     Raises:
       HTTPError: If the API request fails.
@@ -187,20 +187,21 @@ class NeurosnapAPI:
       print(json.dumps(files, indent=2))
     return files
 
-  def get_job_file(self, job_id: str, file_type: str, file_name: str, save_path: str, share_id: str = None) -> tuple[str, bool]:
+  def get_job_file(self, job_id: str, file_type: str, file_name: str, save_path: str, share_id: str = None) -> Tuple[str, bool]:
     """Fetches a specific file from a completed Neurosnap job and saves it to the specified path.
 
     Parameters:
-      job_id (str): The ID of the job.
-      file_type (str): The type of file to fetch.
-      file_name (str): The name of the specific file to fetch.
-      save_path (str): The path where the file content will be saved.
-      share_id (str): The share ID, if any.
+      job_id: The ID of the job.
+      file_type: The type of file to fetch.
+      file_name: The name of the specific file to fetch.
+      save_path: The path where the file content will be saved.
+      share_id: The share ID, if any.
 
     Returns:
-      tuple[str, bool]:
-        - str: The path where the file is saved.
-        - bool: True if the file was downloaded successfully, False otherwise.
+      Tuple of the form ``(save_path, download_succeeded)``
+
+        - ``save_path``: The path where the file is saved.
+        - ``download_succeeded``: True if the file was downloaded successfully, False otherwise.
 
     Raises:
       HTTPError: If the API request fails.
@@ -227,8 +228,8 @@ class NeurosnapAPI:
     """Set a note for a submitted job.
 
     Parameters:
-      job_id : The ID of the job for which the note will be set.
-      note : The note to be associated with the job.
+      job_id: The ID of the job for which the note will be set.
+      note: The note to be associated with the job.
 
     """
     # Prepare the request data
@@ -238,17 +239,16 @@ class NeurosnapAPI:
     assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
     print(f"Note set successfully for job ID {job_id}.")
 
-  def set_job_share(self, job_id: str) -> dict:
+  def set_job_share(self, job_id: str) -> Dict:
     """Enables the sharing feature of a job and makes it public.
 
     Parameters:
-      job_id : The ID of the job to be made public.
+      job_id: The ID of the job to be made public.
 
     Returns:
-      str: The JSON response containing the share ID.
-    """
-    # FIXME: return type in typehint and in docstring are different
+      The JSON response containing the share ID.
 
+    """
     # Send the request to set job share
     response = requests.get(f"{self.BASE_URL}/job/share/set/{job_id}", headers=self.headers)
     assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
@@ -258,7 +258,7 @@ class NeurosnapAPI:
     """Disables the sharing feature of a job and makes the job private.
 
     Parameters:
-      job_id : The ID of the job to be made private.
+      job_id: The ID of the job to be made private.
 
     """
     # Send the request to delete job share
@@ -267,14 +267,14 @@ class NeurosnapAPI:
     assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
     print(f"Job ID {job_id} is now private.")
 
-  def get_team_info(self, format_type: str = None) -> Dict:
+  def get_team_info(self, format_type: Optional[str] = None) -> Dict:
     """Fetches your team's information if you are part of a Neurosnap Team.
 
     Parameters:
-      format_type : The format to print the response: 'table', 'json', or None for no output.
+      format_type: The format to print the response: 'table', 'json', or None for no output.
 
     Returns:
-      Dict: The team information.
+      The team information.
 
     Raises:
       HTTPError: If the API request fails.
@@ -310,14 +310,14 @@ class NeurosnapAPI:
 
     return team_info
 
-  def get_team_jobs(self, format_type: str = None) -> List[Dict]:
+  def get_team_jobs(self, format_type: Optional[str] = None) -> List[Dict]:
     """Fetches all the jobs submitted by all members of your Neurosnap Team.
 
     Parameters:
-        format_type : The format to print the response: 'table', 'JSON', or None for no output.
+      format_type: The format to print the response: 'table', 'JSON', or None for no output.
 
     Returns:
-      List[Dict]: A list of jobs submitted by the team members.
+      A list of jobs submitted by the team members.
 
     Raises:
       HTTPError: If the API request fails.

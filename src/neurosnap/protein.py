@@ -1032,7 +1032,7 @@ def run_blast(
       If a Protein object is provided with multiple chains, an error will be raised, and the user will be prompted to provide a single chain sequence using the `get_aas` method.
     email: The email address to use for communication if there is a problem.
     matrix: The scoring matrix to use (default is "BLOSUM62"). Must be one of ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
-    alignments: The number of alignments to display in the result (default is 250). the number alignments must be
+    alignments: The number of alignments to display in the result (default is 250). the number alignments must be one of the following: 50, 100, 250, 500, 750, 1000.
     scores: The number of scores to display in the result (default is 250).
     evalue: The E  threshold for alignments (default is 10). must be one of the following: 50, 100, 250, 500, 750, 1000.
     filter: Whether to filter low complexity regions (default is False).

@@ -1010,7 +1010,6 @@ def foldseek_search(
     raise ValueError("Invalid output_format. Choose 'json' or 'dataframe'.")
 
 
-# FIXME: evalue here is weird
 def run_blast(
   sequence: Union[str, "Protein"],
   email: str,

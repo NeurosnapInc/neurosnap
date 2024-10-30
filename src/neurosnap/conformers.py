@@ -50,24 +50,22 @@ def find_LCS(mol: Chem.rdchem.Mol) -> Chem.rdchem.Mol:
   return mol
 
 
-def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", e_delta: float = 5.0) -> Tuple[float, Dict[int, float]]:
+def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", percentile: float = 100.0) -> Tuple[float, Dict[int, float]]:
   """Minimize conformer energy (kcal/mol) using RDkit
-  and filter out conformers below a certain threshold.
+  and filter out conformers based on energy percentile.
 
   Parameters:
     mol: RDkit mol object containing the conformers you want to minimize. (rdkit.Chem.rdchem.Mol)
     method: Can be either UFF, MMFF94, or MMFF94s (str)
-    e_delta: Filters out conformers that are above a certain energy threshold in kcal/mol. Formula used is >= min_conformer_energy + e_delta (float)
+    percentile: Filters out conformers above a given energy percentile (0 to 100). For example, 10.0 will retain conformers within the lowest 10% energy. (float)
 
   Returns:
     A tuple of the form ``(mol_filtered, energies)``
 
-    - ``mol_filtered``: pairwise sequence identity. Will return None
-    - ``energies``: dictionary where keys are conformer IDs and values are calculated energies in kcal/mol
+    - ``mol_filtered``: Molecule object with filtered conformers.
+    - ``energies``: Dictionary where keys are conformer IDs and values are calculated energies in kcal/mol.
 
   """
-  # FIXME(@KeaunAmani): should probably better explain the "Will return None"
-
   logger.info(f"Minimizing energy of all conformers using {method}")
   for i in range(mol.GetNumConformers()):
     if method == "UFF":
@@ -79,30 +77,30 @@ def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", e_delta: float = 5.0)
     else:
       raise ValueError(f'Invalid minimization method passed {method}. Must be either "UFF", "MMFF94", or "MMFF94s".')
 
-  ## Energy Filters
+  # Calculate energies for all conformers
   energies = {}  # keys are conformer IDs, values are calculated energies.
-  energies_filtered = {}
   for i in range(mol.GetNumConformers()):
     ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=i)
     energies[i] = ff.CalcEnergy()
 
-  # Filter out conformers above a certain energy threshold (e.g., 5 kcal/mol above the lowest energy conformer)
-  energy_threshold = min(energies.values()) + e_delta  # kcal/mol
-  num_filtered = 0
+  # Determine the energy threshold based on the specified percentile
+  energy_values = list(energies.values())
+  energy_threshold = np.percentile(energy_values, percentile)
 
-  # Create a new molecule object with only the filtered conformers
+  # Filter out conformers above the energy threshold
   mol_filtered = Chem.Mol(mol)  # Copy the molecule structure
   mol_filtered.RemoveAllConformers()  # Remove all conformers from the copy
+  energies_filtered = {}
+  num_filtered = 0
   for conf_id, energy in energies.items():
     if energy <= energy_threshold:
       num_filtered += 1
       conformer = mol.GetConformer(conf_id)
       new_conf_id = mol_filtered.AddConformer(conformer, assignId=True)  # Add the filtered conformer to the new molecule
       energies_filtered[new_conf_id] = energy
-      # mol_filtered.GetConformer(new_conf_id).SetId(conf_id) # Optionally, assign the same ID
 
-  logger.info(f"Filtered {num_filtered:,} conformers within 0 to {energy_threshold:.2f} kcal/mol.")
-  logger.info(f"min: {min(energies.values()):.2f}, max: {max(energies.values()):.2f}, avg: {sum(energies.values())/len(energies.values()):.2f}")
+  logger.info(f"Filtered {num_filtered:,} conformers within the lowest {percentile}% of energies.")
+  logger.info(f"min: {min(energy_values):.2f}, max: {max(energy_values):.2f}, avg: {sum(energy_values)/len(energy_values):.2f}")
   return mol_filtered, energies_filtered
 
 

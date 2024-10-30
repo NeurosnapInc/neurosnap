@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 
 sys.path.insert(0, os.path.abspath("../src/neurosnap/"))
 
@@ -13,7 +14,7 @@ sys.path.insert(0, os.path.abspath("../src/neurosnap/"))
 project = "neurosnap"
 copyright = "2024, Keaun Amani"
 author = "Keaun Amani"
-release = "0.0.62"
+release = "0.0.64"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

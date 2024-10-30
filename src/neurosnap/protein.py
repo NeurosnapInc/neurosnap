@@ -96,16 +96,16 @@ for code, abr, name in AAs_FULL_TABLE:
 ### CLASSES ###
 class Protein:
   def __init__(self, pdb):
-    """
-    -------------------------------------------------------
-    Class that wraps around a protein structure.
+    """Class that wraps around a protein structure.
+
     Utilizes the biopython protein structure under the hood.
     Atoms that are not part of a chain will automatically be
     added to a new chain that does not overlap with any
     existing chains.
-    -------------------------------------------------------
+
     Parameters:
       pdb: Can be either a file handle, PDB filepath, PDB ID, or UniProt ID (str|io.IOBase)
+
     """
     self.title = "Untitled Protein"
     if isinstance(pdb, io.IOBase):
@@ -180,18 +180,18 @@ class Protein:
     return f"<Neurosnap Protein: Title={self.title} Models={self.models()}, Chains=[{', '.join(self.chains())}], Atoms={len(self.df)}>"
 
   def __call__(self, model=None, chain=None, res_type=None):
-    """
-    -------------------------------------------------------
-    Returns a selection of a copy of the internal dataframe
+    """Returns a selection of a copy of the internal dataframe
     that matches the provided query. If no queries are
     provided, will return a copy of the internal dataframe.
-    -------------------------------------------------------
+
     Parameters:
-      model...: If provided, returned atoms must match this model (int)
-      chain...: If provided, returned atoms must match this chain (int)
+      model: If provided, returned atoms must match this model (int)
+      chain: If provided, returned atoms must match this chain (int)
       res_type: If provided, returned atoms must match this res_type (int)
+
     Returns:
       df: Copy of the internal dataframe that matches the input query (pandas.core.frame.DataFrame)
+
     """
     df = self.df.copy()
     if model is not None:
@@ -203,17 +203,17 @@ class Protein:
     return df
 
   def __sub__(self, other_protein):
-    """
-    -------------------------------------------------------
-    Automatically calculate the RMSD of two proteins.
+    """Automatically calculate the RMSD of two proteins.
     Model used will naively be the first models that have
     identical backbone shapes.
     Essentially just wraps around self.calculate_rmsd()
-    -------------------------------------------------------
+
     Parameters:
       other_protein: Another Protein object to compare against (Protein)
+
     Returns:
       df: Copy of the internal dataframe that matches the input query (pandas.core.frame.DataFrame)
+
     """
     # Get models for each structure using backbone shape
     model1 = None
@@ -233,38 +233,36 @@ class Protein:
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self):
-    """
-    -------------------------------------------------------
-    Returns a list of all the model names/IDs.
-    -------------------------------------------------------
+    """Returns a list of all the model names/IDs.
+
     Returns:
       models: Chain names/IDs found within the PDB file (list<int>)
+
     """
     return [model.id for model in self.structure]
 
   def chains(self, model=0):
-    """
-    -------------------------------------------------------
-    Returns a list of all the chain names/IDs.
+    """Returns a list of all the chain names/IDs.
     Assumes first model of 0 if not provided.
-    -------------------------------------------------------
+
     Parameters:
-      model: The ID of the model you want to fetch the chains of, defaults to 0 (int)
+      model: The ID of the model you want to fetch the chains of, defaults to 0
+
     Returns:
       chains: Chain names/IDs found within the PDB file (list<str>)
+
     """
     return [chain.id for chain in self.structure[model] if chain.id.strip()]
 
   def generate_df(self):
-    """
-    -------------------------------------------------------
-    Generate the biopandas-like dataframe and update the
+    """Generate the biopandas-like dataframe and update the
     value of self.df to the new dataframe.
     This method should be called whenever the internal
     protein structure is modified or has a transformation
     applied to it.
+
     Inspired by: https://biopandas.github.io/biopandas
-    -------------------------------------------------------
+
     """
     df = {
       "model": [],
@@ -305,16 +303,16 @@ class Protein:
     self.df = pd.DataFrame(df)
 
   def get_aas(self, model, chain):
-    """
-    -------------------------------------------------------
-    Returns the amino acid sequence of a target chain.
+    """Returns the amino acid sequence of a target chain.
     Ligands, small molecules, and nucleotides are ignored.
-    -------------------------------------------------------
+
     Parameters:
       model: The ID of the model containing the target chain (int)
       chain: The ID of the chain you want to fetch the AA sequence of (str)
+
     Returns:
       seq: The amino acid sequence of the found chain (str)
+
     """
     assert model in self.structure, f'Protein does not contain model "{model}"'
     assert chain in self.structure[model], f'Model {model} does not contain chain "{chain}"'
@@ -323,15 +321,14 @@ class Protein:
     return str(ppb.build_peptides(self.structure[model][chain])[0].get_sequence())
 
   def renumber(self, model=None, chain=None, start=1):
-    """
-    -------------------------------------------------------
-    Renumbers all selected residues. If selection does not
+    """Renumbers all selected residues. If selection does not
     exist this function will do absolutely nothing.
-    -------------------------------------------------------
+
     Parameters:
       model: The model ID to renumber, if not provided will use all models (int)
       chain: The chain ID to renumber, if not provided will use all chains (str)
       start: Starting value to increment from, default 1 (int)
+
     """
 
     def aux(start):
@@ -352,12 +349,10 @@ class Protein:
     self.generate_df()
 
   def remove_waters(self):
-    """
-    -------------------------------------------------------
-    Removes all water molecules (residues named 'WAT' or 'HOH')
+    """Removes all water molecules (residues named 'WAT' or 'HOH')
     from the structure. It is suggested to call .renumber()
     afterwards as well.
-    -------------------------------------------------------
+
     """
     for model in self.structure:
       for chain in model:
@@ -371,19 +366,17 @@ class Protein:
     self.generate_df()
 
   def remove_non_biopolymers(self, model=None, chain=None):
-    """
-    -------------------------------------------------------
-    Removes all ligands, heteroatoms, and non-biopolymer
+    """Removes all ligands, heteroatoms, and non-biopolymer
     residues from the selected structure. Non-biopolymer
     residues are considered to be any residues that are not
     standard amino acids or standard nucleotides (DNA/RNA).
     If no model or chain is provided, it will remove from
     the entire structure.
-    -------------------------------------------------------
+
     Parameters:
       model: The model ID to process, if not provided will use all models (int)
       chain: The chain ID to process, if not provided will use all chains (str)
-    -------------------------------------------------------
+
     """
     # List of standard amino acids and nucleotides (biopolymer residues)
     biopolymer_residues = set(AA_ABR_TO_CODE.keys()).union(STANDARD_NUCLEOTIDES)
@@ -402,16 +395,14 @@ class Protein:
     self.generate_df()
 
   def remove_nucleotides(self, model=None, chain=None):
-    """
-    -------------------------------------------------------
-    Removes all nucleotides (DNA and RNA) from the structure.
+    """Removes all nucleotides (DNA and RNA) from the structure.
     If no model or chain is provided, it will remove nucleotides
     from the entire structure.
-    -------------------------------------------------------
+
     Parameters:
       model: The model ID to process, if not provided will use all models (int)
       chain: The chain ID to process, if not provided will use all chains (str)
-    -------------------------------------------------------
+
     """
     for m in self.structure:
       if model is None or m.id == model:
@@ -428,16 +419,16 @@ class Protein:
     self.generate_df()
 
   def get_backbone(self, model=None, chain=None):
-    """
-    -------------------------------------------------------
-    Extract backbone atoms (N, CA, C) from the structure.
+    """Extract backbone atoms (N, CA, C) from the structure.
     If model or chain is not provided, extracts from all models/chains.
-    -------------------------------------------------------
+
     Parameters:
       model: Model ID to extract from, if not provided, all models are included (int)
       chain: Chain ID to extract from, if not provided, all chains are included (str)
+
     Returns:
       backbone: A numpy array of backbone coordinates (Nx3) (numpy.ndarray)
+
     """
     backbone_coords = []
 
@@ -453,16 +444,15 @@ class Protein:
     return np.array(backbone_coords)
 
   def find_disulfide_bonds(self, threshold=2.05):
-    """
-    -------------------------------------------------------
-    Find disulfide bonds between Cysteine residues in the structure.
+    """Find disulfide bonds between Cysteine residues in the structure.
     Looks for SG-SG bonds within a threshold distance (default 2.05 Å).
-    -------------------------------------------------------
+
     Parameters:
       threshold: Maximum distance to consider a bond between SG atoms (float)
+
     Returns:
       disulfide_pairs: List of tuples of residue pairs forming disulfide bonds (list<tuple>)
-    -------------------------------------------------------
+
     """
     disulfide_pairs = []
 
@@ -482,20 +472,19 @@ class Protein:
     return disulfide_pairs
 
   def find_salt_bridges(self, model=None, chain=None, cutoff=4.0):
-    """
-    -------------------------------------------------------
-    Identify salt bridges between oppositely charged residues.
+    """Identify salt bridges between oppositely charged residues.
     A salt bridge is defined as an interaction between
     a positively charged residue (Lys, Arg) and a negatively
     charged residue (Asp, Glu) within a given cutoff distance.
-    -------------------------------------------------------
+
     Parameters:
       model: Model ID to search, if not provided searches all models (int)
       chain: Chain ID to search, if not provided searches all chains (str)
       cutoff: Maximum distance for a salt bridge (float)
+
     Returns:
       salt_bridges: List of residue pairs forming salt bridges (list<tuple>)
-    -------------------------------------------------------
+
     """
     positive_residues = {"LYS", "ARG"}
     negative_residues = {"ASP", "GLU"}
@@ -515,16 +504,15 @@ class Protein:
     return salt_bridges
 
   def find_hydrophobic_residues(self, model=None, chain=None):
-    """
-    -------------------------------------------------------
-    Identify hydrophobic residues in the structure.
-    -------------------------------------------------------
+    """Identify hydrophobic residues in the structure.
+
     Parameters:
       model: Model ID to extract from, if not provided checks all models (int)
       chain: Chain ID to extract from, if not provided checks all chains (str)
+
     Returns:
       hydrophobic_residues: List of tuples (model_id, chain_id, residue) for hydrophobic residues (list)
-    -------------------------------------------------------
+
     """
     hydrophobic_residues = []
 
@@ -539,16 +527,15 @@ class Protein:
     return hydrophobic_residues
 
   def find_missing_residues(self):
-    """
-    -------------------------------------------------------
-    Identify missing residues in the structure based on residue numbering.
+    """Identify missing residues in the structure based on residue numbering.
     Useful for identifying gaps in the structure.
-    -------------------------------------------------------
+
     Parameters:
       chain: The chain ID to inspect, if not provided inspects all chains (str)
+
     Returns:
       missing_residues: List of missing residue positions (list<int>)
-    -------------------------------------------------------
+
     """
     missing_residues = []
 
@@ -562,17 +549,15 @@ class Protein:
     return missing_residues
 
   def align(self, other_protein, model1=0, model2=0):
-    """
-    -------------------------------------------------------
-    Align another Protein object's structure to the self.structure
+    """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed
     and aligned. Only compares backbone atoms (N, CA, C).
-    -------------------------------------------------------
+
     Parameters:
       other_protein: Another Protein object to compare against (Protein)
-      model1......: Model ID of reference protein to align to (int)
-      model2......: Model ID of other protein to transform and align to reference (int)
-    -------------------------------------------------------
+      model1: Model ID of reference protein to align to (int)
+      model2: Model ID of other protein to transform and align to reference (int)
+
     """
     assert model1 in self.models(), "Specified model needs to be present in the reference structure."
     assert model2 in other_protein.models(), "Specified model needs to be present in the other structure."
@@ -594,21 +579,20 @@ class Protein:
     other_protein.generate_df()
 
   def calculate_rmsd(self, other_protein, model1=0, model2=0, chain1=None, chain2=None, align=True):
-    """
-    -------------------------------------------------------
-    Calculate RMSD between the current structure and another protein.
+    """Calculate RMSD between the current structure and another protein.
     Only compares backbone atoms (N, CA, C). RMSD is in angstroms (Å).
-    -------------------------------------------------------
+
     Parameters:
       other_protein: Another Protein object to compare against (Protein)
-      model1.......: Model ID of original protein to compare (int)
-      model2.......: Model ID of other protein to compare (int)
-      chain1.......: Chain ID of original protein, if not provided compares all chains (str)
-      chain2.......: Chain ID of other protein, if not provided compares all chains (str)
-      align........: Whether to align the structures first using Superimposer (bool)
+      model1: Model ID of original protein to compare (int)
+      model2: Model ID of other protein to compare (int)
+      chain1: Chain ID of original protein, if not provided compares all chains (str)
+      chain2: Chain ID of other protein, if not provided compares all chains (str)
+      align: Whether to align the structures first using Superimposer (bool)
+
     Returns:
       rmsd: The root-mean-square deviation between the two structures (float)
-    -------------------------------------------------------
+
     """
     # ensure models are present
     assert model1 in self.models(), f"Model {model1} was not found in current protein."
@@ -631,17 +615,16 @@ class Protein:
     return rmsd
 
   def calculate_distance_matrix(self, model=None, chain=None):
-    """
-    -------------------------------------------------------
-    Calculate the distance matrix for all alpha-carbon (CA) atoms in the chain.
+    """Calculate the distance matrix for all alpha-carbon (CA) atoms in the chain.
     Useful for creating contact maps or proximity analyses.
-    -------------------------------------------------------
+
     Parameters:
       model: The model ID to calculate the distance matrix for, if not provided will use first model found (int)
       chain: The chain ID to calculate, if not provided calculates for all chains (str)
+
     Returns:
       dist_matrix: A 2D numpy array representing the distance matrix (numpy.ndarray)
-    -------------------------------------------------------
+
     """
     model = self.models()[0]
     ca_atoms = []
@@ -659,17 +642,16 @@ class Protein:
     return dist_matrix
 
   def calculate_center_of_mass(self, model=None, chain=None):
-    """
-    -------------------------------------------------------
-    Calculate the center of mass of the protein.
+    """Calculate the center of mass of the protein.
     Considers only atoms with defined masses.
-    -------------------------------------------------------
+
     Parameters:
       model: Model ID to calculate for, if not provided calculates for all models (int)
       chain: Chain ID to calculate for, if not provided calculates for all chains (str)
+
     Returns:
       center_of_mass: A 3D numpy array representing the center of mass (numpy.ndarray)
-    -------------------------------------------------------
+
     """
     total_mass = 0
     weighted_coords = np.zeros(3)
@@ -690,25 +672,22 @@ class Protein:
     return weighted_coords / total_mass
 
   def distances_from_com(self, model=None, chain=None):
-    """
-    Calculate the distances of all atoms from the center of mass (COM) of the protein.
+    """Calculate the distances of all atoms from the center of mass (COM) of the protein.
 
     This method computes the Euclidean distance between the coordinates of each atom
     and the center of mass of the structure. The center of mass is calculated for the
     specified model and chain, or for all models and chains if none are provided.
 
     Parameters:
-    ----------
-    model : int, optional
+      model : int, optional
         The model ID to calculate for. If not provided, calculates for all models.
-    chain : str, optional
+      chain : str, optional
         The chain ID to calculate for. If not provided, calculates for all chains.
 
     Returns:
-    -------
-    distances : numpy.ndarray
-        A 1D NumPy array containing the distances (in Ångströms) between each atom
-        and the center of mass.
+      numpy.ndarray: distances
+
+      A 1D NumPy array containing the distances (in Ångströms) between each atom and the center of mass.
     """
     com = self.calculate_center_of_mass(model=model, chain=chain)
     distances = []
@@ -725,17 +704,16 @@ class Protein:
     return np.array(distances)  # Convert the list of distances to a NumPy array
 
   def calculate_surface_area(self, model=0, level="R"):
-    """
-    -------------------------------------------------------
-    Calculate the solvent-accessible surface area (SASA) of the protein.
+    """Calculate the solvent-accessible surface area (SASA) of the protein.
     Utilizes Biopython's SASA module.
-    -------------------------------------------------------
+
     Parameters:
       model: The model ID to calculate SASA for, defaults to 0 (int)
       level: The level at which ASA values are assigned, which can be one of "A" (Atom), "R" (Residue), "C" (Chain), "M" (Model), or "S" (Structure). The ASA value of an entity is the sum of all ASA values of its children. (str)
+
     Returns:
       sasa: Solvent-accessible surface area in Å² (float)
-    -------------------------------------------------------
+
     """
     assert model in self.models(), f"Model {model} is not currently present."
     structure_model = self.structure[model]
@@ -744,18 +722,17 @@ class Protein:
     total_sasa = sum([residue.sasa for residue in structure_model.get_residues() if residue.sasa])
     return total_sasa
 
-  def calculate_protein_volume(self, model=0, chain=None):
-    """
-    -------------------------------------------------------
-    Compute an estimate of the protein volume using the van der Waals radii.
+  def calculate_protein_volume(self, model=0, chain=None) -> float:
+    """Compute an estimate of the protein volume using the van der Waals radii.
     Uses the sum of atom radii to compute the volume.
-    -------------------------------------------------------
+
     Parameters:
       model: Model ID to compute volume for, defaults to 0 (int)
       chain: Chain ID to compute, if not provided computes for all chains (str)
+
     Returns:
       volume: Estimated volume in Å³ (float)
-    -------------------------------------------------------
+
     """
     assert model in self.models(), f"Model {model} is not currently present."
     vdw_radii = {"H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8}  # Example radii in Å
@@ -773,16 +750,14 @@ class Protein:
                   volume += (4 / 3) * np.pi * (radius**3)
     return volume
 
-  def to_sdf(self, fpath):
-    """
-    -------------------------------------------------------
-    Save the current protein structure as an SDF file.
+  def to_sdf(self, fpath: str):
+    """Save the current protein structure as an SDF file.
     Will export all models and chains. Use .remove()
     method to get rid of undesired regions.
-    -------------------------------------------------------
+
     Parameters:
-      fpath: Path to the output SDF file (str)
-    -------------------------------------------------------
+      fpath: Path to the output SDF file
+
     """
     # Write the current protein structure to a temporary PDB file
     with tempfile.NamedTemporaryFile(delete=True, suffix=".pdb") as temp_pdb:
@@ -802,20 +777,18 @@ class Protein:
       logger.info(f"Successfully wrote SDF file to {fpath}.")
 
   def remove(self, model, chain=None, resi_start=None, resi_end=None):
-    """
-    -------------------------------------------------------
-    Completely removes all parts of a selection from
+    """Completely removes all parts of a selection from
     self.structure. If a residue range is provided then all
     residues between resi_start and resi_end will be removed
     from the structure (inclusively). If a residue range is
     not provided then all residues in a chain will be removed.
-    -------------------------------------------------------
+
     Parameters:
-      model.....: ID of model to remove from (int)
-      chain.....: ID of chain to remove from, if not provided will remove all chains in the model (str, optional)
+      model: ID of model to remove from (int)
+      chain: ID of chain to remove from, if not provided will remove all chains in the model (str, optional)
       resi_start: Index of first residue in the range you want to remove (int, optional)
-      resi_end..: Index of last residues in the range you want to remove (int, optional)
-    -------------------------------------------------------
+      resi_end: Index of last residues in the range you want to remove (int, optional)
+
     """
     # validate input query
     assert model in self.models(), f"Model ID {model} does not exist in your structure. Found models include {self.models()}."
@@ -846,16 +819,14 @@ class Protein:
     # Update the pandas dataframe to reflect the changes
     self.generate_df()
 
-  def save(self, fpath, format="pdb"):
-    """
-    -------------------------------------------------------
-    Save the structure as a PDB or mmCIF file.
+  def save(self, fpath: str, format: str = "pdb"):
+    """Save the structure as a PDB or mmCIF file.
     Will overwrite any existing files.
-    -------------------------------------------------------
+
     Parameters:
       fpath: File path where you want to save the structure (str)
       format: File format to save in, either 'pdb' or 'mmcif' (str)
-    -------------------------------------------------------
+
     """
     format = format.lower()
     if format == "pdb":
@@ -871,20 +842,24 @@ class Protein:
 
 
 ### FUNCTIONS ###
-def getAA(query):
-  """
-  -------------------------------------------------------
-  Efficiently get any amino acid using either their 1 letter code,
+def getAA(query: str):
+  """Efficiently get any amino acid using either their 1 letter code,
   3 letter abbreviation, or full name. See AAs_FULL_TABLE
   for a list of all supported amino acids and codes.
-  -------------------------------------------------------
+
   Parameters:
-    query: Amino acid code, abbreviation, or name (str)
+    query: Amino acid code, abbreviation, or name
+
   Returns:
+    tuple[str, str, str]: return a triple
+
     code: Amino acid 1 letter abbreviation / code (str)
-    abr.: Amino acid 3 letter abbreviation / code (str)
+    abr: Amino acid 3 letter abbreviation / code (str)
     name: Amino acid full name (str)
+
   """
+  # FIXME return type tuple
+
   query = query.upper()
   try:
     if len(query) == 1:
@@ -897,16 +872,16 @@ def getAA(query):
     raise ValueError(f"Unknown amino acid for {query}")
 
 
-def calc_lDDT(ref_pdb, sample_pdb):
-  """
-  -------------------------------------------------------
-  Calculates the lDDT (Local Distance Difference Test) between two proteins.
-  -------------------------------------------------------
+def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:
+  """Calculates the lDDT (Local Distance Difference Test) between two proteins.
+
   Parameters:
-    ref_pdb...: Filepath for reference protein (str)
-    sample_pdb: Filepath for sample protein (str)
+    ref_pdb: Filepath for reference protein
+    sample_pdb: Filepath for sample protein
+
   Returns:
-    lDDT: The lDDT score of the two proteins which ranges between 0-1 (float)
+    lDDT: The lDDT score of the two proteins which ranges between 0-1
+
   """
   ref_L, ref_dmap, ref_rnames = lDDT.pdb2dmap(ref_pdb)
   mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
@@ -921,10 +896,9 @@ def foldseek_search(
   retry_interval: int = 5,
   output_format: str = "json",
 ) -> Union[str, pd.DataFrame]:
-  """
-  Perform a protein structure search using the Foldseek API.
+  """Perform a protein structure search using the Foldseek API.
 
-  Args:
+  Parameters:
       protein: Either a Protein object or a path to a PDB file.
       mode: Search mode ('3diaa' or 'tm-align').
       databases: List of databases to search. Defaults to a predefined list if not provided.
@@ -939,6 +913,7 @@ def foldseek_search(
       RuntimeError: If the job fails.
       TimeoutError: If the job does not complete within the allotted retries.
       ValueError: If an invalid output_format is specified.
+
   """
 
   BASE_URL = "https://search.foldseek.com/api"
@@ -1052,67 +1027,53 @@ def run_blast(
   output_path=None,
   return_df=True,
 ):
-  """
-  Submits a BLAST job to the EBI NCBI BLAST web service, checks the status periodically, and retrieves the result.
+  """Submits a BLAST job to the EBI NCBI BLAST web service, checks the status periodically, and retrieves the result.
   The result can be saved either as an XML or FASTA file. Optionally, a DataFrame with alignment details can be returned.
 
   Parameters:
-  -----------
-  sequence : str or Protein
+    sequence : str or Protein
       The input amino acid sequence as a string or a Protein object. If a Protein object is provided with multiple chains,
       an error will be raised, and the user will be prompted to provide a single chain sequence using the `get_aas` method.
-
-  email : str
+    email : str
       The email address to use for communication if there is a problem.
-
-  matrix : str, optional
+    matrix : str, optional
       The scoring matrix to use (default is "BLOSUM62"). Must be one of ["BLOSUM45", "BLOSUM62", "BLOSUM80", "PAM30", "PAM70"].
-
-  alignments : int, optional
+    alignments : int, optional
       The number of alignments to display in the result (default is 250). the number alignments must be
-
-  scores : int, optional
+    scores : int, optional
       The number of scores to display in the result (default is 250).
-
-  evalue : float, optional
+    evalue : float, optional
       The E  threshold for alignments (default is 10). must be one of the following: 50, 100, 250, 500, 750, 1000.
-
-  filter : bool, optional
+    filter : bool, optional
       Whether to filter low complexity regions (default is False).
-
-  gapalign : bool, optional
+    gapalign : bool, optional
       Whether to allow gap alignments (default is True).
-
-  database : str, optional
+    database : str, optional
       The database to search in (default is "uniprotkb_refprotswissprot"). Must be one of:
       ["uniprotkb_refprotswissprot", "uniprotkb_pdb", "uniprotkb", "afdb", "uniprotkb_reference_proteomes",
       "uniprotkb_swissprot", "uniref100", "uniref90", "uniref50", "uniparc"].
-
-  output_format : str, optional
+    output_format : str, optional
       The format in which to save the result. Either "xml" or "fasta". If None, no file will be saved (default is None).
-
-  output_path : str, optional
+    output_path : str, optional
       The file path to save the output. This is required if `output_format` is specified.
-
-  return_df : bool, optional
+    return_df : bool, optional
       Whether to return a DataFrame with alignment details (default is True).
 
   Returns:
-  --------
-  pd.DataFrame or None:
-      A pandas DataFrame with BLAST hit and alignment information, if `return_df` is True.
-      The DataFrame contains the following columns:
-      - "Hit ID": The identifier of the hit sequence.
-      - "Accession": The accession number of the hit sequence.
-      - "Description": The description of the hit sequence.
-      - "Length": The length of the hit sequence.
-      - "Score": The score of the alignment.
-      - "Bits": The bit score of the alignment.
-      - "Expectation": The E-value of the alignment.
-      - "Identity (%)": The percentage identity of the alignment.
-      - "Gaps": The number of gaps in the alignment.
-      - "Query Sequence": The query sequence in the alignment.
-      - "Match Sequence": The matched sequence in the alignment.
+    pd.DataFrame | None: A pandas DataFrame with BLAST hit and alignment information, if `return_df` is True.
+
+    The DataFrame contains the following columns:
+    - "Hit ID": The identifier of the hit sequence.
+    - "Accession": The accession number of the hit sequence.
+    - "Description": The description of the hit sequence.
+    - "Length": The length of the hit sequence.
+    - "Score": The score of the alignment.
+    - "Bits": The bit score of the alignment.
+    - "Expectation": The E-value of the alignment.
+    - "Identity (%)": The percentage identity of the alignment.
+    - "Gaps": The number of gaps in the alignment.
+    - "Query Sequence": The query sequence in the alignment.
+    - "Match Sequence": The matched sequence in the alignment.
   """
 
   def parse_xml_to_fasta_and_dataframe(xml_content, job_id, output_format=None, output_path=None, return_df=True):
@@ -1287,27 +1248,28 @@ def run_blast(
 def plot_pseudo_3D(
   xyz, c=None, ax=None, chainbreak=5, Ls=None, cmap="gist_rainbow", line_w=2.0, cmin=None, cmax=None, zmin=None, zmax=None, shadow=0.95
 ):
-  """
-  -------------------------------------------------------
-  Plot the famous Pseudo 3D projection of a protein.
+  """Plot the famous Pseudo 3D projection of a protein.
+
   Algorithm originally written By Dr. Sergey Ovchinnikov.
   Adapted from https://github.com/sokrypton/ColabDesign/blob/16e03c23f2a30a3dcb1775ac25e107424f9f7352/colabdesign/shared/plot.py
-  -------------------------------------------------------
+
   Parameters:
-    xyz.......: XYZ coordinates of the protein (numpy.ndarray|pandas.core.frame.DataFrame)
-    c.........: 1D array of all the values to use to color the protein, defaults to residue index (numpy.ndarray)
-    ax........: Matplotlib axes object to add the figure to (matplotlib.axes._axes.Axes)
+    xyz: XYZ coordinates of the protein (numpy.ndarray | pandas.core.frame.DataFrame)
+    c: 1D array of all the values to use to color the protein, defaults to residue index (numpy.ndarray)
+    ax: Matplotlib axes object to add the figure to (matplotlib.axes._axes.Axes)
     chainbreak: Minimum distance in angstroms between chains / segments before being considered a chain break (int)
-    Ls........: Allows handling multiple chains or segments by providing the lengths of each chain, ensuring that chains are visualized separately without unwanted connections (list)
-    cmap......: Matplotlib color map to use for coloring the protein (str)
-    line_w....: Line width (float)
-    cmin......: Minimum value for coloring, automatically calculated if None (float)
-    cmax......: Maximum value for coloring, automatically calculated if None (float)
-    zmin......: Minimum z coordinate values, automatically calculated if None (float)
-    zmax......: Maximum z coordinate values, automatically calculated if None (float)
-    shadow....: Shadow intensity between 0 and 1 inclusive, lower numbers mean darker more intense shadows (float)
+    Ls: Allows handling multiple chains or segments by providing the lengths of each chain, ensuring that chains are visualized separately without unwanted connections (list)
+    cmap: Matplotlib color map to use for coloring the protein (str)
+    line_w: Line width (float)
+    cmin: Minimum value for coloring, automatically calculated if None (float)
+    cmax: Maximum value for coloring, automatically calculated if None (float)
+    zmin: Minimum z coordinate values, automatically calculated if None (float)
+    zmax: Maximum z coordinate values, automatically calculated if None (float)
+    shadow: Shadow intensity between 0 and 1 inclusive, lower numbers mean darker more intense shadows (float)
+
   Returns:
-    lc: LineCollection object of whats been drawn (matplotlib.collections.LineCollection)
+    matplotlib.collections.LineCollection: LineCollection object of whats been drawn
+
   """
 
   def rescale(a, amin=None, amax=None):
@@ -1421,20 +1383,20 @@ def plot_pseudo_3D(
 
 
 def animate_pseudo_3D(fig, ax, frames, titles="Protein Animation", interval=200, repeat_delay=0, repeat=True):
-  """
-  -------------------------------------------------------
-  Animate multiple Pseudo 3D LineCollection objects.
-  -------------------------------------------------------
+  """Animate multiple Pseudo 3D LineCollection objects.
+
   Parameters:
-    fig.........: Matplotlib figure that contains all the frames (matplotlib.figure.Figure)
-    ax..........: Matplotlib axes for the figure that contains all the frames (matplotlib.figure.Figure)
-    frames......: List of LineCollection objects (matplotlib.collections.LineCollection)
-    titles......: Single title or list of titles corresponding to each frame (str or list<str>)
-    interval....: Delay between frames in milliseconds (int)
+    fig: Matplotlib figure that contains all the frames (matplotlib.figure.Figure)
+    ax: Matplotlib axes for the figure that contains all the frames (matplotlib.figure.Figure)
+    frames: List of LineCollection objects (matplotlib.collections.LineCollection)
+    titles: Single title or list of titles corresponding to each frame (str or list<str>)
+    interval: Delay between frames in milliseconds (int)
     repeat_delay: The delay in milliseconds between consecutive animation runs, if repeat is True (int)
-    repeat......: Whether the animation repeats when the sequence of frames is completed (bool)
+    repeat: Whether the animation repeats when the sequence of frames is completed (bool)
+
   Returns:
-    ani: Animation of all the different frames (matplotlib.animation.ArtistAnimation)
+    matplotlib.animation.ArtistAnimation: Animation of all the different frames
+
   """
   # check titles
   if isinstance(titles, str):

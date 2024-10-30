@@ -15,16 +15,18 @@ from neurosnap.log import logger
 
 
 def find_LCS(mol):
-  """
-  -------------------------------------------------------
-  Find the largest common substructure (LCS) between a
+  """Find the largest common substructure (LCS) between a
   set of conformers and aligns all conformers to the LCS.
-  Raises an exception if no LCS detected.
-  -------------------------------------------------------
+
   Parameters:
-    mol...: Input RDkit molecule object, must already have conformers present (rdkit.Chem.rdchem.Mol)
+    mol: Input RDkit molecule object, must already have conformers present (rdkit.Chem.rdchem.Mol)
+
   Returns:
-    mol_aligned: Resultant molecule object with all conformers aligned to the LCS (rdkit.Chem.rdchem.Mol)
+    rdkit.Chem.rdchem.Mol: Resultant molecule object with all conformers aligned to the LCS
+
+  Raises:
+    Exception: if no LCS is detected
+
   """
   logger.info("Finding largest common substructure (LCS) for clustering")
   # Convert the molecule to a list of molecules (each conformer treated as a separate molecule)
@@ -47,20 +49,21 @@ def find_LCS(mol):
   return mol
 
 
-def minimize(mol, method="MMFF94", e_delta=5):
-  """
-  -------------------------------------------------------
-  Minimize conformer energy (kcal/mol) using RDkit
+def minimize(mol, method: str = "MMFF94", e_delta=5):
+  """Minimize conformer energy (kcal/mol) using RDkit
   and filter out conformers below a certain threshold.
-  -------------------------------------------------------
+
   Parameters:
-    mol....: RDkit mol object containing the conformers you want to minimize. (rdkit.Chem.rdchem.Mol)
-    method.: Can be either UFF, MMFF94, or MMFF94s (str)
+    mol: RDkit mol object containing the conformers you want to minimize. (rdkit.Chem.rdchem.Mol)
+    method: Can be either UFF, MMFF94, or MMFF94s (str)
     e_delta: Filters out conformers that are above a certain energy threshold in kcal/mol. Formula used is >= min_conformer_energy + e_delta (float)
+
   Returns:
     mol_filtered: The pairwise sequence identity. Will return None (float)
-    energies....: Dictionary where keys are conformer IDs and values are calculated energies in kcal/mol (dict<int:float>)
+    energies: Dictionary where keys are conformer IDs and values are calculated energies in kcal/mol (dict<int:float>)
+
   """
+  # FIXME: return type tuple
   logger.info(f"Minimizing energy of all conformers using {method}")
   for i in range(mol.GetNumConformers()):
     if method == "UFF":
@@ -100,25 +103,26 @@ def minimize(mol, method="MMFF94", e_delta=5):
 
 
 def generate(input_mol, output_name="unique_conformers", write_multi=False, num_confs=1000, min_method="MMFF94", max_atoms=500):
-  """
-  -------------------------------------------------------
-  Generate conformers for an input molecule.
+  """Generate conformers for an input molecule.
+
   Performs the following actions in order:
   1. Generate conformers using ETKDG method
   2. Minimize energy of all conformers and remove those below a dynamic threshold
   3. Align & create RMSD matrix of all conformers
   4. Clusters using Butina method to remove structurally redundant conformers
   5. Return most energetically favorable conformers in each cluster
-  -------------------------------------------------------
+
   Parameters:
-    input_mol..: Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol (any)
+    input_mol: Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol (any)
     output_name: Output to write SDF files of passing conformers (str)
     write_multi: If True will write all unique conformers to a single SDF file, if False will write all unique conformers in separate SDF files in output_name (bool)
-    num_confs..: Number of conformers to generate (int)
-    min_method.: Method for minimization, can be either UFF, MMFF94, MMFF94s, or None for no minimization (str)
-    max_atoms..: Maximum number of atoms allowed for the input molecule (int)
+    num_confs: Number of conformers to generate (int)
+    min_method: Method for minimization, can be either UFF, MMFF94, MMFF94s, or None for no minimization (str)
+    max_atoms: Maximum number of atoms allowed for the input molecule (int)
+
   Returns:
-    df_out....: Output pandas dataframe with all conformer statistics (pandas.core.frame.DataFrame)
+    pandas.core.frame.DataFrame: Output pandas dataframe with all conformer statistics
+
   """
   ### parse input and construct corresponding RDkit mol object
   my_mol = None
@@ -199,7 +203,7 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
         if energies[cid] < best_energy:
           best_cid = cid
           best_energy = energies[cid]
-    else: # if no min_method / energies available just take the first cluster
+    else:  # if no min_method / energies available just take the first cluster
       best_cid = cluster[0]
       best_energy = 0
 

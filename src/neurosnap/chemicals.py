@@ -7,18 +7,18 @@ from neurosnap.log import logger
 
 
 ### FUNCTIONS ###
-def smiles_to_sdf(smiles, output_path):
-  """
-  -------------------------------------------------------
-  Converts a SMILES string to an sdf file.
+def smiles_to_sdf(smiles: str, output_path: str):
+  """Converts a SMILES string to an sdf file.
   Will overwrite existing results.
+
   NOTE: This function does the bare minimum in terms of
-  generating the SDF molecule. The conformers.py module
+  generating the SDF molecule. The :obj:`neurosnap.conformers` module
   should be used in most cases.
-  -------------------------------------------------------
+
   Parameters:
-    smiles.....: Smiles string to parse and convert (str)
-    output_path: Path to output SDF file, should end with .sdf (str)
+    smiles (str): Smiles string to parse and convert
+    output_path (str): Path to output SDF file, should end with .sdf
+
   """
   try:
     m = Chem.MolFromSmiles(smiles)

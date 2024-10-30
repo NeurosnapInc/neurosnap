@@ -66,20 +66,20 @@ MMSEQS2_CITATION = """The MMseqs2 webserver used to generate this MSA is offered
 
 ### FUNCTIONS ###
 def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remove_chars="*", uppercase=True):
-  """
-  -------------------------------------------------------
-  Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
-  -------------------------------------------------------
+  """Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
+
   Parameters:
-    input_fasta.: Path to read input a3m file, fasta as a raw string, or a file-handle like object to read (str|io.TextIOBase)
-    size........: Number of rows to read (int)
-    allow_chars.: Sequences that contain characters not included within STANDARD_AAs+allow_chars will throw an exception (str)
-    drop_chars..: Drop sequences that contain these characters e.g., "-X" (str)
-    remove_chars: Removes these characters from sequences e.g., "*-X" (str)
-    uppercase...: Converts all amino acid chars to uppercase when True (bool)
+    input_fasta (str | io.TextIOBase): Path to read input a3m file, fasta as a raw string, or a file-handle like object to read
+    size (int): Number of rows to read
+    allow_chars (str): Sequences that contain characters not included within STANDARD_AAs+allow_chars will throw an exception
+    drop_chars (str): Drop sequences that contain these characters. For example, ``"-X"``
+    remove_chars (str): Removes these characters from sequences. For example, ``"*-X"``
+    uppercase (bool): Converts all amino acid chars to uppercase when True
+
   Returns:
-    names: List of proteins names from the a3m file including gaps (list<str>)
-    seqs.: List of proteins sequences from the a3m file including gaps (list<str>)
+    tuple[list[str], list[str]]: list of protein names, and list of protein
+    sequences, from the a3m file including gaps
+
   """
   names = []
   seqs = []
@@ -138,16 +138,15 @@ def read_msa(input_fasta, size=float("inf"), allow_chars="", drop_chars="", remo
 
 
 def write_msa(output_path, names, seqs):
-  """
-  -------------------------------------------------------
-  Writes an MSA, a3m, or fasta to a file.
+  """Writes an MSA, a3m, or fasta to a file.
   Makes no assumptions about the validity of names or
-  sequences. Will throw an exception if len(names) != len(seqs)
-  -------------------------------------------------------
+  sequences. Will throw an exception if ``len(names) != len(seqs)``
+
   Parameters:
-    output_path: Path to output file to write, will overwrite existing files (str)
-    names......: List of proteins names from the file (list<str>)
-    seqs.......: List of proteins sequences from the file (list<str>)
+    output_path (str): Path to output file to write, will overwrite existing files
+    names (list[str]): List of proteins names from the file
+    seqs (list[str]): List of proteins sequences from the file
+
   """
   assert len(names) == len(seqs), "The number of names and sequences do not match."
   with open(output_path, "w") as f:
@@ -156,17 +155,16 @@ def write_msa(output_path, names, seqs):
 
 
 def pad_seqs(seqs, char="-", truncate=False):
-  """
-  -------------------------------------------------------
-  Pads all sequences to the longest sequences length
-  using a character from the right side.
-  -------------------------------------------------------
+  """Pads all sequences to the longest sequences length using a character from the right side.
+
   Parameters:
-    seqs......: List of sequences to pad (list<str>)
-    chars.....: The character to perform the padding with, default is "-" (str)
-    truncate..: When set to True will truncate all sequences to the length of the first, set to integer to truncate sequence to that length (bool/int)
+    seqs (list[str]): List of sequences to pad
+    chars (str): The character to perform the padding with, default is "-"
+    truncate (bool/int): When set to True will truncate all sequences to the length of the first, set to integer to truncate sequence to that length
+
   Returns:
-    seqs_padded: The padded sequences (list<str>)
+    list[str]: The padded sequences
+
   """
   if truncate is True:
     longest_seq = len(seqs[0])
@@ -183,16 +181,18 @@ def pad_seqs(seqs, char="-", truncate=False):
 
 
 def get_seqid(seq1, seq2):
-  """
-  -------------------------------------------------------
-  Calculate the pairwise sequence identity of two same length sequences or alignments.
-  -------------------------------------------------------
+  """Calculate the pairwise sequence identity of two same length sequences or alignments.
+
   Parameters:
-    seq1: The 1st sequence / aligned sequence. (str)
-    seq2: The 2nd sequence / aligned sequence. (str)
+    seq1 (str): The 1st sequence / aligned sequence.
+    seq2 (str): The 2nd sequence / aligned sequence.
+
   Returns:
-    seq_id: The pairwise sequence identity. Will return None  (float)
+    float: The pairwise sequence identity. Will return None  (float)
+
   """
+  # FIXME: return type statement doesn't make sense here
+
   assert len(seq1) == len(seq2), "Sequences are not the same length."
   num_matches = 0
   for a, b in zip(seq1, seq2):
@@ -202,19 +202,19 @@ def get_seqid(seq1, seq2):
 
 
 def run_phmmer(query, database, evalue=10, cpu=2):
-  """
-  -------------------------------------------------------
-  Run phmmer using a query sequence against a database and
+  """Run phmmer using a query sequence against a database and
   return all the sequences that are considered as hits.
-  Shameless stolen and adapted from https://github.com/seanrjohnson/protein_gibbs_sampler/blob/a5de349d5f6a474407fc0f19cecf39a0447a20a6/src/pgen/utils.py#L263
-  -------------------------------------------------------
+  Shamelessly stolen and adapted from https://github.com/seanrjohnson/protein_gibbs_sampler/blob/a5de349d5f6a474407fc0f19cecf39a0447a20a6/src/pgen/utils.py#L263
+
   Parameters:
-    query......: Amino acid sequence of the protein you want to find hits for (str).
-    database...: Path to reference database of sequences you want to search for hits and create and alignment with, must be a protein fasta file (str)
-    evalue.....: The threshold E value for the phmmer hit to be reported (float)
-    cpu........: The number of CPU cores to be used to run phmmer (str)
+    query (str): Amino acid sequence of the protein you want to find hits for
+    database (str): Path to reference database of sequences you want to search for hits and create and alignment with, must be a protein fasta file
+    evalue (float): The threshold E value for the phmmer hit to be reported
+    cpu (str): The number of CPU cores to be used to run phmmer
+
   Returns:
-    hits: List of hits ranked by how good the hits are (list<str>)
+    list[str]: List of hits ranked by how good the hits are
+
   """
   assert shutil.which("phmmer") is not None, "Cannot find phmmer. Please ensure phmmer is installed and added to your PATH."
 
@@ -237,18 +237,20 @@ def run_phmmer(query, database, evalue=10, cpu=2):
 
 
 def align_mafft(seqs, ep=0.0, op=1.53):
-  """
-  -------------------------------------------------------
-  Generates an alignment using mafft.
-  -------------------------------------------------------
+  """Generates an alignment using mafft.
+
   Parameters:
-    seqs: Can be fasta file path, list of sequences, or dictionary where values are AA sequences and keys are their corresponding names/IDs.
-    ep..: ep value for mafft, default is 0.00 (float)
-    op..: op value for mafft, default is 1.53 (float)
+    seqs : Can be fasta file path, list of sequences, or dictionary where values are AA sequences and keys are their corresponding names/IDs.
+    ep (float): ep value for mafft, default is 0.00
+    op (float): op value for mafft, default is 1.53
+
   Returns:
     out_names: List of aligned protein names (list<str>)
-    out_seqs.: List of corresponding protein sequences (list<str>)
+    out_seqs: List of corresponding protein sequences (list<str>)
+
   """
+  # FIXME return type tuple
+
   # check if mafft is actually present
   assert (
     shutil.which("mafft") is not None
@@ -286,19 +288,21 @@ def align_mafft(seqs, ep=0.0, op=1.53):
 
 
 def run_phmmer_mafft(query, ref_db_path, size=float("inf"), in_name="input_sequence"):
-  """
-  -------------------------------------------------------
-  Generate MSA using phmmer and mafft from reference sequences.
-  -------------------------------------------------------
+  """Generate MSA using phmmer and mafft from reference sequences.
+
   Parameters:
-    query......: Amino acid sequence of the protein you want to create an MSA of (str).
-    ref_db_path: Path to reference database of sequences you want to search for hits and create and alignment with (str)
-    size.......: Top n number of sequences to keep (int)
-    in_name....: Optional name for input sequence to put in the output (str)
+    query (str): Amino acid sequence of the protein whose MSA you want to create
+    ref_db_path (str): Path to reference database of sequences with which you want to search for hits and create and alignment
+    size (int): Top n number of sequences to keep
+    in_name (str): Optional name for input sequence to put in the output
+
   Returns:
     out_names: List of aligned protein names (list<str>)
-    out_seqs.: List of corresponding protein sequences (list<str>)
+    out_seqs: List of corresponding protein sequences (list<str>)
+
   """
+  # FIXME: return type tuple
+
   with tempfile.TemporaryDirectory() as tmp_dir:
     tmp_fasta_path = f"{tmp_dir}/tmp.fasta"
     # clean input fasta
@@ -332,25 +336,29 @@ def run_phmmer_mafft(query, ref_db_path, size=float("inf"), in_name="input_seque
 
 
 def run_mmseqs2(seqs, output, database="mmseqs2_uniref_env", use_filter=True, use_templates=False, pairing=None, print_citations=True):
-  """
-  -------------------------------------------------------
-  Generate an a3m MSA using the ColabFold API. Will write
-  all results to the output directory including templates,
+  """Generate an a3m MSA using the ColabFold API.
+  Will write all results to the output directory including templates,
   MSAs, and accompanying files.
+
   Code originally adapted from: https://github.com/sokrypton/ColabFold/
-  -------------------------------------------------------
+
   Parameters:
-    seqs..........: Amino acid sequences for protein to generate an MSA of (str)
-    output.......: Output directory path, will overwrite existing results (str)
-    database.....: Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref" (str)
-    use_filter...: Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper) (bool)
-    use_templates: Download templates as well using the mmseqs2 results (bool)
-    pairing......: Can be set to either "greedy", "complete", or None for no pairing (str)
-    print_citations: Prints citations (bool)
+    seqs (str): Amino acid sequences for protein to generate an MSA of
+    output (str): Output directory path, will overwrite existing results
+    database (str): Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref"
+    use_filter (bool): Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper)
+    use_templates (bool): Download templates as well using the mmseqs2 results
+    pairing (str): Can be set to either "greedy", "complete", or None for no pairing
+    print_citations (bool): Prints citations
+
   Returns:
     a3m_lines: List of a3m lines (list<str>)
     template_paths: List of template paths (list<str>), returned only if use_templates is True.
+
   """
+  # FIXME: return type is weird
+  # ideally should always return tuple, and just set the second parameter to Optional
+
   if print_citations:
     print(MMSEQS2_CITATION)
   # API settings
@@ -603,24 +611,16 @@ def run_mmseqs2_modes(seq, output, cov=50, id=90, max_msa=2048, mode="unpaired_p
   The final a3m and most useful a3m file will be written as "output/final.a3m".
   Code originally adapted from: https://github.com/sokrypton/ColabFold/
 
-  Parameters
-  ----------
-  seq : str or list of str
-    Sequence(s) to generate the MSA for. If a list of sequences is
-    provided, they will be considered as a single protein for the MSA.
-  output : str
-    Output directory path, will overwrite existing results.
-  cov : int, optional
-    Coverage of the MSA (default is 50).
-  id : int, optional
-    Identity threshold for the MSA (default is 90).
-  max_msa : int, optional
-    Maximum number of sequences in the MSA (default is 2048).
-  mode : str, optional
-    Mode to run the MSA generation in. Can be "unpaired", "paired", or
-    "unpaired_paired" (default is "unpaired_paired").
-  print_citations : bool, optional
-    Whether to print the citations in the output (default is True).
+  Parameters:
+    seq (str / list[str]): Sequence(s) to generate the MSA for. If a list of sequences is
+      provided, they will be considered as a single protein for the MSA.
+    output (str): Output directory path, will overwrite existing results.
+    cov (int): Coverage of the MSA
+    id (int): Identity threshold for the MSA
+    max_msa (int): Maximum number of sequences in the MSA
+    mode (str): Mode to run the MSA generation in. Can be "unpaired", "paired", or "unpaired_paired"
+    print_citations (bool): Whether to print the citations in the output.
+
   """
   if print_citations:
     print(MMSEQS2_CITATION)

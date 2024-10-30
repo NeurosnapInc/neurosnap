@@ -23,9 +23,11 @@ source venv/bin/activate
 pip install --editable .[dev]
 ```
 
-# Building documentation
+## Building documentation
 To build documentation, enter your virtual environment and run `make docs` from
 the root of the repository.
+
+Then, open `docs/build/html/index.html` in a web browser.
 
 # Installation
 ```sh

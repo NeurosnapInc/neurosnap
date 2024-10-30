@@ -330,6 +330,7 @@ class Protein:
       start: Starting value to increment from, default 1 (int)
 
     """
+
     def aux(start):
       for m in self.structure:
         if model is None or m.id == model:
@@ -641,7 +642,7 @@ class Protein:
     return dist_matrix
 
   def calculate_center_of_mass(self, model=None, chain=None):
-    """ Calculate the center of mass of the protein.
+    """Calculate the center of mass of the protein.
     Considers only atoms with defined masses.
 
     Parameters:
@@ -818,7 +819,7 @@ class Protein:
     # Update the pandas dataframe to reflect the changes
     self.generate_df()
 
-  def save(self, fpath: str, format : str ="pdb"):
+  def save(self, fpath: str, format: str = "pdb"):
     """Save the structure as a PDB or mmCIF file.
     Will overwrite any existing files.
 

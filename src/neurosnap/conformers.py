@@ -49,7 +49,7 @@ def find_LCS(mol):
   return mol
 
 
-def minimize(mol, method: str ="MMFF94", e_delta=5):
+def minimize(mol, method: str = "MMFF94", e_delta=5):
   """Minimize conformer energy (kcal/mol) using RDkit
   and filter out conformers below a certain threshold.
 
@@ -203,7 +203,7 @@ def generate(input_mol, output_name="unique_conformers", write_multi=False, num_
         if energies[cid] < best_energy:
           best_cid = cid
           best_energy = energies[cid]
-    else: # if no min_method / energies available just take the first cluster
+    else:  # if no min_method / energies available just take the first cluster
       best_cid = cluster[0]
       best_energy = 0
 

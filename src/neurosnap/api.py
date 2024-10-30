@@ -42,7 +42,7 @@ class NeurosnapAPI:
     """Fetches and returns a list of available Neurosnap services. Optionally prints the services.
 
     Parameters:
-      format_type (str): 
+      format_type (str):
         - "table": Prints services in a tabular format with key fields.
         - "json": Prints services as formatted JSON.
         - None (default): No printing.

@@ -356,7 +356,7 @@ def run_mmseqs2(
   use_templates: bool = False,
   pairing: Optional[str] = None,
   print_citations: bool = True,
-) -> Union[Tuple[List[str], List[str]], List[str]]:
+) -> Tuple[List[str], Optional[List[str]]]:
   """Generate an a3m MSA using the ColabFold API.
   Will write all results to the output directory including templates,
   MSAs, and accompanying files.
@@ -373,22 +373,10 @@ def run_mmseqs2(
     print_citations: Prints citations
 
   Returns:
-    If ``use_templates``, return ``(a3m_lines, template_paths)``, else return ``a3m_lines``
-
     - ``a3m_lines``: list of a3m lines
     - ``template_paths``: list of template paths
 
   """
-  # FIXME(@KeaunAmani): the return type is weird here because of the return logic
-  # currently its `Union[Tuple[List[str], List[str]], List[str]]`
-  # should just be `Tuple[List[str], Optional[List[str]]]`
-  #
-  # its weird to change the return type based on a given function param
-  # better to always return a tuple, with second value as None
-  #
-  # I left another fixme at the end of the function that you can apply to make this change
-  # I didn't change it myself though because its an API change for this package
-
   if print_citations:
     print(MMSEQS2_CITATION)
   # API settings
@@ -630,13 +618,10 @@ def run_mmseqs2(
         template_paths_.append(template_paths[n])
     template_paths = template_paths_
 
-  # FIXME(@KeaunAmani): change the return statement to this
-  # if use_templates:
-  #   return (a3m_lines, template_paths)
-  # else:
-  #   return (a3m_lines, None)
-
-  return (a3m_lines, template_paths) if use_templates else a3m_lines
+  if use_templates:
+    return (a3m_lines, template_paths)
+  else:
+    return (a3m_lines, None)
 
 
 def run_mmseqs2_modes(

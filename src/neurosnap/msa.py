@@ -192,17 +192,16 @@ def pad_seqs(seqs: List[str], char: str = "-", truncate: Union[bool, int] = Fals
 
 def get_seqid(seq1: str, seq2: str) -> float:
   """Calculate the pairwise sequence identity of two same length sequences or alignments.
+  Will not perform any alignment steps.
 
   Parameters:
     seq1: The 1st sequence / aligned sequence.
     seq2: The 2nd sequence / aligned sequence.
 
   Returns:
-    The pairwise sequence identity. Will return None
+    The pairwise sequence identity, 0 means no matches found, 100 means sequences were identical.
 
   """
-  # FIXME(@KeaunAmani): should probably better explain the "Will return None"
-
   assert len(seq1) == len(seq2), "Sequences are not the same length."
   num_matches = 0
   for a, b in zip(seq1, seq2):

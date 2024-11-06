@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath("../src/neurosnap/"))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "neurosnap"
-copyright = "2024, Keaun Amani"
+copyright = "2024, Neurosnap Inc."
 author = "Keaun Amani"
 release = "0.0.64"
 

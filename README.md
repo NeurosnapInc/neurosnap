@@ -15,10 +15,10 @@ We welcome contributions to this package. If you have a feature that you want to
 
 ```sh
 # set up a virtualenv
-python3.8 -m venv venv
+python -m venv .venv
 
 # this step might differ depending on your shell
-source venv/bin/activate
+source .venv/bin/activate
 
 pip install --editable .[dev]
 ```

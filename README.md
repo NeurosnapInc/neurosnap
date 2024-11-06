@@ -31,6 +31,10 @@ Then, open `docs/build/html/index.html` in a web browser.
 
 # Installation
 ```sh
+# current stable version
+pip install -U --no-cache-dir neurosnap
+
+# latest version
 pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
 ```
 

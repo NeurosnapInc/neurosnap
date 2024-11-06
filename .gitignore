@@ -5,6 +5,7 @@
 **/.vscode
 neurosnap.egg-info
 test_files/
+dist/
 
 # sphinx
 docs/build/

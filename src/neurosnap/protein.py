@@ -95,7 +95,7 @@ for code, abr, name in AAs_FULL_TABLE:
 
 ### CLASSES ###
 class Protein:
-  def __init__(self, pdb: Union[str | io.IOBase]):
+  def __init__(self, pdb: Union[str, io.IOBase]):
     """Class that wraps around a protein structure.
 
     Utilizes the biopython protein structure under the hood.

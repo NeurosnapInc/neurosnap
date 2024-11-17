@@ -105,7 +105,7 @@ def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", percentile: float = 1
       new_conf_id = mol_filtered.AddConformer(conformer, assignId=True)  # Add the filtered conformer to the new molecule
       energies_filtered[new_conf_id] = energy
 
-  logger.info(f"Filtered {num_filtered:,} conformers within the lowest {percentile}% of energies.")
+  logger.info(f"Filtered {num_filtered:,}/{len(energy_values):,} conformers within the lowest {percentile}% of energies.")
   logger.info(f"min: {min(energy_values):.2f}, max: {max(energy_values):.2f}, avg: {sum(energy_values)/len(energy_values):.2f}")
   return mol_filtered, energies_filtered
 

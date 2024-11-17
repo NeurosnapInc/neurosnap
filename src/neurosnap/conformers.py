@@ -67,20 +67,26 @@ def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", percentile: float = 1
 
   """
   logger.info(f"Minimizing energy of all conformers using {method}")
+  energies = {}  # keys are conformer IDs, values are calculated energies.
   for i in range(mol.GetNumConformers()):
     if method == "UFF":
       AllChem.UFFOptimizeMolecule(mol, confId=i)
-    elif method == "MMFF94":
-      AllChem.MMFFOptimizeMolecule(mol, confId=i, mmffVariant="MMFF94")
-    elif method == "MMFF94s":
-      AllChem.MMFFOptimizeMolecule(mol, confId=i, mmffVariant="MMFF94s")
+      ff = AllChem.UFFGetMoleculeForceField(mol, confId=i)
+    elif method in ["MMFF94", "MMFF94s"]:
+      AllChem.MMFFOptimizeMolecule(mol, confId=i, mmffVariant=method)
+      props = AllChem.MMFFGetMoleculeProperties(mol)
+      if props is None:
+        logger.warning(f"MMFF properties could not be initialized for molecule: {Chem.MolToSmiles(mol)}")
+        energies[i] = 0
+        continue
+      ff = AllChem.MMFFGetMoleculeForceField(mol, props, confId=i)
     else:
-      raise ValueError(f'Invalid minimization method passed {method}. Must be either "UFF", "MMFF94", or "MMFF94s".')
+      raise ValueError(f"Invalid minimization method: {method}")
 
-  # Calculate energies for all conformers
-  energies = {}  # keys are conformer IDs, values are calculated energies.
-  for i in range(mol.GetNumConformers()):
-    ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=i)
+    if ff is None:
+      logger.warning(f"Force field could not be initialized for conformer {i}, setting value to 0.")
+      energies[i] = 0
+      continue
     energies[i] = ff.CalcEnergy()
 
   # Determine the energy threshold based on the specified percentile
@@ -99,7 +105,7 @@ def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", percentile: float = 1
       new_conf_id = mol_filtered.AddConformer(conformer, assignId=True)  # Add the filtered conformer to the new molecule
       energies_filtered[new_conf_id] = energy
 
-  logger.info(f"Filtered {num_filtered:,} conformers within the lowest {percentile}% of energies.")
+  logger.info(f"Filtered {num_filtered:,}/{len(energy_values):,} conformers within the lowest {percentile}% of energies.")
   logger.info(f"min: {min(energy_values):.2f}, max: {max(energy_values):.2f}, avg: {sum(energy_values)/len(energy_values):.2f}")
   return mol_filtered, energies_filtered
 

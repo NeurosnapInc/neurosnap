@@ -521,6 +521,8 @@ def run_mmseqs2(
     src_path = os.path.join(temp_dir, file)
     if os.path.exists(src_path):
       shutil.move(src_path, os.path.join(output, file))
+  
+  shutil.rmtree(temp_dir)
 
   if pairing:
     a3m_files = [f"{output}/pair.a3m"]

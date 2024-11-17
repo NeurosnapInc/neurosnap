@@ -111,7 +111,7 @@ def ClusterProt(proteins: List[Union["Protein", str]], model: int = 0, chain: Op
   }
 
 
-  def animate_results(cp_results: Dict, animation_fpath: str="cluster_prot.gif"):
+def animate_results(cp_results: Dict, animation_fpath: str="cluster_prot.gif"):
   """Animate the ClusterProt results using the aligned proteins and 1D projections.
 
   Parameters:

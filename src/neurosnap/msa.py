@@ -407,6 +407,8 @@ def run_mmseqs2(
     shutil.rmtree(output)
   os.mkdir(output)
 
+  temp_dir = tempfile.mkdtemp()
+
   def submit(seqs, mode, N=101):
     n, query = N, ""
     for seq in seqs:
@@ -514,7 +516,11 @@ def run_mmseqs2(
     break
   # extract files
   with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
-    tar.extractall(path=output, filter="data")
+    tar.extractall(path=temp_dir)
+  for file in ["uniref.a3m", "bfd.mgnify30.metaeuk30.smag30.a3m", "pair.a3m", "pdb70.m8"]:
+    src_path = os.path.join(temp_dir, file)
+    if os.path.exists(src_path):
+      shutil.move(src_path, os.path.join(output, file))
 
   if pairing:
     a3m_files = [f"{output}/pair.a3m"]

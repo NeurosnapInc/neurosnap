@@ -675,7 +675,7 @@ def run_mmseqs2_modes(
   # Handle paired MSA if applicable
   if mode in ["paired", "unpaired_paired"] and len(u_seqs) > 1:
     print("Getting paired MSA")
-    out_paired = run_mmseqs2(u_seqs, output, pairing="greedy", print_citations=False)
+    _, out_paired = run_mmseqs2(u_seqs, output, pairing="greedy", print_citations=False)
     headers, sequences = [], []
     for a3m_lines in out_paired:
       n = -1
@@ -710,7 +710,7 @@ def run_mmseqs2_modes(
   # Handle unpaired MSA if applicable
   if len(msa) < max_msa and (mode in ["unpaired", "unpaired_paired"] or len(u_seqs) == 1):
     print("Getting unpaired MSA")
-    out = run_mmseqs2(u_seqs, output, pairing=None, print_citations=False)
+    _, out = run_mmseqs2(u_seqs, output, pairing=None, print_citations=False)
     Ls = [len(seq) for seq in u_seqs]
     sub_idx = []
     sub_msa = []

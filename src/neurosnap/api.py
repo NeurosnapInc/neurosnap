@@ -55,7 +55,7 @@ class NeurosnapAPI:
 
     """
     response = requests.get(f"{self.BASE_URL}/services", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     services = response.json()
 
     def format_service(service):
@@ -90,7 +90,7 @@ class NeurosnapAPI:
 
     """
     response = requests.get(f"{self.BASE_URL}/jobs", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     jobs = response.json()
     for job in jobs:
       if "Submitted" in job:
@@ -127,7 +127,7 @@ class NeurosnapAPI:
     # Make the POST request
     response = requests.post(f"{self.BASE_URL}/job/submit/{service_name}", headers=self.headers, files=files_dict, data=filtered_data)
 
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
 
     # Return the job ID
     return response.json()
@@ -146,7 +146,7 @@ class NeurosnapAPI:
 
     """
     response = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     return response.json()
 
   def get_job_files(self, job_id: str, file_type: str, share_id: str = None, format_type: Optional[str] = None) -> List[str]:
@@ -174,7 +174,7 @@ class NeurosnapAPI:
       url += f"?share={share_id}"
     # Make the request and check the status
     response = requests.get(url, headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     # Parse the response
     files = response.json()
     # Optionally format the output based on the format_type
@@ -214,7 +214,7 @@ class NeurosnapAPI:
 
     # Make the request and check the status
     response = requests.get(url, headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     try:
       with open(save_path, "wb") as f:
         f.write(response.content)
@@ -236,7 +236,7 @@ class NeurosnapAPI:
     payload = {"job_id": job_id, "note": note}
     # Send the POST request
     response = requests.post(f"{self.BASE_URL}/job/note/set", headers=self.headers, json=payload)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     print(f"Note set successfully for job ID {job_id}.")
 
   def set_job_share(self, job_id: str) -> Dict:
@@ -251,7 +251,7 @@ class NeurosnapAPI:
     """
     # Send the request to set job share
     response = requests.get(f"{self.BASE_URL}/job/share/set/{job_id}", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     return response.json()  # Return the JSON output containing the share ID
 
   def delete_job_share(self, job_id: str) -> None:
@@ -264,7 +264,7 @@ class NeurosnapAPI:
     # Send the request to delete job share
     response = requests.get(f"{self.BASE_URL}/job/share/delete/{job_id}", headers=self.headers)
 
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
     print(f"Job ID {job_id} is now private.")
 
   def get_team_info(self, format_type: Optional[str] = None) -> Dict:
@@ -281,7 +281,7 @@ class NeurosnapAPI:
 
     """
     response = requests.get(f"{self.BASE_URL}/teams/info", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
 
     team_info = response.json()
     format_type = format_type.lower()
@@ -324,7 +324,7 @@ class NeurosnapAPI:
 
     """
     response = requests.get(f"{self.BASE_URL}/teams/jobs", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
+    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
 
     jobs = response.json()
     for job in jobs:

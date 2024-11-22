@@ -426,6 +426,7 @@ class Protein:
     """
     # List of standard amino acids and nucleotides (biopolymer residues)
     biopolymer_residues = set(AA_ABR_TO_CODE.keys()).union(STANDARD_NUCLEOTIDES)
+    biopolymer_residues.remove("UNK")
 
     for m in self.structure:
       if model is None or m.id == model:

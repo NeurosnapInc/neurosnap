@@ -6,10 +6,11 @@ a feature rich wrapper around protein structures using BioPython.
 import io
 import json
 import os
+import shutil
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from typing import List, Union, Tuple, Optional
+from typing import List, Optional, Tuple, Union
 
 import matplotlib
 import matplotlib.animation as animation
@@ -18,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder
+from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder, Structure, Model, Chain
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -364,6 +365,30 @@ class Protein:
     # update the pandas dataframe
     self.generate_df()
 
+  def remove_nucleotides(self, model: Optional[int] = None, chain: Optional[str] = None):
+    """Removes all nucleotides (DNA and RNA) from the structure.
+    If no model or chain is provided, it will remove nucleotides
+    from the entire structure.
+
+    Parameters:
+      model: The model ID to process. If ``None``, will use all models.
+      chain: The chain ID to process. If ``None``, will use all chains.
+
+    """
+    for m in self.structure:
+      if model is None or m.id == model:
+        for c in m:
+          if chain is None or c.id == chain:
+            # Identify nucleotide residues (both RNA and DNA)
+            residues_to_remove = [res for res in c if res.get_resname() in STANDARD_NUCLEOTIDES]
+
+            # Remove nucleotide residues
+            for res in residues_to_remove:
+              c.detach_child(res.id)
+
+    # update the pandas dataframe
+    self.generate_df()
+
   def remove_non_biopolymers(self, model: Optional[int] = None, chain: Optional[str] = None):
     """Removes all ligands, heteroatoms, and non-biopolymer
     residues from the selected structure. Non-biopolymer
@@ -393,29 +418,68 @@ class Protein:
     # update the pandas dataframe
     self.generate_df()
 
-  def remove_nucleotides(self, model: Optional[int] = None, chain: Optional[str] = None):
-    """Removes all nucleotides (DNA and RNA) from the structure.
-    If no model or chain is provided, it will remove nucleotides
-    from the entire structure.
+  def extract_non_biopolymers(self, output_dir: str, model: int = 0, min_atoms: int = 0):
+    """Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)
+    from the specified model in the structure and writes them to SDF files.
+    Each molecule is saved as a separate SDF file in the output directory.
 
     Parameters:
-      model: The model ID to process. If ``None``, will use all models.
-      chain: The chain ID to process. If ``None``, will use all chains.
+      output_dir: The directory where the SDF files will be saved. Will overwrite existing directory.
+      model: The model ID to process.
+      min_atoms: Minimum number of atoms a molecule must have to be saved. Molecules with fewer atoms are skipped.
 
     """
-    for m in self.structure:
-      if model is None or m.id == model:
-        for c in m:
-          if chain is None or c.id == chain:
-            # Identify nucleotide residues (both RNA and DNA)
-            residues_to_remove = [res for res in c if res.get_resname() in STANDARD_NUCLEOTIDES]
+    # Ensure the output directory exists
+    if os.path.exists(output_dir):
+      shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
 
-            # Remove nucleotide residues
-            for res in residues_to_remove:
-              c.detach_child(res.id)
+    # List of standard amino acids and nucleotides (biopolymer residues)
+    biopolymer_residues = set(AA_ABR_TO_CODE.keys()).union(STANDARD_NUCLEOTIDES)
 
-    # update the pandas dataframe
-    self.generate_df()
+    # Ensure the model exists
+    assert model in self.models(), f"Model {model} does not exist in the structure."
+
+    # Counter for naming output files
+    molecule_counter = 1
+
+    # Process the specified model
+    for chain in self.structure[model]:
+      for residue in list(chain):  # Use list to avoid modification during iteration
+        if residue.get_resname() not in biopolymer_residues:
+          # Create a new structure containing only this residue
+          new_structure = Structure.Structure("temp_structure")
+          new_model = Model.Model(model)
+          new_chain = Chain.Chain(chain.id)
+          new_chain.add(residue.copy())
+          new_model.add(new_chain)
+          new_structure.add(new_model)
+
+          # Create a temporary PDB file for the residue
+          with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb") as temp_pdb:
+            io = PDBIO()
+            io.set_structure(new_structure)
+            io.save(temp_pdb.name)
+            temp_pdb.close()
+
+          # Convert the PDB file to SDF
+          mol = Chem.MolFromPDBFile(temp_pdb.name, sanitize=False)
+          if mol is not None:
+            # Check the number of atoms using RDKit
+            if mol.GetNumAtoms() < min_atoms:
+              os.remove(temp_pdb.name)  # Remove the temporary PDB file
+              continue
+
+            sdf_path = os.path.join(output_dir, f"{molecule_counter}.sdf")
+            writer = Chem.SDWriter(sdf_path)
+            writer.write(mol)
+            writer.close()
+            molecule_counter += 1
+
+          # Remove the temporary PDB file
+          os.remove(temp_pdb.name)
+
+    logger.info(f"Extracted {molecule_counter - 1} non-biopolymer molecules to {output_dir}.")
 
   def get_backbone(self, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
     """Extract backbone atoms (N, CA, C) from the structure.

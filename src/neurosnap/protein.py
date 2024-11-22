@@ -422,7 +422,7 @@ class Protein:
     """Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)
     from the specified model in the structure and writes them to SDF files.
     Each molecule is saved as a separate SDF file in the output directory.
-    # Automatically adds hydrogens to molecules.
+    Automatically adds hydrogens to molecules.
 
     Parameters:
       output_dir: The directory where the SDF files will be saved. Will overwrite existing directory.

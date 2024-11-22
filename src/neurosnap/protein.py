@@ -422,7 +422,8 @@ class Protein:
     """Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)
     from the specified model in the structure and writes them to SDF files.
     Each molecule is saved as a separate SDF file in the output directory.
-    Automatically adds hydrogens to molecules.
+    Automatically adds hydrogens to molecules. Will also attempt to sanitize
+    the molecule if possible, if sanitization fails a warning will be logged.
 
     Parameters:
       output_dir: The directory where the SDF files will be saved. Will overwrite existing directory.
@@ -473,6 +474,12 @@ class Protein:
 
             # Add hydrogens to the molecule
             mol = Chem.AddHs(mol)
+
+            # Sanitize the molecule to ensure consistency and validity
+            try:
+              Chem.SanitizeMol(mol)
+            except Exception as e:
+              logger.warning(f"Sanitization failed for {temp_pdb.name}: {e}")
 
             sdf_path = os.path.join(output_dir, f"{molecule_counter}.sdf")
             writer = Chem.SDWriter(sdf_path)

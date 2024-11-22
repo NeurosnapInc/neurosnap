@@ -47,7 +47,28 @@ STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG", "DU"}
 # X | UNK | unknown codon
 # * | TRM | termination codon
 STANDARD_AAs = "ACDEFGHIKLMNPQRSTVWY"
-STANDARD_AAs_ABR = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"}
+STANDARD_AAs_ABR = {
+  "ALA",
+  "ARG",
+  "ASN",
+  "ASP",
+  "CYS",
+  "GLN",
+  "GLU",
+  "GLY",
+  "HIS",
+  "ILE",
+  "LEU",
+  "LYS",
+  "MET",
+  "PHE",
+  "PRO",
+  "SER",
+  "THR",
+  "TRP",
+  "TYR",
+  "VAL",
+}
 # List of hydrophobic residues
 HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
 
@@ -418,80 +439,6 @@ class Protein:
               c.detach_child(res.id)
     # update the pandas dataframe
     self.generate_df()
-
-  def extract_non_biopolymers(self, output_dir: str, model: int = 0, min_atoms: int = 0):
-    """Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)
-    from the specified model in the structure and writes them to SDF files.
-    Each molecule is saved as a separate SDF file in the output directory.
-    Automatically adds hydrogens to molecules. Will also attempt to sanitize
-    the molecule if possible, if sanitization fails a warning will be logged.
-
-    Parameters:
-      output_dir: The directory where the SDF files will be saved. Will overwrite existing directory.
-      model: The model ID to process.
-      min_atoms: Minimum number of atoms a molecule must have to be saved. Molecules with fewer atoms are skipped.
-
-    """
-    # Ensure the output directory exists
-    if os.path.exists(output_dir):
-      shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
-
-    # List of standard amino acids and nucleotides (biopolymer residues)
-    biopolymer_residues = STANDARD_AAs_ABR.union(STANDARD_NUCLEOTIDES)
-
-    # Ensure the model exists
-    assert model in self.models(), f"Model {model} does not exist in the structure."
-
-    # Counter for naming output files
-    molecule_counter = 1
-
-    # Process the specified model
-    for chain in self.structure[model]:
-      for residue in list(chain):  # Use list to avoid modification during iteration
-        if residue.get_resname() not in biopolymer_residues:
-          # Create a new structure containing only this residue
-          new_structure = Structure.Structure("temp_structure")
-          new_model = Model.Model(model)
-          new_chain = Chain.Chain(chain.id)
-          new_chain.add(residue.copy())
-          new_model.add(new_chain)
-          new_structure.add(new_model)
-
-          # Create a temporary PDB file for the residue
-          with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb") as temp_pdb:
-            io = PDBIO()
-            io.set_structure(new_structure)
-            io.save(temp_pdb.name)
-            temp_pdb.close()
-
-          # Convert the PDB file to SDF
-          mol = Chem.MolFromPDBFile(temp_pdb.name, sanitize=False)
-          if mol is not None:
-            # Check the number of atoms using RDKit
-            if mol.GetNumAtoms() < min_atoms:
-              os.remove(temp_pdb.name)  # Remove the temporary PDB file
-              continue
-
-            # Add hydrogens to the molecule
-            mol = Chem.AddHs(mol)
-
-            # Sanitize the molecule to ensure consistency and validity
-            try:
-              Chem.SanitizeMol(mol)
-            except Exception as e:
-              logger.warning(f"Sanitization failed for {temp_pdb.name}: {e}")
-
-            sdf_path = os.path.join(output_dir, f"{molecule_counter}.sdf")
-            writer = Chem.SDWriter(sdf_path)
-            writer.write(mol)
-            writer.close()
-            molecule_counter += 1
-
-          # Remove the temporary PDB file
-          os.remove(temp_pdb.name)
-
-    logger.info(f"Extracted {molecule_counter - 1} non-biopolymer molecules to {output_dir}.")
 
   def get_backbone(self, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
     """Extract backbone atoms (N, CA, C) from the structure.
@@ -943,6 +890,111 @@ def getAA(query: str) -> Tuple[str, str, str]:
       return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
+
+
+def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
+  """
+  Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)
+  from the specified PDB file and writes them to SDF files.
+  Each molecule is saved as a separate SDF file in the output directory.
+  Automatically adds hydrogens to molecules. Attempts to sanitize
+  the molecule if possible; logs a warning if sanitization fails.
+
+  Parameters:
+      pdb_file: Path to the input PDB file.
+      output_dir: Directory where the SDF files will be saved. Will overwrite existing directory.
+      min_atoms: Minimum number of atoms a molecule must have to be saved. Molecules with fewer atoms are skipped.
+  """
+  def is_biopolymer(molecule):
+    """
+    Determines if a molecule is a biopolymer (protein or nucleotide) based on specific characteristics.
+    Returns True if it is a biopolymer; False otherwise.
+    """
+    # Check for peptide bonds or nucleotide backbones
+    # Simplified logic: exclude molecules with standard amino acids or nucleotide bases
+    biopolymer_keywords = [
+      "GLY",
+      "ALA",
+      "VAL",
+      "LEU",
+      "ILE",
+      "MET",
+      "PHE",
+      "TYR",
+      "TRP",
+      "SER",
+      "THR",
+      "CYS",
+      "PRO",
+      "ASN",
+      "GLN",
+      "ASP",
+      "GLU",
+      "LYS",
+      "ARG",
+      "HIS",  # Amino acids
+      "DA",
+      "DT",
+      "DG",
+      "DC",
+      "A",
+      "T",
+      "G",
+      "C",
+      "U",  # Nucleotide bases
+    ]
+    for atom in molecule.GetAtoms():
+      residue_info = atom.GetPDBResidueInfo()
+      if residue_info:
+        res_name = residue_info.GetResidueName().strip()
+        if res_name in biopolymer_keywords:
+          return True
+    return False
+
+  # Create output directory if it doesn't exist
+  if os.path.exists(output_dir):
+    shutil.rmtree(output_dir)
+  os.makedirs(output_dir)
+
+  # Read the PDB file
+  mol = Chem.MolFromPDBFile(pdb_file, removeHs=False, sanitize=False)
+  if mol is None:
+    raise ValueError(f"Failed to read PDB file: {pdb_file}.")
+
+  # Split the molecule into fragments (separate entities in the PDB)
+  fragments = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
+  molecule_count = 1
+
+  for i, frag in enumerate(fragments):
+    if frag is None:
+      logger.warning(f"Skipping fragment {i} due to processing failure.")
+      continue
+
+    try:
+      # Add hydrogens and sanitize molecule
+      Chem.SanitizeMol(frag)
+    except Exception as e:
+      logger.warning(f"Failed to sanitize fragment {i}: {e}")
+      continue
+
+    # Check if the fragment is a biopolymer
+    if is_biopolymer(frag):
+      logger.info(f"Skipping biopolymer fragment {i}.")
+      continue
+
+    # Skip small molecules based on atom count
+    if frag.GetNumAtoms() < min_atoms:
+      logger.info(f"Skipping small molecule fragment {i} (atom count: {frag.GetNumAtoms()}).")
+      continue
+
+    # Save fragment to SDF
+    sdf_file = os.path.join(output_dir, f"ligand_{molecule_count}.sdf")
+    writer = Chem.SDWriter(sdf_file)
+    writer.write(frag)
+    writer.close()
+    molecule_count += 1
+
+  logger.info(f"Extracted {molecule_count-1} non-biopolymer molecules to {output_dir}.")
 
 
 def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:

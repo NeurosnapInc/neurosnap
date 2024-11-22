@@ -47,6 +47,7 @@ STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG", "DU"}
 # X | UNK | unknown codon
 # * | TRM | termination codon
 STANDARD_AAs = "ACDEFGHIKLMNPQRSTVWY"
+STANDARD_AAs_ABR = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"}
 # List of hydrophobic residues
 HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
 
@@ -437,7 +438,7 @@ class Protein:
     os.makedirs(output_dir)
 
     # List of standard amino acids and nucleotides (biopolymer residues)
-    biopolymer_residues = set(AA_ABR_TO_CODE.keys()).union(STANDARD_NUCLEOTIDES)
+    biopolymer_residues = STANDARD_AAs_ABR.union(STANDARD_NUCLEOTIDES)
 
     # Ensure the model exists
     assert model in self.models(), f"Model {model} does not exist in the structure."

@@ -470,6 +470,9 @@ class Protein:
               os.remove(temp_pdb.name)  # Remove the temporary PDB file
               continue
 
+            # Add hydrogens to the molecule
+            mol = Chem.AddHs(mol)
+
             sdf_path = os.path.join(output_dir, f"{molecule_counter}.sdf")
             writer = Chem.SDWriter(sdf_path)
             writer.write(mol)

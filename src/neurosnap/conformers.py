@@ -135,7 +135,7 @@ def generate(
       max_atoms: Maximum number of atoms allowed for the input molecule
 
   Returns:
-      A dataframe with all conformer statistics. Note if energy minimization is disabled or fails than energy column will consist of Infinity values.
+      A dataframe with all conformer statistics. Note if energy minimization is disabled or fails then energy column will consist of None values.
 
   """
   ### parse input and construct corresponding RDkit mol object
@@ -226,8 +226,9 @@ def generate(
         if energies[cid] < best_energy:
           best_cid = cid
           best_energy = energies[cid]
-    else:  # if no min_method / energies available just take the first element in the cluster
+    else:  # if no min_method / energies available just take the first element in the cluster and set energy to None
       best_cid = cluster[0]
+      best_energy = None
 
     logger.debug(f"Cluster ID: {i}, Best Conformer: {best_cid} ({best_energy:.2f}), Conformers {cluster}")
     output["conformer_id"].append(best_cid)

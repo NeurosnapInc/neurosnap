@@ -55,15 +55,14 @@ def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", percentile: float = 1
   and filter out conformers based on energy percentile.
 
   Parameters:
-    mol: RDkit mol object containing the conformers you want to minimize. (rdkit.Chem.rdchem.Mol)
-    method: Can be either UFF, MMFF94, or MMFF94s (str)
-    percentile: Filters out conformers above a given energy percentile (0 to 100). For example, 10.0 will retain conformers within the lowest 10% energy. (float)
+      mol: RDkit mol object containing the conformers you want to minimize. (rdkit.Chem.rdchem.Mol)
+      method: Can be either UFF, MMFF94, or MMFF94s (str)
+      percentile: Filters out conformers above a given energy percentile (0 to 100). For example, 10.0 will retain conformers within the lowest 10% energy. (float)
 
   Returns:
-    A tuple of the form ``(mol_filtered, energies)``
-
-    - ``mol_filtered``: Molecule object with filtered conformers.
-    - ``energies``: Dictionary where keys are conformer IDs and values are calculated energies in kcal/mol.
+      A tuple of the form ``(mol_filtered, energies)``
+      - ``mol_filtered``: Molecule object with filtered conformers.
+      - ``energies``: Dictionary where keys are conformer IDs and values are calculated energies in kcal/mol.
 
   """
   logger.info(f"Minimizing energy of all conformers using {method}")
@@ -115,7 +114,7 @@ def generate(
   output_name: str = "unique_conformers",
   write_multi: bool = False,
   num_confs: int = 1000,
-  min_method: Optional[str] = "MMFF94",
+  min_method: Optional[str] = "auto",
   max_atoms: int = 500,
 ) -> pd.DataFrame:
   """Generate conformers for an input molecule.
@@ -128,15 +127,15 @@ def generate(
   5. Return most energetically favorable conformers in each cluster
 
   Parameters:
-    input_mol: Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol
-    output_name: Output to write SDF files of passing conformers
-    write_multi: If True will write all unique conformers to a single SDF file, if False will write all unique conformers in separate SDF files in output_name
-    num_confs: Number of conformers to generate
-    min_method: Method for minimization, can be either UFF, MMFF94, MMFF94s, or None for no minimization
-    max_atoms: Maximum number of atoms allowed for the input molecule
+      input_mol: Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol
+      output_name: Output to write SDF files of passing conformers
+      write_multi: If True will write all unique conformers to a single SDF file, if False will write all unique conformers in separate SDF files in output_name
+      num_confs: Number of conformers to generate
+      min_method: Method for minimization, can be either "auto", "UFF", "MMFF94", "MMFF94s", or None for no minimization
+      max_atoms: Maximum number of atoms allowed for the input molecule
 
   Returns:
-    A dataframe with all conformer statistics
+      A dataframe with all conformer statistics. Note if energy minimization is disabled or fails than energy column will consist of Infinity values.
 
   """
   ### parse input and construct corresponding RDkit mol object
@@ -180,8 +179,17 @@ def generate(
   logger.info(f"Generated {my_mol.GetNumConformers():,} 3D conformers.")
 
   ### Minimize energy of each conformer
+  energies = {}
   if min_method:
-    my_mol, energies = minimize(my_mol, method=min_method)
+    # if min_method is set to auto then try a variety of methods until one succeeds
+    if min_method == "auto":
+      for method in ["MMFF94", "UFF", "MMFF94s"]:
+        try:
+          my_mol, energies = minimize(my_mol, method=method)
+        except:
+          pass
+    else:
+      my_mol, energies = minimize(my_mol, method=min_method)
 
   ### Clustering
   ## Calculate the RMSD matrix between all pairs of conformers
@@ -213,14 +221,13 @@ def generate(
   for i, cluster in enumerate(clusters, start=1):
     best_energy = float("inf")
     best_cid = None
-    if min_method:
+    if energies:
       for cid in cluster:
         if energies[cid] < best_energy:
           best_cid = cid
           best_energy = energies[cid]
-    else:  # if no min_method / energies available just take the first cluster
+    else:  # if no min_method / energies available just take the first element in the cluster
       best_cid = cluster[0]
-      best_energy = 0
 
     logger.debug(f"Cluster ID: {i}, Best Conformer: {best_cid} ({best_energy:.2f}), Conformers {cluster}")
     output["conformer_id"].append(best_cid)

@@ -74,7 +74,7 @@ def read_msa(
   remove_chars: str = "*",
   uppercase: bool = True,
 ) -> Tuple[List[str], List[str]]:
-  """Reads an MSA, a3m, or fasta file and returns an array of names and seqs.
+  """Reads an MSA, a3m, or fasta file and returns an array of names and seqs. Returned headers will consist of all characters up until the first space with the "|" character replaced with an underscore.
 
   Parameters:
     input_fasta: Path to read input a3m file, fasta as a raw string, or a file-handle like object to read
@@ -115,9 +115,10 @@ def read_msa(
           raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
         if len(seqs) >= size + 1:
           break
-        match = re.search(r"^>([\w-]*)", line)
+        match = re.search(r"^>([\w_-\|]*)", line)
         assert match is not None, f"Invalid MSA/fasta. {line} is not a valid header."
         name = match.group(1)
+        name = name.replace("|", "_")
         assert len(name), f"Invalid MSA/fasta. line {i} has an empty header."
         names.append(name)
         seqs.append("")

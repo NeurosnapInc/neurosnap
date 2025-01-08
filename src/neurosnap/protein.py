@@ -942,16 +942,26 @@ class Protein:
     # Update the pandas dataframe to reflect the changes
     self.generate_df()
 
-  def save(self, fpath: str, format: str = "pdb"):
+  def save(self, fpath: str, format: str = "auto"):
     """Save the structure as a PDB or mmCIF file.
     Will overwrite any existing files.
 
     Parameters:
       fpath: File path where you want to save the structure
-      format: File format to save in, either 'pdb' or 'mmcif'
+      format: File format to save in, either 'pdb' or 'mmcif', set to 'auto' to infer format from extension.
 
     """
     format = format.lower()
+    # infer format from extension if not provided
+    if format == "auto":
+      if str(fpath).endswith(".pdb"):
+        format = "pdb"
+      elif str(fpath).endswith(".mmcif") or str(fpath).endswith(".cif"):
+        format = "mmcif"
+      else:
+        raise ValueError("Failed to infer format for file. Supported extensions consist of '.pdb' or '.mmcif'.")
+
+    # save file
     if format == "pdb":
       io = PDBIO()
       io.set_structure(self.structure)

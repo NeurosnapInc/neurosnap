@@ -19,7 +19,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder, Structure, Model, Chain
+from Bio.PDB import PDBIO, SASA, Chain, Model, PDBParser, PPBuilder, Structure
+from Bio.PDB.Atom import Atom
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -773,6 +774,106 @@ class Protein:
                   volume += (4 / 3) * np.pi * (radius**3)
     return volume
 
+  def calculate_hydrogen_bonds(
+    self,
+    model: Optional[int] = None,
+    chain: Optional[str] = None,
+    chain_other: Optional[str] = None,
+    donor_acceptor_cutoff: float = 3.5,
+    angle_cutoff: float = 120.0,
+  ) -> int:
+    """Calculate the number of hydrogen bonds in the protein structure.
+    Hydrogen atoms must be explicitly defined within the structure as implicit hydrogens
+    will not computed. We recommend using a tool like reduce to add missing hydrogens.
+
+    Hydrogen bonds are detected based on distance and angle criteria:
+    - Distance between donor and acceptor must be less than `donor_acceptor_cutoff`.
+    - The angle formed by donor-hydrogen-acceptor must be greater than `angle_cutoff`.
+
+    If `model` is set to `None`, hydrogen bonds are calculated only for the first model in the structure.
+
+    If `chain_other` is `None`:
+      - Hydrogen bonds are calculated for the specified `chain` or all chains if `chain` is also `None`.
+    If `chain_other` is set to a specific chain:
+      - Hydrogen bonds are calculated only between atoms of `chain` and `chain_other`.
+    If `chain_other` is specified but `chain` is not, an exception is raised.
+
+    Parameters:
+      model: Model ID to calculate for. If None, only the first model is considered.
+      chain: Chain ID to calculate for. If None, all chains in the selected model are considered.
+      chain_other: Secondary chain ID for inter-chain hydrogen bonds. If None, intra-chain bonds are calculated.
+      donor_acceptor_cutoff: Maximum distance between donor and acceptor (in Å). Default is 3.5 Å.
+      angle_cutoff: Minimum angle for a hydrogen bond (in degrees). Default is 120°.
+
+    Returns:
+      The total number of hydrogen bonds in the structure.
+
+    Raises:
+      ValueError: If `chain_other` is specified but `chain` is not.
+
+    """
+    hydrogen_bonds = 0
+    hydrogen_distance_cutoff = 1.2  # Typical bond length between H and donor atom (in Å)
+
+    # Default to the first model if model is None
+    if model is None:
+      model = self.models()[0]
+    model = self.structure[model]
+
+    # input validation
+    if chain_other is not None and chain is None:
+      raise ValueError("`chain_other` is specified, but `chain` is not. Both must be provided for inter-chain hydrogen bond calculation.")
+    if chain is not None and chain not in self.chains():
+      raise ValueError(f"Chain {chain} does not exist within the input structure.")
+    if chain_other is not None and chain_other not in self.chains():
+      raise ValueError(f"Chain {chain_other} does not exist within the input structure.")
+
+    for c in model:
+      if chain is not None and c.id != chain:
+        continue
+
+      for donor_res in c:
+        for donor_atom in donor_res:
+          if donor_atom.element not in ["N", "O"]:
+            continue  # Only consider N or O as donors
+
+          # Identify hydrogen atoms bonded to the donor
+          bonded_hydrogens = [
+            atom for atom in donor_res if atom.element == "H" and np.linalg.norm(donor_atom.coord - atom.coord) <= hydrogen_distance_cutoff
+          ]
+          if not bonded_hydrogens:
+            continue
+
+          # Determine chains to search for acceptors
+          acceptor_chains = [chain_other] if chain_other else [c.id for c in model if chain is None or c.id == chain]
+
+          for acceptor_chain in acceptor_chains:
+            for acceptor_res in model[acceptor_chain]:
+              for acceptor_atom in acceptor_res:
+                if acceptor_atom.element not in ["N", "O"]:
+                  continue  # Only consider N or O as acceptors
+                if acceptor_atom is donor_atom:
+                  continue  # Skip self-bonding
+
+                # Calculate the distance between donor and acceptor
+                distance = np.linalg.norm(donor_atom.coord - acceptor_atom.coord)
+                if distance > donor_acceptor_cutoff:
+                  continue
+
+                # Calculate the angle formed by donor-hydrogen-acceptor for each bonded hydrogen
+                for hydrogen in bonded_hydrogens:
+                  donor_h_vector = hydrogen.coord - donor_atom.coord
+                  acceptor_donor_vector = acceptor_atom.coord - donor_atom.coord
+                  angle = np.arccos(
+                    np.dot(donor_h_vector, acceptor_donor_vector) / (np.linalg.norm(donor_h_vector) * np.linalg.norm(acceptor_donor_vector))
+                  )
+                  angle = np.degrees(angle)
+
+                  if angle >= angle_cutoff:
+                    hydrogen_bonds += 1
+
+    return hydrogen_bonds
+
   def to_sdf(self, fpath: str):
     """Save the current protein structure as an SDF file.
     Will export all models and chains. Use :obj:`.remove()`
@@ -906,6 +1007,7 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
       output_dir: Directory where the SDF files will be saved. Will overwrite existing directory.
       min_atoms: Minimum number of atoms a molecule must have to be saved. Molecules with fewer atoms are skipped.
   """
+
   def is_biopolymer(molecule):
     """
     Determines if a molecule is a biopolymer (protein or nucleotide) based on specific characteristics.

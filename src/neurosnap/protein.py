@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, SASA, Chain, Model, PDBParser, PPBuilder, Structure
+from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer

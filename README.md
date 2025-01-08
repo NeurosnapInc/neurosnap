@@ -23,6 +23,9 @@ source .venv/bin/activate
 pip install --editable .[dev]
 ```
 
+# Documentation
+Official documentation can be found here: [https://neurosnapinc.github.io/](https://neurosnapinc.github.io/).
+
 ## Building documentation
 To build documentation, enter your virtual environment and run `make docs` from
 the root of the repository.

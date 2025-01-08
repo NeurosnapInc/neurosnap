@@ -15,7 +15,7 @@ print(sys.executable)
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "neurosnap"
+project = "Neurosnap"
 copyright = "2022-2025, Neurosnap Inc."
 author = "Keaun Amani"
 release = "2025.01.08"

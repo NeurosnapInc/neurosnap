@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder
+from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder, MMCIFParser
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -118,17 +118,17 @@ for code, abr, name in AAs_FULL_TABLE:
 
 ### CLASSES ###
 class Protein:
-  def __init__(self, pdb: Union[str, io.IOBase]):
+  def __init__(self, pdb: Union[str, io.IOBase], format: str = "auto"):
     """Class that wraps around a protein structure.
 
     Utilizes the biopython protein structure under the hood.
     Atoms that are not part of a chain will automatically be
     added to a new chain that does not overlap with any
     existing chains.
-
+I
     Parameters:
-      pdb: Can be either a file handle, PDB filepath, PDB ID, or UniProt ID
-
+      pdb: Can be either a file handle, PDB or mmCIF filepath, PDB ID, or UniProt ID
+      format: File format of the input ("pdb", "mmcif", or "auto" to infer format from extension)
     """
     self.title = "Untitled Protein"
     if isinstance(pdb, io.IOBase):
@@ -159,8 +159,23 @@ class Protein:
     else:
       raise ValueError("Invalid input type provided. Can be either a file handle, PDB filepath, PDB ID, or UniProt ID")
 
+    # Infer format if set to auto
+    if format == "auto":
+      if str(pdb).lower().endswith(".pdb"):
+        format = "pdb"
+      elif str(pdb).lower().endswith(".cif") or str(pdb).lower().endswith(".mmcif"):
+        format = "mmcif"
+      else:
+        raise ValueError("Failed to infer format. Please specify format explicitly as 'pdb' or 'mmcif'.")
+
     # load structure
-    parser = PDBParser()
+    if format == "pdb":
+      parser = PDBParser()
+    elif format == "mmcif":
+      parser = MMCIFParser()
+    else:
+      raise ValueError("Invalid format specified. Supported formats are 'pdb' or 'mmcif'.")
+
     self.structure = parser.get_structure("structure", pdb)
     assert len(self.structure), "No models found. Structure appears to be empty."
 

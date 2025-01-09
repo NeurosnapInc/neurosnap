@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, SASA, PDBParser, PPBuilder, MMCIFParser
+from Bio.PDB import PDBIO, PDBParser, PPBuilder, MMCIFParser
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -753,6 +753,7 @@ I
       Solvent-accessible surface area in Å²
 
     """
+    from Bio.PDB import SASA # NOTE: SASA isn't imported the same depending on biopython version so import it here to prevent errors
     assert model in self.models(), f"Model {model} is not currently present."
     structure_model = self.structure[model]
     sasa_calculator = SASA.ShrakeRupley()

@@ -434,6 +434,8 @@ class Protein:
       if found:
         resi_start = int(found.group(1))
         resi_end = int(found.group(2))
+        if resi_start > resi_end:
+          raise ValueError(f'Invalid residue range selector "{selector}". The starting residue cannot be greater than the ending residue.')
         for resi in range(resi_start, resi_end+1):
           if self.df[(self.df["chain"] == chain) & (self.df["res_id"] == resi)].empty:
             raise ValueError(f'Residue "{resi}" in selector "{selector}" does not exist in the specified chain.')

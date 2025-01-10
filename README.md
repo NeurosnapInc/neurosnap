@@ -10,6 +10,27 @@ Collection of useful bioinformatic functions and tools for various computational
 
 This a package developed by Keaun Amani at [neurosnap.ai](https://neurosnap.ai/). You are welcome to use this code and contribute as you see fit. We are currently working on expanding this package as well to add support for more common functions.
 
+# Installation
+```sh
+# current stable version
+pip install -U --no-cache-dir neurosnap
+
+# latest version
+pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
+```
+
+# Documentation
+Official documentation can be found here: [https://neurosnapinc.github.io/](https://neurosnapinc.github.io/).
+
+## Building documentation
+To build documentation, enter your virtual environment and run `make docs` from
+the root of the repository.
+
+Then, open `docs/build/html/index.html` in a web browser.
+
+# Tutorials
+Various interactive jupyter notebooks can be found in the [example_notebooks directory](https://github.com/NeurosnapInc/neurosnap/tree/main/example_notebooks) of this repository. For additional tutorials check out the [Official Neurosnap Blog](https://neurosnap.ai/blog) or [join our discord server](https://discord.gg/2yDZX6rTh4).
+
 # Contributions
 We welcome contributions to this package. If you have a feature that you want to code or have added, submit a pull request or an issue.
 
@@ -22,24 +43,3 @@ source .venv/bin/activate
 
 pip install --editable .[dev]
 ```
-
-# Documentation
-Official documentation can be found here: [https://neurosnapinc.github.io/](https://neurosnapinc.github.io/).
-
-## Building documentation
-To build documentation, enter your virtual environment and run `make docs` from
-the root of the repository.
-
-Then, open `docs/build/html/index.html` in a web browser.
-
-# Installation
-```sh
-# current stable version
-pip install -U --no-cache-dir neurosnap
-
-# latest version
-pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
-```
-
-# Tutorials
-Various interactive jupyter notebooks can be found in the [example_notebooks directory](https://github.com/NeurosnapInc/neurosnap/tree/main/example_notebooks) of this repository. For additional tutorials check out the [Official Neurosnap Blog](https://neurosnap.ai/blog) or [join our discord server](https://discord.gg/2yDZX6rTh4).

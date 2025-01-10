@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib
 import matplotlib.animation as animation
@@ -358,23 +358,30 @@ class Protein:
     ppb = PPBuilder()
     return str(ppb.build_peptides(self.structure[model][chain])[0].get_sequence())
 
-  def select_residues(self, selectors: str, model: Optional[int] = None) -> dict[str, List[int]]:
-    """Returns the residue sequence number / identifier using a string selector for a specific model.
-    Residue string selectors must be comma delimited and consist of the following patterns:
-    - "C": Will select all of chain C.
-    - "B1": Will select residue with identifier of 1 present in chain B only.
-    - "A10-20": Will select residues with identifier of 10 to 20 inclusively in chain A.
-    - "A15,A20-23,B": Will select residues 15, 20, 21, 22, 23, and all residues on chain B.
+  def select_residues(self, selectors: str, model: Optional[int] = None) -> Dict[str, List[int]]:
+    """Select residues from a protein structure using a string selector.
 
-    If any of the selectors do not correspond to a sequence then an exception will be raised.
+    This method allows for flexible selection of residues in a protein structure
+    based on a string query. The query must be a comma-delimited list of selectors
+    following these patterns:
+
+    - "C": Select all residues in chain C.
+    - "B1": Select residue with identifier 1 in chain B only.
+    - "A10-20": Select residues with identifiers 10 to 20 (inclusive) in chain A.
+    - "A15,A20-23,B": Select residues 15, 20, 21, 22, 23, and all residues in chain B.
+
+    If any selector does not match residues in the structure, an exception is raised.
 
     Parameters:
-      selectors: The selector string to query against the structure.
-      model: The ID of the model you want to select from. If set to None then the first model found will be used.
+        selectors: A string specifying the residue selection query.
+        model: The ID of the model to select from. If None, the first model is used.
 
     Returns:
-      Dictionary where keys are chain IDs and values are lists of integers corresponding to selected residues.
+        dict: A dictionary where keys are chain IDs and values are sorted
+              lists of residue sequence numbers that match the query.
 
+    Raises:
+        ValueError: If a specified chain or residue in the selector does not exist in the structure.
     """
     if model is None:
       model = self.models().pop(0)

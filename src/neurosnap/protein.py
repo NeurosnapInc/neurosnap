@@ -6,6 +6,7 @@ a feature rich wrapper around protein structures using BioPython.
 import io
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -19,7 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, PDBParser, PPBuilder, MMCIFParser
+from Bio.PDB import PDBIO, MMCIFParser, PDBParser, PPBuilder
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -356,6 +357,94 @@ class Protein:
 
     ppb = PPBuilder()
     return str(ppb.build_peptides(self.structure[model][chain])[0].get_sequence())
+
+  def select_residues(self, selectors: str, model: Optional[int] = None) -> dict[str, List[int]]:
+    """Returns the residue sequence number / identifier using a string selector for a specific model.
+    Residue string selectors must be comma delimited and consist of the following patterns:
+    - "C": Will select all of chain C.
+    - "B1": Will select residue with identifier of 1 present in chain B only.
+    - "A10-20": Will select residues with identifier of 10 to 20 inclusively in chain A.
+    - "A15,A20-23,B": Will select residues 15, 20, 21, 22, 23, and all residues on chain B.
+
+    If any of the selectors do not correspond to a sequence then an exception will be raised.
+
+    Parameters:
+      selectors: The selector string to query against the structure.
+      model: The ID of the model you want to select from. If set to None then the first model found will be used.
+
+    Returns:
+      Dictionary where keys are chain IDs and values are lists of integers corresponding to selected residues.
+
+    """
+    if model is None:
+      model = self.models().pop(0)
+    elif model not in self.structure:
+      raise ValueError(f'Protein does not contain model "{model}"')
+    
+    # get chains and create output object
+    chains = self.chains()
+    output = {}
+    for chain in chains:
+      output[chain] = set()
+    
+    # compile regular expressions
+    pattern_res_single = re.compile(r"^[A-Za-z](\d{1,})$")
+    pattern_res_range = re.compile(r"^[A-Za-z](\d{1,})-(\d{1,})$")
+
+    # remove white space
+    selectors = re.sub(r"\s", "", selectors)
+    # remove any leading or trailing commas
+    selectors = selectors.strip(",")
+    # remove ",," if present
+    while ",," in selectors:
+      selectors = selectors.replace(",,", ",")
+    
+    # get selection
+    for selector in selectors.split(","):
+      # get and validate chain
+      chain = selector[0]
+      if chain not in chains:
+        raise ValueError(f'Chain "{chain}" in selector "{selector}" does not exist in the specified structure.')
+
+      # if select entire chain
+      if len(selector) == 1:
+        self.df[(self.df["chain"] == chain)]
+        output[chain] = output[chain].union(self.df[(self.df["chain"] == chain)]["res_id"].to_list())
+        continue
+
+      # if select single residue
+      found = pattern_res_single.search(selector)
+      if found:
+        resi = int(found.group(1))
+        if self.df[(self.df["chain"] == chain) & (self.df["res_id"] == resi)].empty:
+          raise ValueError(f'Residue "{resi}" in selector "{selector}" does not exist in the specified chain.')
+        else:
+          output[chain].add(resi)
+        continue
+
+      # if select residue range
+      found = pattern_res_range.search(selector)
+      if found:
+        resi_start = int(found.group(1))
+        resi_end = int(found.group(2))
+        for resi in range(resi_start, resi_end+1):
+          if self.df[(self.df["chain"] == chain) & (self.df["res_id"] == resi)].empty:
+            raise ValueError(f'Residue "{resi}" in selector "{selector}" does not exist in the specified chain.')
+          else:
+            output[chain].add(resi)
+        continue
+    
+    # remove empty chains and convert to sorted array
+    empty = []
+    for chain, resis in output.items():
+      if resis:
+        output[chain] = sorted(list(resis))
+      else:
+        empty.append(chain)
+    for chain in empty:
+      del output[chain]
+
+    return output
 
   def renumber(self, model: Optional[int] = None, chain: Optional[int] = None, start: int = 1):
     """Renumbers all selected residues. If selection does not
@@ -753,7 +842,7 @@ class Protein:
       Solvent-accessible surface area in Å²
 
     """
-    from Bio.PDB import SASA # NOTE: SASA isn't imported the same depending on biopython version so import it here to prevent errors
+    from Bio.PDB import SASA  # NOTE: SASA isn't imported the same depending on biopython version so import it here to prevent errors
     assert model in self.models(), f"Model {model} is not currently present."
     structure_model = self.structure[model]
     sasa_calculator = SASA.ShrakeRupley()

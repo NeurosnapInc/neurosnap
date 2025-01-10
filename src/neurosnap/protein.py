@@ -125,7 +125,7 @@ class Protein:
     Atoms that are not part of a chain will automatically be
     added to a new chain that does not overlap with any
     existing chains.
-I
+
     Parameters:
       pdb: Can be either a file handle, PDB or mmCIF filepath, PDB ID, or UniProt ID
       format: File format of the input ("pdb", "mmcif", or "auto" to infer format from extension)

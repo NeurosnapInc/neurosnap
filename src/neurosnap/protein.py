@@ -353,7 +353,7 @@ class Protein:
 
     """
     if model is None:
-      model = self.models().pop(0)
+      model = self.models()[0]
     assert model in self.structure, f'Protein does not contain model "{model}"'
     assert chain in self.structure[model], f'Model {model} does not contain chain "{chain}"'
     

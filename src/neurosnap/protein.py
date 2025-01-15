@@ -1528,11 +1528,10 @@ def run_blast(
   # Handle Protein object input
   if isinstance(sequence, Protein):
     if len(sequence.chains()) > 1:
-      raise AssertionError("The protein has multiple chains. Use '.get_aas(model, chain)' to obtain the sequence for a specific chain.")
+      raise AssertionError("The protein has multiple chains. Use '.get_aas(chain)' to obtain the sequence for a specific chain.")
 
-    model = sequence.models()[0]
     chain = sequence.chains()[0]
-    sequence = sequence.get_aas(model, chain)
+    sequence = sequence.get_aas(chain)
 
   # Step 1: Submit the BLAST job
   url = "https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/run"

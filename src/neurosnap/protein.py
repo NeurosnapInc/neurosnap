@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, MMCIFParser, PDBParser, PPBuilder
+from Bio.PDB import PDBIO, MMCIFParser, PDBParser
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -340,23 +340,30 @@ class Protein:
             df["mass"].append(atom.mass)
     self.df = pd.DataFrame(df)
 
-  def get_aas(self, model: int, chain: str) -> str:
+  def get_aas(self, chain: str, model: Optional[int] = None) -> str:
     """Returns the amino acid sequence of a target chain.
     Ligands, small molecules, and nucleotides are ignored.
 
     Parameters:
-      model: The ID of the model containing the target chain
       chain: The ID of the chain you want to fetch the AA sequence of
+      model: The ID of the model containing the target chain, if set to None will default to first model
 
     Returns:
       The amino acid sequence of the found chain
 
     """
+    if model is None:
+      model = self.models().pop(0)
     assert model in self.structure, f'Protein does not contain model "{model}"'
     assert chain in self.structure[model], f'Model {model} does not contain chain "{chain}"'
+    
+    seq = ""
+    for res in self.structure[model][chain]:
+      resn = res.get_resname()
+      if resn in STANDARD_AAs_ABR:
+        seq += getAA(resn)[0]
 
-    ppb = PPBuilder()
-    return str(ppb.build_peptides(self.structure[model][chain])[0].get_sequence())
+    return seq
 
   def select_residues(self, selectors: str, model: Optional[int] = None) -> Dict[str, List[int]]:
     """Select residues from a protein structure using a string selector.

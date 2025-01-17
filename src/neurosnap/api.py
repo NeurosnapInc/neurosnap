@@ -103,7 +103,7 @@ class NeurosnapAPI:
       print(json.dumps(jobs, indent=2))
     return jobs
 
-  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str]) -> Dict:
+  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str], note : Optional[str] = None) -> Dict:
     """Submit a Neurosnap job.
 
     Parameters:
@@ -125,7 +125,10 @@ class NeurosnapAPI:
     files_dict = {k: open(v, "rb") for k, v in files.items()}
 
     # Make the POST request
-    response = requests.post(f"{self.BASE_URL}/job/submit/{service_name}", headers=self.headers, files=files_dict, data=filtered_data)
+    url = f"{self.BASE_URL}/job/submit/{service_name}"
+    if note is not None:
+      url += f"?note={note}"
+    response = requests.post(url, headers=self.headers, files=files_dict, data=filtered_data)
 
     assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
 

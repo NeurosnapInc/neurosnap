@@ -1176,7 +1176,39 @@ def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:
   return lDDT.get_LDDT(ref_dmap, mod_dmap)
 
 
-def fetch_uniprot(uniprot_id, head=False):
+def fetch_uniprot(uniprot_id: str, head: bool = False) -> Union[str, bool]:
+  """
+  Fetches a UniProt or UniParc FASTA entry by its identifier.
+
+  This function retrieves a protein sequence in FASTA format using the UniProt REST API. 
+  If the given UniProt ID is not found in UniProtKB, the function will attempt to fetch 
+  it from UniParc. The function can either fetch the header information (if `head` is True) 
+  or the full sequence.
+
+  Args:
+      uniprot_id (str): The UniProt or UniParc accession ID for the protein sequence.
+      head (bool, optional): If True, performs a HEAD request to check if the entry exists 
+          without downloading the sequence. Defaults to False.
+
+  Returns:
+      Union[str, bool]: 
+          - If `head` is True: Returns `True` if the ID exists.
+          - If `head` is False: Returns the protein sequence as a string if successfully fetched.
+
+  Raises:
+      Exception: If the UniProt or UniParc ID is not found in either database.
+      ValueError: If the retrieved FASTA contains too many or no sequences.
+
+  Example:
+      ```python
+      try:
+          sequence = fetch_uniprot("P12345")
+          print(sequence)
+      except Exception as e:
+          print(f"Error: {e}")
+      ```
+
+  """
   method = requests.head if head else requests.get
   logger.debug(f"Fetching uniprot entry with ID {uniprot_id}")
   r = method(f"https://rest.uniprot.org/uniprotkb/{uniprot_id}.fasta")
@@ -1184,6 +1216,9 @@ def fetch_uniprot(uniprot_id, head=False):
     r = method(f"https://rest.uniprot.org/uniparc/{uniprot_id}.fasta")
     if r.status_code != 200:
       raise Exception(f'Could not find UniProt accession "{uniprot_id}" in either UniProtKB or UniParc. Please ensure that IDs are correct and refer to actual proteins.')
+
+  if head:
+    return True
 
   _, seqs = read_msa(r.text)
   if len(seqs) > 1:

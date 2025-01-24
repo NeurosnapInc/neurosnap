@@ -31,90 +31,20 @@ from scipy.special import expit as sigmoid
 
 import neurosnap.algos.lDDT as lDDT
 from neurosnap.api import USER_AGENT
+from neurosnap.constants import (
+  AA_ABR_TO_CODE,
+  AA_ABR_TO_NAME,
+  AA_CODE_TO_ABR,
+  AA_CODE_TO_NAME,
+  AA_NAME_TO_ABR,
+  AA_NAME_TO_CODE,
+  BACKBONE_ATOMS,
+  HYDROPHOBIC_RESIDUES,
+  STANDARD_NUCLEOTIDES,
+  STANDARD_AAs_ABR,
+)
 from neurosnap.log import logger
-
-### CONSTANTS ###
-# Names of atoms that are part of a protein's backbone structure
-BACKBONE_ATOMS = {"N", "CA", "C"}
-# Codes for both RNA and DNA
-STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG", "DU"}
-## Standard amino acids excluding the unknown character ("X")
-## Currently excludes
-# O | pyl | pyrrolysine
-# U | sec | selenocysteine
-# B | asx | asparagine/aspartic acid
-# Z | glx | glutamine/glutamic acid
-# J | xle | leucine/isoleucine
-# X | UNK | unknown codon
-# * | TRM | termination codon
-STANDARD_AAs = "ACDEFGHIKLMNPQRSTVWY"
-STANDARD_AAs_ABR = {
-  "ALA",
-  "ARG",
-  "ASN",
-  "ASP",
-  "CYS",
-  "GLN",
-  "GLU",
-  "GLY",
-  "HIS",
-  "ILE",
-  "LEU",
-  "LYS",
-  "MET",
-  "PHE",
-  "PRO",
-  "SER",
-  "THR",
-  "TRP",
-  "TYR",
-  "VAL",
-}
-# List of hydrophobic residues
-HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
-
-## Full amino acids table
-AAs_FULL_TABLE = [
-  ["A", "ALA", "ALANINE"],
-  ["R", "ARG", "ARGININE"],
-  ["N", "ASN", "ASPARAGINE"],
-  ["D", "ASP", "ASPARTIC ACID"],
-  ["C", "CYS", "CYSTEINE"],
-  ["Q", "GLN", "GLUTAMINE"],
-  ["E", "GLU", "GLUTAMIC ACID"],
-  ["G", "GLY", "GLYCINE"],
-  ["H", "HIS", "HISTIDINE"],
-  ["I", "ILE", "ISOLEUCINE"],
-  ["L", "LEU", "LEUCINE"],
-  ["K", "LYS", "LYSINE"],
-  ["M", "MET", "METHIONINE"],
-  ["F", "PHE", "PHENYLALANINE"],
-  ["P", "PRO", "PROLINE"],
-  ["S", "SER", "SERINE"],
-  ["T", "THR", "THREONINE"],
-  ["W", "TRP", "TRYPTOPHAN"],
-  ["Y", "TYR", "TYROSINE"],
-  ["V", "VAL", "VALINE"],
-  ["O", "PYL", "PYRROLYSINE"],
-  ["U", "SEC", "SELENOCYSTEINE"],
-  ["B", "ASX", "ASPARAGINE/ASPARTIC ACID"],
-  ["Z", "GLX", "GLUTAMINE/GLUTAMIC ACID"],
-  ["J", "XLE", "LEUCINE/ISOLEUCINE"],
-  ["X", "UNK", "UNKNOWN CODON"],
-]
-AA_CODE_TO_ABR = {}
-AA_CODE_TO_NAME = {}
-AA_ABR_TO_CODE = {}
-AA_ABR_TO_NAME = {}
-AA_NAME_TO_CODE = {}
-AA_NAME_TO_ABR = {}
-for code, abr, name in AAs_FULL_TABLE:
-  AA_CODE_TO_ABR[code] = abr
-  AA_CODE_TO_NAME[code] = name
-  AA_ABR_TO_CODE[abr] = code
-  AA_ABR_TO_NAME[abr] = name
-  AA_NAME_TO_ABR[name] = abr
-  AA_NAME_TO_CODE[name] = code
+from neurosnap.msa import read_msa
 
 
 ### CLASSES ###
@@ -1244,6 +1174,26 @@ def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:
   ref_L, ref_dmap, ref_rnames = lDDT.pdb2dmap(ref_pdb)
   mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
   return lDDT.get_LDDT(ref_dmap, mod_dmap)
+
+
+def fetch_uniprot(uniprot_id, head=False):
+  method = requests.head if head else requests.get
+  logger.debug(f"Fetching uniprot entry with ID {uniprot_id}")
+  r = method(f"https://rest.uniprot.org/uniprotkb/{uniprot_id}.fasta")
+  if r.status_code != 200:
+    r = method(f"https://rest.uniprot.org/uniparc/{uniprot_id}.fasta")
+    if r.status_code != 200:
+      raise Exception(f'Could not find UniProt accession "{uniprot_id}" in either UniProtKB or UniParc. Please ensure that IDs are correct and refer to actual proteins.')
+
+  _, seqs = read_msa(r.text)
+  if len(seqs) > 1:
+    print(r.text)
+    raise ValueError("Too many sequences returned")
+  elif len(seqs) < 1:
+    print(r.text)
+    raise ValueError("No sequence returned")
+
+  return seqs[0]
 
 
 def foldseek_search(

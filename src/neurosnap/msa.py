@@ -18,7 +18,7 @@ from Bio import SearchIO
 
 from neurosnap.api import USER_AGENT
 from neurosnap.log import logger
-from neurosnap.protein import STANDARD_AAs
+from neurosnap.constants import STANDARD_AAs
 
 ### CONSTANTS ###
 MMSEQS2_CITATION = """The MMseqs2 webserver used to generate this MSA is offered as a free service. Please support the authors in maintaining this free resource by citing them appropriately as follows:

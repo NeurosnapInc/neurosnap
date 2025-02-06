@@ -1211,11 +1211,10 @@ def fetch_accessions(accessions):
       4. Identify missing accessions and query UniProtKB.
       5. Validate that all input accessions were retrieved successfully.
   """
-  accessions = list(set(accessions))
+  accessions = list(set(str(x).strip() for x in accessions))
 
   # chunk into fragments to run separately
   batch_size = 150 # NOTE: This worked best during testing
-  accessions = list(accessions)
   batches = [accessions[i:i + batch_size] for i in range(0, len(accessions), batch_size)]
 
   output = {}

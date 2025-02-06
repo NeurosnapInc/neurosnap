@@ -24,6 +24,7 @@ dependencies = [
   "pandas",
   "biopython",
   "rdkit",
+  "tqdm",
   "scipy",
   "matplotlib",
   "tabulate",

@@ -28,6 +28,7 @@ from matplotlib import collections as mcoll
 from rdkit import Chem
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from scipy.special import expit as sigmoid
+from tqdm import tqdm
 
 import neurosnap.algos.lDDT as lDDT
 from neurosnap.api import USER_AGENT
@@ -1174,6 +1175,85 @@ def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:
   ref_L, ref_dmap, ref_rnames = lDDT.pdb2dmap(ref_pdb)
   mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
   return lDDT.get_LDDT(ref_dmap, mod_dmap)
+
+
+def fetch_accessions(accessions):
+  """
+  Fetch protein sequences corresponding to a list of UniProt accession numbers.
+
+  This function retrieves sequences from the UniProt API, checking first the UniParc database and 
+  then UniProtKB if sequences are missing. Accessions are processed in batches to handle large lists efficiently.
+
+  Args:
+      accessions (list of str): A list of UniProt accession numbers. Duplicate accessions will be automatically removed.
+
+  Returns:
+      dict: A dictionary where keys are accession numbers and values are the corresponding protein sequences.
+
+  Raises:
+      ValueError: If one or more accessions could not be found in UniParc or UniProtKB.
+      requests.exceptions.HTTPError: If the API request fails and raises an HTTP error.
+
+  Notes:
+      - Batching is performed with a default batch size of 150, which was determined to be optimal during testing.
+      - The function first queries the UniParc API and then queries the UniProtKB API for any missing accessions.
+
+  Example:
+      >>> accessions = ["P12345", "Q67890", "A1B2C3"]
+      >>> sequences = fetch_accessions(accessions)
+      >>> print(sequences["P12345"])
+      "MEEPQSDPSV...GDE"
+
+  Steps:
+      1. Deduplicate the input list of accessions.
+      2. Split the accessions into batches to query UniParc.
+      3. Query the UniParc API for each batch and store results.
+      4. Identify missing accessions and query UniProtKB.
+      5. Validate that all input accessions were retrieved successfully.
+  """
+  accessions = list(set(accessions))
+
+  # chunk into fragments to run separately
+  batch_size = 150 # NOTE: This worked best during testing
+  accessions = list(accessions)
+  batches = [accessions[i:i + batch_size] for i in range(0, len(accessions), batch_size)]
+
+  output = {}
+  for batch in tqdm(batches, desc="Fetching sequences from uniprot.org", total=len(batches)):
+    query = " OR ".join([f"isoform:{x}" if "-" in x else f"accession:{x}" for x in batch])
+    r = requests.get(f"https://rest.uniprot.org/uniparc/search?fields=accession,sequence&format=tsv&query=({query})&size=500") # max size is 500
+    if r.status_code == 200:
+      df = pd.read_csv(io.StringIO(r.text), sep="\t")
+      for _, row in df.iterrows():
+        for acc in row.UniProtKB.split("; "):
+          if acc in batch and acc not in output:
+            output[acc] = df.Sequence[0]
+            break
+    else:
+      logger.error(f"[{r.status_code}] {r.text}")
+      r.raise_for_status()
+
+  # get missing accessions and try looking for them in uniprotkb
+  accessions_missing = [acc for acc in accessions if acc not in output]
+  batches = [accessions_missing[i:i + batch_size] for i in range(0, len(accessions_missing), batch_size)]
+  for batch in tqdm(batches, desc="Fetching sequences from uniprot.org", total=len(batches)):
+    query = " OR ".join([f"accession:{x}" for x in batch])
+    r = requests.get(f"https://rest.uniprot.org/uniprotkb/search?fields=accession,sequence&format=tsv&query=({query})&size=500") # max size is 500
+    if r.status_code == 200:
+      df = pd.read_csv(io.StringIO(r.text), sep="\t")
+      for _, row in df.iterrows():
+        if row.Entry in batch and row.Entry not in output:
+          output[row.Entry] = df.Sequence[0]
+    else:
+      logger.error(f"[{r.status_code}] {r.text}")
+      r.raise_for_status()
+
+  # ensure all accessions are present
+  for acc in accessions:
+    if acc not in output:
+      raise ValueError(f"The accession {acc} was not found in uniparc or uniprotkb (found {len(output)}/{len(accessions)}).")
+  
+  return output
 
 
 def fetch_uniprot(uniprot_id: str, head: bool = False) -> Union[str, bool]:

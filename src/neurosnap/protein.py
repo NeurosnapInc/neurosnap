@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Tuple, Union, Iterable
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import matplotlib
 import matplotlib.animation as animation

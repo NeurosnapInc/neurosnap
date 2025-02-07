@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Iterable
 
 import matplotlib
 import matplotlib.animation as animation
@@ -1177,21 +1177,21 @@ def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:
   return lDDT.get_LDDT(ref_dmap, mod_dmap)
 
 
-def fetch_accessions(accessions):
+def fetch_accessions(accessions: Iterable[str], batch_size: int = 150) -> Dict[str, Union[str, None]]:
   """
   Fetch protein sequences corresponding to a list of UniProt accession numbers.
 
-  This function retrieves sequences from the UniProt API, checking first the UniParc database and 
+  This function retrieves sequences from the UniProt API, checking first the UniParc database and
   then UniProtKB if sequences are missing. Accessions are processed in batches to handle large lists efficiently.
 
   Args:
-      accessions (list of str): A list of UniProt accession numbers. Duplicate accessions will be automatically removed.
+      accessions: A list of UniProt accession numbers. Duplicate accessions will be automatically removed.
+      batch_size: Size of each batch of sequences to fetch from uniprot API per request.
 
   Returns:
-      dict: A dictionary where keys are accession numbers and values are the corresponding protein sequences.
+      dict: A dictionary where keys are accession numbers and values are the corresponding protein sequences. Missing sequences will have the value None.
 
   Raises:
-      ValueError: If one or more accessions could not be found in UniParc or UniProtKB.
       requests.exceptions.HTTPError: If the API request fails and raises an HTTP error.
 
   Notes:
@@ -1214,13 +1214,12 @@ def fetch_accessions(accessions):
   accessions = list(set(str(x).strip() for x in accessions))
 
   # chunk into fragments to run separately
-  batch_size = 150 # NOTE: This worked best during testing
-  batches = [accessions[i:i + batch_size] for i in range(0, len(accessions), batch_size)]
+  batches = [accessions[i : i + batch_size] for i in range(0, len(accessions), batch_size)]
 
   output = {}
   for batch in tqdm(batches, desc="Fetching sequences from uniprot.org", total=len(batches)):
     query = " OR ".join([f"isoform:{x}" if "-" in x else f"accession:{x}" for x in batch])
-    r = requests.get(f"https://rest.uniprot.org/uniparc/search?fields=accession,sequence&format=tsv&query=({query})&size=500") # max size is 500
+    r = requests.get(f"https://rest.uniprot.org/uniparc/search?fields=accession,sequence&format=tsv&query=({query})&size=500")  # max size is 500
     if r.status_code == 200:
       df = pd.read_csv(io.StringIO(r.text), sep="\t")
       for _, row in df.iterrows():
@@ -1234,10 +1233,10 @@ def fetch_accessions(accessions):
 
   # get missing accessions and try looking for them in uniprotkb
   accessions_missing = [acc for acc in accessions if acc not in output]
-  batches = [accessions_missing[i:i + batch_size] for i in range(0, len(accessions_missing), batch_size)]
+  batches = [accessions_missing[i : i + batch_size] for i in range(0, len(accessions_missing), batch_size)]
   for batch in tqdm(batches, desc="Fetching sequences from uniprot.org", total=len(batches)):
     query = " OR ".join([f"accession:{x}" for x in batch])
-    r = requests.get(f"https://rest.uniprot.org/uniprotkb/search?fields=accession,sequence&format=tsv&query=({query})&size=500") # max size is 500
+    r = requests.get(f"https://rest.uniprot.org/uniprotkb/search?fields=accession,sequence&format=tsv&query=({query})&size=500")  # max size is 500
     if r.status_code == 200:
       df = pd.read_csv(io.StringIO(r.text), sep="\t")
       for _, row in df.iterrows():
@@ -1247,11 +1246,12 @@ def fetch_accessions(accessions):
       logger.error(f"[{r.status_code}] {r.text}")
       r.raise_for_status()
 
-  # ensure all accessions are present
+  # check if all accessions are present
   for acc in accessions:
     if acc not in output:
-      raise ValueError(f"The accession {acc} was not found in uniparc or uniprotkb (found {len(output)}/{len(accessions)}).")
-  
+      output[acc] = None
+      logger.warning(f"Could not find a sequence for accession: {acc}")
+
   return output
 
 

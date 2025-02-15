@@ -52,7 +52,6 @@ def ClusterProt(proteins: List[Union["Protein", str]], model: int = 0, chain: Op
   """
   # ensure input data is valid
   logger.debug(f"Loading {len(proteins)} for clustering")
-  assert len(proteins) > 3, f"Input proteins should have a length of at least 3, found length of {len(proteins)}"
   for i, protein in enumerate(proteins):
     if isinstance(protein, Protein):
       pass

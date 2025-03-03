@@ -623,32 +623,43 @@ class Protein:
 
     return missing_residues
 
-  def align(self, other_protein: "Protein", model1: int = 0, model2: int = 0):
+  def align(self, other_protein: "Protein", model1: int = 0, model2: int = 0, chain1: List[str] = [], chain2: str = []):
     """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed
     and aligned. Only compares backbone atoms (N, CA, C).
 
     Parameters:
-      other_protein: Another Protein object to compare against
+      other_protein: Another Neurosnap Protein object to compare against
       model1: Model ID of reference protein to align to
       model2: Model ID of other protein to transform and align to reference
+      chain1: The chain(s) you want to include in the alignment within the reference protein, set to an empty list to use all chains.
+      chain2: The chain(s) you want to include in the alignment within the other protein, set to an empty list to use all chains.
 
     """
     assert model1 in self.models(), "Specified model needs to be present in the reference structure."
     assert model2 in other_protein.models(), "Specified model needs to be present in the other structure."
+    # validate chains
+    avail_chains = self.chains(model1)
+    for chain in chain1:
+      assert chain in avail_chains, f"Chain {chain} was not found in the reference protein. Found chains include {', '.join(avail_chains)}."
+    avail_chains = other_protein.chains(model2)
+    for chain in chain2:
+      assert chain in avail_chains, f"Chain {chain} was not found in the other protein. Found chains include {', '.join(avail_chains)}."
+
 
     # Use the Superimposer to align the structures
-    def aux(sample_model):
+    def aux_get_atoms(sample_model, chains):
       atoms = []
       for sample_chain in sample_model:
-        for res in sample_chain:
-          for atom in res:
-            if atom.name in BACKBONE_ATOMS:
-              atoms.append(atom)
+        if not chains or sample_chain.id in chains:
+          for res in sample_chain:
+            for atom in res:
+              if atom.name in BACKBONE_ATOMS:
+                atoms.append(atom)
       return atoms
 
     sup = Superimposer()
-    sup.set_atoms(aux(self.structure[model1]), aux(other_protein.structure[model2]))
+    sup.set_atoms(aux_get_atoms(self.structure[model1], chain1), aux_get_atoms(other_protein.structure[model2], chain2))
     sup.apply(other_protein.structure[model2])  # Apply the transformation to the other protein
     # update the pandas dataframe
     other_protein.generate_df()

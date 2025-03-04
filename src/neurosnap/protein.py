@@ -568,16 +568,15 @@ class Protein:
     if model is None:
       model = self.models().pop(0)
 
-    for m in self.self.structure[model]:
-      for c in m:
-        if chain is None or c.id == chain:
-          pos_residues = [res for res in c if res.get_resname() in positive_residues]
-          neg_residues = [res for res in c if res.get_resname() in negative_residues]
-          for pos_res in pos_residues:
-            for neg_res in neg_residues:
-              dist = pos_res["CA"] - neg_res["CA"]  # Use alpha-carbon distance as a proxy
-              if dist < cutoff:
-                salt_bridges.append((pos_res, neg_res))
+    for c in self.structure[model]:
+      if chain is None or c.id == chain:
+        pos_residues = [res for res in c if res.get_resname() in positive_residues]
+        neg_residues = [res for res in c if res.get_resname() in negative_residues]
+        for pos_res in pos_residues:
+          for neg_res in neg_residues:
+            dist = pos_res["CA"] - neg_res["CA"]  # Use alpha-carbon distance as a proxy
+            if dist < cutoff:
+              salt_bridges.append((pos_res, neg_res))
     return salt_bridges
 
   def find_hydrophobic_residues(self, model: Optional[int] = None, chain: Optional[str] = None) -> List[Tuple]:

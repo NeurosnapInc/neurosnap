@@ -579,26 +579,27 @@ class Protein:
               salt_bridges.append((pos_res, neg_res))
     return salt_bridges
 
-  def find_hydrophobic_residues(self, model: Optional[int] = None, chain: Optional[str] = None) -> List[Tuple]:
+  def find_hydrophobic_residues(self, chain: Optional[str] = None, model: Optional[int] = None) -> List[Tuple]:
     """Identify hydrophobic residues in the structure.
 
     Parameters:
-      model: Model ID to extract from. If ``None``, all models are checked.
       chain: Chain ID to extract from. If ``None``, all chains are checked.
+      model: Model ID to extract from. If ``None``, the first available model is searched.
 
     Returns:
-      List of tuples ``(model_id, chain_id, residue)`` for hydrophobic residues
+      List of tuples ``(chain_id, residue)`` for hydrophobic residues
 
     """
     hydrophobic_residues = []
 
-    for m in self.structure:
-      if model is None or m.id == model:
-        for c in m:
-          if chain is None or c.id == chain:
-            for res in c:
-              if res.get_resname() in HYDROPHOBIC_RESIDUES:
-                hydrophobic_residues.append((m.id, c.id, res))
+    if model is None:
+      model = self.models().pop(0)
+
+    for c in self.structure[model]:
+      if chain is None or c.id == chain:
+        for res in c:
+          if res.get_resname() in HYDROPHOBIC_RESIDUES:
+            hydrophobic_residues.append((c.id, res))
 
     return hydrophobic_residues
 

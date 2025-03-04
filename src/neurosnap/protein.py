@@ -546,15 +546,15 @@ class Protein:
               pass  # Skip if no SG atom found
     return disulfide_pairs
 
-  def find_salt_bridges(self, model: Optional[int] = None, chain: Optional[str] = None, cutoff: float = 4.0) -> List[Tuple]:
+  def find_salt_bridges(self, chain: Optional[str] = None, model: Optional[int] = None, cutoff: float = 4.0) -> List[Tuple]:
     """Identify salt bridges between oppositely charged residues.
     A salt bridge is defined as an interaction between
     a positively charged residue (Lys, Arg) and a negatively
     charged residue (Asp, Glu) within a given cutoff distance.
 
     Parameters:
-      model: Model ID to search. If ``None``, all models are searched.
       chain: Chain ID to search. If ``None``, all chains are searched.
+      model: Model ID to search, If ``None``, the first available model is searched.
       cutoff: Maximum distance for a salt bridge (float)
 
     Returns:
@@ -565,17 +565,19 @@ class Protein:
     negative_residues = {"ASP", "GLU"}
     salt_bridges = []
 
-    for m in self.structure:
-      if model is None or m.id == model:
-        for c in m:
-          if chain is None or c.id == chain:
-            pos_residues = [res for res in c if res.get_resname() in positive_residues]
-            neg_residues = [res for res in c if res.get_resname() in negative_residues]
-            for pos_res in pos_residues:
-              for neg_res in neg_residues:
-                dist = pos_res["CA"] - neg_res["CA"]  # Use alpha-carbon distance as a proxy
-                if dist < cutoff:
-                  salt_bridges.append((pos_res, neg_res))
+    if model is None:
+      model = self.models().pop(0)
+
+    for m in self.self.structure[model]:
+      for c in m:
+        if chain is None or c.id == chain:
+          pos_residues = [res for res in c if res.get_resname() in positive_residues]
+          neg_residues = [res for res in c if res.get_resname() in negative_residues]
+          for pos_res in pos_residues:
+            for neg_res in neg_residues:
+              dist = pos_res["CA"] - neg_res["CA"]  # Use alpha-carbon distance as a proxy
+              if dist < cutoff:
+                salt_bridges.append((pos_res, neg_res))
     return salt_bridges
 
   def find_hydrophobic_residues(self, model: Optional[int] = None, chain: Optional[str] = None) -> List[Tuple]:

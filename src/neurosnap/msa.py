@@ -73,6 +73,7 @@ def read_msa(
   drop_chars: str = "",
   remove_chars: str = "*",
   uppercase: bool = True,
+  name_allow_all_chars: bool  = False,
 ) -> Tuple[List[str], List[str]]:
   """Reads an MSA, a3m, or fasta file and returns an array of names and seqs. Returned headers will consist of all characters up until the first space with the "|" character replaced with an underscore.
 
@@ -83,6 +84,7 @@ def read_msa(
     drop_chars: Drop sequences that contain these characters. For example, ``"-X"``
     remove_chars: Removes these characters from sequences. For example, ``"*-X"``
     uppercase: Converts all amino acid chars to uppercase when True
+    name_allow_all_chars: Uses the entire header string for names instead of the standard regex pattern
 
   Returns:
     A tuple of the form ``(names, seqs)``
@@ -96,6 +98,18 @@ def read_msa(
   allow_chars = allow_chars.replace("-", "\\-")
   drop_chars = drop_chars.replace("-", "\\-")
   remove_chars = remove_chars.replace("-", "\\-")
+
+  # compile regular expressions
+  if name_allow_all_chars:
+    reg_name = re.compile(r"^>(.*)$")
+  else:
+    reg_name = re.compile(r"^>([\w_-\|]*)")
+  
+  if remove_chars:
+    reg_rc = re.compile(f"[{remove_chars}\\s]")
+  if drop_chars:
+    reg_dc = re.compile(f"[{drop_chars}]")
+  reg_ac = re.compile(f"^[{STANDARD_AAs+allow_chars}]*$")
 
   if isinstance(input_fasta, str):
     if os.path.exists(input_fasta):
@@ -115,7 +129,7 @@ def read_msa(
           raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
         if len(seqs) >= size + 1:
           break
-        match = re.search(r"^>([\w_-\|]*)", line)
+        match = reg_name.search(line)
         assert match is not None, f"Invalid MSA/fasta. {line} is not a valid header."
         name = match.group(1)
         name = name.replace("|", "_")
@@ -127,16 +141,16 @@ def read_msa(
           line = line.upper()
         # remove whitespace and remove_chars
         if remove_chars:
-          line = re.sub(f"[{remove_chars}\\s]", "", line)
+          line = reg_rc.sub("", line)
         # drop chars
         if drop_chars:
-          match = re.search(f"[{drop_chars}]", line)
+          match = reg_dc.search(line)
           if match is not None:
             names.pop()
             seqs.pop()
             continue
 
-        match = re.search(f"^[{STANDARD_AAs+allow_chars}]*$", line)
+        match = reg_ac.search(line)
         if match is None:
           raise ValueError(
             f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'"

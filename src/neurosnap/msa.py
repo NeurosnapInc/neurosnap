@@ -419,7 +419,11 @@ def run_mmseqs2(
 
   # define path
   if os.path.isdir(output):
-    shutil.rmtree(output)
+      # prevent deletion of output directory by adding time if exist
+      new_output = output
+      if os.path.exists(new_output):
+          new_output = f"{output}_new_{int(time.time())}"
+      output = new_output
   os.mkdir(output)
 
   temp_dir = tempfile.mkdtemp()

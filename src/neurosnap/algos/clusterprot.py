@@ -22,7 +22,15 @@ except Exception as e:
   raise e
 
 
-def ClusterProt(proteins: List[Union["Protein", str]], model: int = 0, chain: Optional[str] = None, proj_1d_algo: str = "umap") -> Dict[str, Any]:
+def ClusterProt(
+  proteins: List[Union["Protein", str]],
+  model: int = 0,
+  chain: Optional[str] = None,
+  proj_1d_algo: str = "umap",
+  dbscan_eps: float = 0,
+  dbscan_min_samples: int = 0,
+  eps_scale_factor: float = 0.05,
+) -> Dict[str, Any]:
   """Run the ClusterProt algorithm on some input proteins.
 
   Clusters proteins using their structural similarity.
@@ -41,6 +49,9 @@ def ClusterProt(proteins: List[Union["Protein", str]], model: int = 0, chain: Op
     model: Model ID to for ClusterProt to use (must be consistent across all structures)
     chain: Chain ID to for ClusterProt to use (must be consistent across all structures), if not provided calculates for all chains
     proj_1d_algo: Algorithm to use for the 1D projection. Can be either ``"umap"`` or ``"pca"``
+    dbscan_eps: The ``eps`` value to provide to DBSCAN. Leave as 0 to automatically calculate optimal value. Prior to the 2024-04-15 update this values was left as ``0.5``.
+    dbscan_min_samples: The ``min_samples`` value to provide to DBSCAN. Leave as 0 to automatically calculate optimal value. Prior to the 2024-04-15 update this values was left as ``5``.
+    eps_scale_factor: Fraction of the 2D data's diagonal range used to set DBSCAN's eps. Recommended: 0.05-0.10 for larger datasets or finer clusters; 0.15 for smaller datasets or broader clustering.
 
   Returns:
     A dictionary containing the results from the algorithm:
@@ -87,9 +98,22 @@ def ClusterProt(proteins: List[Union["Protein", str]], model: int = 0, chain: Op
     prot_ref.align(prot, model1=model, model2=model)
 
   # 2D projection and cluster it using DBSCAN
-  logger.debug("Creating 2D projection and clustering it using DBSCAN")
+  logger.debug("Creating 2D projection using UMAP")
   proj_2d = UMAP(n_components=2, init="random", n_neighbors=7).fit_transform(proteins_vects)
-  cluster_labels = DBSCAN(eps=0.5, min_samples=5).fit_predict(proj_2d)
+
+  # cluster using DBSCAN and optionally calculate ideal DBSCAN params
+  logger.debug("Creating cluster labels using DBSCAN")
+  if dbscan_eps <= 0:
+    xmin, ymin = np.min(proj_2d, axis=0)
+    xmax, ymax = np.max(proj_2d, axis=0)
+    data_range = np.sqrt((xmax - xmin) ** 2 + (ymax - ymin) ** 2)
+    dbscan_eps = eps_scale_factor * data_range  # n% of diagonal range
+
+  if dbscan_min_samples <= 0:
+    dbscan_min_samples = int(np.log(len(proteins))) + 1
+
+  # calculate DBSCAN labels
+  cluster_labels = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples).fit_predict(proj_2d)
 
   # compute 1D projection for animation
   logger.debug("Computing 1D projection for animation")
@@ -110,7 +134,7 @@ def ClusterProt(proteins: List[Union["Protein", str]], model: int = 0, chain: Op
   }
 
 
-def animate_results(cp_results: Dict, animation_fpath: str="cluster_prot.gif"):
+def animate_results(cp_results: Dict, animation_fpath: str = "cluster_prot.gif"):
   """Animate the ClusterProt results using the aligned proteins and 1D projections.
 
   Parameters:

@@ -630,7 +630,7 @@ class Protein:
 
     return missing_residues
 
-  def align(self, other_protein: "Protein", model1: int = 0, model2: int = 0, chain1: List[str] = [], chain2: str = []):
+  def align(self, other_protein: "Protein", model1: int = 0, model2: int = 0, chain1: List[str] = [], chain2: List[str] = []):
     """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed
     and aligned. Only compares backbone atoms (N, CA, C).

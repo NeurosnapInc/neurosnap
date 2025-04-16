@@ -108,6 +108,7 @@ def ClusterProt(
     xmax, ymax = np.max(proj_2d, axis=0)
     data_range = np.sqrt((xmax - xmin) ** 2 + (ymax - ymin) ** 2)
     dbscan_eps = eps_scale_factor * data_range  # n% of diagonal range
+    dbscan_eps = max(dbscan_eps, 1e-4)  # clip value to ensure it doesn't get too small
 
   if dbscan_min_samples <= 0:
     dbscan_min_samples = int(np.log(len(proteins))) + 1

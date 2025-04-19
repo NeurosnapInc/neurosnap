@@ -186,6 +186,7 @@ def generate(
       for method in ["MMFF94", "UFF", "MMFF94s"]:
         try:
           my_mol, energies = minimize(my_mol, method=method)
+          break
         except:
           pass
     else:

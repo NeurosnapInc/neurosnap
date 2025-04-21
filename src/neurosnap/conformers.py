@@ -194,12 +194,11 @@ def generate(
 
   ### Clustering
   ## Calculate the RMSD matrix between all pairs of conformers
-  dists = []
+  logger.debug("Calculating RMSD matrix between all conformer pairs")
   num_conformers = my_mol.GetNumConformers()
   my_mol_nh = Chem.RemoveHs(my_mol)  # remove hydrogens as it interferes with following steps
-  for i in range(num_conformers):
-    for j in range(i):
-      dists.append(rdMolAlign.GetBestRMS(my_mol_nh, my_mol_nh, i, j))
+  rmslist = AllChem.GetConformerRMSMatrix(my_mol_nh)
+  print(rmslist)
 
   ## Perform clustering using Butina approach
   # Calculate the dynamic threshold based on molecule size (distance threshold in Å for Butina)
@@ -210,7 +209,7 @@ def generate(
 
   # perform clustering
   logger.debug(f"Clustering {num_conformers:,} conformers.")
-  clusters = Butina.ClusterData(dists, num_conformers, threshold, isDistData=True, reordering=True)
+  clusters = Butina.ClusterData(rmslist, num_conformers, threshold, isDistData=True, reordering=True)
 
   # get most favorable representatives for each cluster using calculated energy
   output = {

@@ -197,9 +197,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert model1 is not None, (
-      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
-    )
+    assert (
+      model1 is not None
+    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self) -> List[int]:
@@ -744,7 +744,7 @@ class Protein:
       chains: List of chain IDs to calculate for, if not provided calculates for all chains
 
     Returns:
-      center_of_mass: A 3D numpy array representing the center of mass
+      center_of_mass: A numpy array with shape (3,) representing the center of mass (x, y, z)
 
     """
     total_mass = 0
@@ -766,7 +766,7 @@ class Protein:
 
     return weighted_coords / total_mass
 
-  def distances_from_com(self, model: Optional[int] = 0, chains: Optional[List[str]] = None) -> np.ndarray:
+  def distances_from_com(self, model: Optional[int] = 0, chains: Optional[List[str]] = None, com: Optional[np.ndarray] = None) -> np.ndarray:
     """Calculate the distances of all atoms from the center of mass (COM) of the protein.
 
     This method computes the Euclidean distance between the coordinates of each atom
@@ -776,12 +776,16 @@ class Protein:
     Parameters:
       model: The model ID to calculate for. If not provided, defaults to 0.
       chains: List of chain IDs to calculate for. If not provided, calculates for all chains.
+      com: Center of mass (com) to use, must be a numpy array with shape (3,) representing the center of mass (x, y, z). Set to None to calculate the com automatically
 
     Returns:
       A 1D NumPy array containing the distances (in Ångströms) between each atom and the center of mass.
 
     """
-    com = self.calculate_center_of_mass(model=model, chains=chains)
+    if com is not None:
+      assert len(com) == 3, "Input center of mass must be a numpy array with shape (3,) representing the center of mass (x, y, z)."
+    else:
+      com = self.calculate_center_of_mass(model=model, chains=chains)
     distances = []
 
     for m in self.structure:
@@ -796,7 +800,7 @@ class Protein:
 
     return np.array(distances)  # Convert the list of distances to a NumPy array
 
-  def calculate_rog(self, model: Optional[int] = 0, chains: Optional[List[str]] = None) -> float:
+  def calculate_rog(self, model: Optional[int] = 0, chains: Optional[List[str]] = None, distances_from_com: Optional[np.ndarray] = None) -> float:
     """Calculate the radius of gyration (Rg) of the protein.
 
     The radius of gyration measures the overall size and compactness of the protein structure.
@@ -805,12 +809,16 @@ class Protein:
     Parameters:
       model: The model ID to calculate for. If not provided, defaults to 0.
       chains: List of chain IDs to calculate for. If not provided, calculates for all chains.
+      distances_from_com: A 1D NumPy array containing the distances (in Ångströms) between each atom and the center of mass. Set to None to automatically calculate this.
 
     Returns:
       The radius of gyration (Rg) in Ångströms. Returns 0.0 if no atoms are found.
 
     """
-    distances_sq = self.distances_from_com(model=model, chains=chains) ** 2
+    if distances_from_com is not None:
+      distances_sq = distances_from_com ** 2
+    else:
+      distances_sq = self.distances_from_com(model=model, chains=chains) ** 2
 
     if distances_sq.size == 0:
       logger.warning("No atoms found for the specified model/chains. Returning Rg = 0.0")

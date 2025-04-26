@@ -197,9 +197,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert (
-      model1 is not None
-    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    assert model1 is not None, (
+      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    )
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self) -> List[int]:
@@ -287,7 +287,7 @@ class Protein:
       model = self.models()[0]
     assert model in self.structure, f'Protein does not contain model "{model}"'
     assert chain in self.structure[model], f'Model {model} does not contain chain "{chain}"'
-    
+
     seq = ""
     for res in self.structure[model][chain]:
       resn = res.get_resname()
@@ -325,13 +325,13 @@ class Protein:
       model = self.models().pop(0)
     elif model not in self.structure:
       raise ValueError(f'Protein does not contain model "{model}"')
-    
+
     # get chains and create output object
     chains = self.chains()
     output = {}
     for chain in chains:
       output[chain] = set()
-    
+
     # compile regular expressions
     pattern_res_single = re.compile(r"^[A-Za-z](\d{1,})$")
     pattern_res_range = re.compile(r"^[A-Za-z](\d{1,})-(\d{1,})$")
@@ -343,7 +343,7 @@ class Protein:
     # remove ",," if present
     while ",," in selectors:
       selectors = selectors.replace(",,", ",")
-    
+
     # get selection
     for selector in selectors.split(","):
       # get and validate chain
@@ -374,13 +374,13 @@ class Protein:
         resi_end = int(found.group(2))
         if resi_start > resi_end:
           raise ValueError(f'Invalid residue range selector "{selector}". The starting residue cannot be greater than the ending residue.')
-        for resi in range(resi_start, resi_end+1):
+        for resi in range(resi_start, resi_end + 1):
           if self.df[(self.df["chain"] == chain) & (self.df["res_id"] == resi)].empty:
             raise ValueError(f'Residue "{resi}" in selector "{selector}" does not exist in the specified chain.')
           else:
             output[chain].add(resi)
         continue
-    
+
     # remove empty chains and convert to sorted array
     empty = []
     for chain, resis in output.items():
@@ -653,7 +653,6 @@ class Protein:
     for chain in chain2:
       assert chain in avail_chains, f"Chain {chain} was not found in the other protein. Found chains include {', '.join(avail_chains)}."
 
-
     # Use the Superimposer to align the structures
     def aux_get_atoms(sample_model, chains):
       atoms = []
@@ -797,6 +796,29 @@ class Protein:
 
     return np.array(distances)  # Convert the list of distances to a NumPy array
 
+  def calculate_radius_of_gyration(self, model: Optional[int] = 0, chains: Optional[List[str]] = None) -> float:
+    """Calculate the radius of gyration (Rg) of the protein.
+
+    The radius of gyration measures the overall size and compactness of the protein structure.
+    It is calculated based on the distances of atoms from the center of mass (COM).
+
+    Parameters:
+      model: The model ID to calculate for. If not provided, defaults to 0.
+      chains: List of chain IDs to calculate for. If not provided, calculates for all chains.
+
+    Returns:
+      The radius of gyration (Rg) in Ångströms. Returns 0.0 if no atoms are found.
+
+    """
+    distances_sq = self.distances_from_com(model=model, chains=chains) ** 2
+
+    if distances_sq.size == 0:
+      logger.warning("No atoms found for the specified model/chains. Returning Rg = 0.0")
+      return 0.0
+
+    rg = np.sqrt(np.sum(distances_sq) / distances_sq.size)
+    return rg
+
   def calculate_surface_area(self, model: int = 0, level: str = "R") -> float:
     """Calculate the solvent-accessible surface area (SASA) of the protein.
     Utilizes Biopython's SASA module.
@@ -810,6 +832,7 @@ class Protein:
 
     """
     from Bio.PDB import SASA  # NOTE: SASA isn't imported the same depending on biopython version so import it here to prevent errors
+
     assert model in self.models(), f"Model {model} is not currently present."
     structure_model = self.structure[model]
     sasa_calculator = SASA.ShrakeRupley()
@@ -1178,7 +1201,7 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
     writer.close()
     molecule_count += 1
 
-  logger.info(f"Extracted {molecule_count-1} non-biopolymer molecules to {output_dir}.")
+  logger.info(f"Extracted {molecule_count - 1} non-biopolymer molecules to {output_dir}.")
 
 
 def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:
@@ -1279,18 +1302,18 @@ def fetch_uniprot(uniprot_id: str, head: bool = False) -> Union[str, bool]:
   """
   Fetches a UniProt or UniParc FASTA entry by its identifier.
 
-  This function retrieves a protein sequence in FASTA format using the UniProt REST API. 
-  If the given UniProt ID is not found in UniProtKB, the function will attempt to fetch 
-  it from UniParc. The function can either fetch the header information (if `head` is True) 
+  This function retrieves a protein sequence in FASTA format using the UniProt REST API.
+  If the given UniProt ID is not found in UniProtKB, the function will attempt to fetch
+  it from UniParc. The function can either fetch the header information (if `head` is True)
   or the full sequence.
 
   Args:
       uniprot_id (str): The UniProt or UniParc accession ID for the protein sequence.
-      head (bool, optional): If True, performs a HEAD request to check if the entry exists 
+      head (bool, optional): If True, performs a HEAD request to check if the entry exists
           without downloading the sequence. Defaults to False.
 
   Returns:
-      Union[str, bool]: 
+      Union[str, bool]:
           - If `head` is True: Returns `True` if the ID exists.
           - If `head` is False: Returns the protein sequence as a string if successfully fetched.
 
@@ -1314,7 +1337,9 @@ def fetch_uniprot(uniprot_id: str, head: bool = False) -> Union[str, bool]:
   if r.status_code != 200:
     r = method(f"https://rest.uniprot.org/uniparc/{uniprot_id}.fasta")
     if r.status_code != 200:
-      raise Exception(f'Could not find UniProt accession "{uniprot_id}" in either UniProtKB or UniParc. Please ensure that IDs are correct and refer to actual proteins.')
+      raise Exception(
+        f'Could not find UniProt accession "{uniprot_id}" in either UniProtKB or UniParc. Please ensure that IDs are correct and refer to actual proteins.'
+      )
 
   if head:
     return True
@@ -1862,12 +1887,12 @@ def animate_pseudo_3D(
   """
   # check titles
   if isinstance(titles, str):
-    titles = [f"{titles} ({i+1}/{len(frames)})" for i in range(len(frames))]
+    titles = [f"{titles} ({i + 1}/{len(frames)})" for i in range(len(frames))]
   elif len(titles) == len(frames):
     ValueError(f"The number of titles ({len(titles)}) does not match the number of frames ({len(frames)}).")
 
   if isinstance(titles, str):
-    titles = [f"{titles} ({i+1}/{len(frames)})" for i in range(len(frames))]
+    titles = [f"{titles} ({i + 1}/{len(frames)})" for i in range(len(frames))]
   elif len(titles) == len(frames):
     ValueError(f"The number of titles ({len(titles)}) does not match the number of frames ({len(frames)}).")
 

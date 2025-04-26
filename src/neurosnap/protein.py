@@ -796,7 +796,7 @@ class Protein:
 
     return np.array(distances)  # Convert the list of distances to a NumPy array
 
-  def calculate_radius_of_gyration(self, model: Optional[int] = 0, chains: Optional[List[str]] = None) -> float:
+  def calculate_rog(self, model: Optional[int] = 0, chains: Optional[List[str]] = None) -> float:
     """Calculate the radius of gyration (Rg) of the protein.
 
     The radius of gyration measures the overall size and compactness of the protein structure.

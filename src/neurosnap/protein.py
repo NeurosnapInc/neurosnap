@@ -817,7 +817,7 @@ class Protein:
       return 0.0
 
     rg = np.sqrt(np.sum(distances_sq) / distances_sq.size)
-    return rg
+    return float(rg)
 
   def calculate_surface_area(self, model: int = 0, level: str = "R") -> float:
     """Calculate the solvent-accessible surface area (SASA) of the protein.

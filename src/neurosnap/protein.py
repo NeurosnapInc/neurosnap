@@ -766,7 +766,7 @@ class Protein:
 
     return weighted_coords / total_mass
 
-  def distances_from_com(self, model: Optional[int] = None, chains: Optional[List[str]] = None) -> np.ndarray:
+  def distances_from_com(self, model: Optional[int] = 0, chains: Optional[List[str]] = None) -> np.ndarray:
     """Calculate the distances of all atoms from the center of mass (COM) of the protein.
 
     This method computes the Euclidean distance between the coordinates of each atom
@@ -774,7 +774,7 @@ class Protein:
     specified model and chain, or for all models and chains if none are provided.
 
     Parameters:
-      model: The model ID to calculate for. If not provided, calculates for all models.
+      model: The model ID to calculate for. If not provided, defaults to 0.
       chains: List of chain IDs to calculate for. If not provided, calculates for all chains.
 
     Returns:
@@ -785,7 +785,7 @@ class Protein:
     distances = []
 
     for m in self.structure:
-      if model is None or m.id == model:
+      if m.id == model:
         for c in m:
           # Check if the current chain should be included
           if chains is None or c.id in chains:

@@ -736,13 +736,13 @@ class Protein:
     dist_matrix = np.sqrt(np.sum((ca_atoms[:, np.newaxis] - ca_atoms[np.newaxis, :]) ** 2, axis=-1))
     return dist_matrix
 
-  def calculate_center_of_mass(self, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
+  def calculate_center_of_mass(self, model: Optional[int] = None, chain: Optional[List[str]] = None) -> np.ndarray:
     """Calculate the center of mass of the protein.
     Considers only atoms with defined masses.
 
     Parameters:
       model: Model ID to calculate for, if not provided calculates for all models
-      chain: Chain ID to calculate for, if not provided calculates for all chains
+      chain: List of chain IDs to calculate for, if not provided calculates for all chains
 
     Returns:
       center_of_mass: A 3D numpy array representing the center of mass
@@ -754,7 +754,8 @@ class Protein:
     for m in self.structure:
       if model is None or m.id == model:
         for c in m:
-          if chain is None or c.id == chain:
+          # Check if the current chain should be included
+          if chain is None or c.id in chain:
             for res in c:
               for atom in res:
                 if atom.mass is not None:

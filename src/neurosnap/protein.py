@@ -1276,7 +1276,7 @@ def fetch_accessions(accessions: Iterable[str], batch_size: int = 150) -> Dict[s
       for _, row in df.iterrows():
         for acc in row.UniProtKB.split("; "):
           if acc in batch and acc not in output:
-            output[acc] = df.Sequence[0]
+            output[acc] = row.Sequence
             break
     else:
       logger.error(f"[{r.status_code}] {r.text}")
@@ -1292,7 +1292,7 @@ def fetch_accessions(accessions: Iterable[str], batch_size: int = 150) -> Dict[s
       df = pd.read_csv(io.StringIO(r.text), sep="\t")
       for _, row in df.iterrows():
         if row.Entry in batch and row.Entry not in output:
-          output[row.Entry] = df.Sequence[0]
+          output[row.Entry] = row.Sequence
     else:
       logger.error(f"[{r.status_code}] {r.text}")
       r.raise_for_status()

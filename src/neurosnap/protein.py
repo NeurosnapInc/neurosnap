@@ -916,15 +916,14 @@ class Protein:
     """
     # Default to the first model if model is None
     if model is None:
-      model_id = self.models()[0]
-    model = self.structure[model_id]
+      model = self.models()[0]
 
-    assert chain1 in self.chains(model_id), f"Chain {chain1} was not found."
-    assert chain2 in self.chains(model_id), f"Chain {chain2} was not found."
+    assert chain1 in self.chains(model), f"Chain {chain1} was not found."
+    assert chain2 in self.chains(model), f"Chain {chain2} was not found."
 
     # Correctly get atoms from specific chains
-    chain1_atoms = [atom for atom in self.structure.get_atoms() if atom.get_parent().get_parent().id == chain1]  # chain A
-    chain2_atoms = [atom for atom in self.structure.get_atoms() if atom.get_parent().get_parent().id == chain2]  # chain B
+    chain1_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain1]  # chain A
+    chain2_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain2]  # chain B
 
     return self.calculate_contacts(chain2_atoms, chain1_atoms, threshold)
 

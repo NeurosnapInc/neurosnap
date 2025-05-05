@@ -434,12 +434,12 @@ def run_mmseqs2(
       try:
         r = requests.post(f"{host_url}/{submission_endpoint}", data={"q": query, "mode": mode}, timeout=timeout, headers=headers)
       except requests.exceptions.Timeout:
-        print("Timeout while submitting to MSA server. Retrying...")
+        logger.warning("Timeout while submitting to MSA server. Retrying...")
         continue
       except Exception as e:
         error_count += 1
-        print(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
-        print(f"Error: {e}")
+        logger.warning(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
+        logger.error(f"Error: {e}")
         time.sleep(timeout)
         if error_count > 5:
           raise
@@ -449,7 +449,7 @@ def run_mmseqs2(
     try:
       out = r.json()
     except ValueError:
-      print(f"Server didn't reply with json: {r.text}")
+      logger.error(f"Server didn't reply with json: {r.text}")
       out = {"status": "ERROR"}
     return out
 
@@ -459,12 +459,12 @@ def run_mmseqs2(
       try:
         r = requests.get(f"{host_url}/ticket/{ID}", timeout=timeout, headers=headers)
       except requests.exceptions.Timeout:
-        print("Timeout while fetching status from MSA server. Retrying...")
+        logger.warning("Timeout while fetching status from MSA server. Retrying...")
         continue
       except Exception as e:
         error_count += 1
-        print(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
-        print(f"Error: {e}")
+        logger.warning(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
+        logger.error(f"Error: {e}")
         time.sleep(timeout)
         if error_count > 5:
           raise
@@ -473,7 +473,7 @@ def run_mmseqs2(
     try:
       out = r.json()
     except ValueError:
-      print(f"Server didn't reply with json: {r.text}")
+      logger.error(f"Server didn't reply with json: {r.text}")
       out = {"status": "ERROR"}
     return out
 
@@ -486,7 +486,7 @@ def run_mmseqs2(
 
   out = submit(seqs_unique, mode)
   while out["status"] in ["UNKNOWN", "RATELIMIT"]:
-    print(f"Sleeping for {timeout}s. Reason: {out['status']}")
+    logger.info(f"Sleeping for {timeout}s. Reason: {out['status']}")
     # resubmit
     time.sleep(timeout)
     out = submit(seqs_unique, mode)
@@ -502,12 +502,12 @@ def run_mmseqs2(
   # wait for job to finish
   ID = out["id"]
   while out["status"] in ["UNKNOWN", "RUNNING", "PENDING"]:
-    print(f"Sleeping for {timeout}s. Reason: {out['status']}")
+    logger.info(f"Sleeping for {timeout}s. Reason: {out['status']}")
     time.sleep(timeout)
     out = status(ID)
 
   if out["status"] == "ERROR" or out["status"] != "COMPLETE":
-    print(out)
+    logger.info(out)
     raise Exception(
       "MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later."
     )
@@ -518,12 +518,12 @@ def run_mmseqs2(
     try:
       r = requests.get(f"{host_url}/result/download/{ID}", stream=True, timeout=timeout, headers=headers)
     except requests.exceptions.Timeout:
-      print("Timeout while fetching result from MSA server. Retrying...")
+      logger.error("Timeout while fetching result from MSA server. Retrying...")
       continue
     except Exception as e:
       error_count += 1
-      print(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
-      print(f"Error: {e}")
+      logger.warning(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
+      logger.error(f"Error: {e}")
       time.sleep(timeout)
       if error_count > 5:
         raise
@@ -590,7 +590,6 @@ def run_mmseqs2(
   # templates
   if use_templates:
     templates = {}
-    # print("seq\tpdb\tcid\tevalue")
     for line in open(f"{output}/pdb70.m8", "r"):
       p = line.rstrip().split()
       M, pdb, qid, e_value = p[0], p[1], p[2], p[10]
@@ -598,8 +597,6 @@ def run_mmseqs2(
       if M not in templates:
         templates[M] = []
       templates[M].append(pdb)
-      # if len(templates[M]) <= 20:
-      #  print(f"{int(M)-N}\t{pdb}\t{qid}\t{e_value}")
 
     template_paths = {}
     for k, TMPL in templates.items():

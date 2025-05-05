@@ -52,7 +52,7 @@ from neurosnap.msa import read_msa
 
 ### CLASSES ###
 class Protein:
-  def __init__(self, pdb: Union[str, pathlib._local.PosixPath, io.IOBase], format: str = "auto"):
+  def __init__(self, pdb: Union[str, pathlib.Path, io.IOBase], format: str = "auto"):
     """Class that wraps around a protein structure.
 
     Utilizes the biopython protein structure under the hood.
@@ -67,7 +67,7 @@ class Protein:
     self.title = "Untitled Protein"
     if isinstance(pdb, io.IOBase):
       pass
-    elif isinstance(pdb, (str, pathlib._local.PosixPath)):
+    elif isinstance(pdb, (str, pathlib.Path)):
       pdb = str(pdb)  # converts pathlib paths to string
       if os.path.exists(pdb):
         self.title = pdb.split("/")[-1]

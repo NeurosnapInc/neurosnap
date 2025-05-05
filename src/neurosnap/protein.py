@@ -20,7 +20,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from Bio.PDB import PDBIO, MMCIFParser, PDBParser
+from Bio.PDB import PDBIO, MMCIFParser, NeighborSearch, PDBParser
+from Bio.PDB.Atom import Atom
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -816,7 +817,7 @@ class Protein:
 
     """
     if distances_from_com is not None:
-      distances_sq = distances_from_com ** 2
+      distances_sq = distances_from_com**2
     else:
       distances_sq = self.distances_from_com(model=model, chains=chains) ** 2
 
@@ -875,6 +876,55 @@ class Protein:
                   radius = vdw_radii[element]
                   volume += (4 / 3) * np.pi * (radius**3)
     return volume
+
+  def calculate_contacts(self, binder_atoms: List[Atom], target_atoms: List[Atom], threshold: float = 4.5) -> int:
+    """
+    Counts the number of atomic contacts between two sets of atoms within a distance threshold.
+
+    Parameters:
+        binder_atoms (list): A list of Bio.PDB.Atom objects from the binder chain.
+        target_atoms (list): A list of Bio.PDB.Atom objects from the target chain.
+        threshold (float): Distance cutoff (in Å) to consider a contact (default is 4.5 Å).
+
+    Returns:
+        int: The total number of atomic contacts where atoms from the binder
+            are within the threshold distance of atoms in the target.
+    """
+    ns = NeighborSearch(list(target_atoms))
+    count = 0
+    for atom in binder_atoms:
+      neighbors = ns.search(atom.coord, threshold)
+      count += len(neighbors)
+    return count
+
+  def calculate_contacts_interface(self, chain1: str, chain2: str, model: Optional[int] = None, threshold: float = 4.5) -> int:
+    """
+    Calculates the number of atomic contacts between two chains in a protein structure.
+
+    Parameters:
+        chain1 (str): ID of the first chain (e.g., the target).
+        chain2 (str): ID of the second chain (e.g., the binder).
+        model (Optional[int]): Index of the model to use (if structure contains multiple models).
+                               Defaults to the first model if not specified.
+        threshold (float): Distance threshold in Ångströms to consider atoms as being in contact.
+                           Defaults to 4.5 Å.
+
+    Returns:
+        int: Total number of atomic contacts between the two chains within the given distance threshold.
+    """
+    # Default to the first model if model is None
+    if model is None:
+      model_id = self.models()[0]
+    model = self.structure[model_id]
+
+    assert chain1 in self.chains(model_id), f"Chain {chain1} was not found."
+    assert chain2 in self.chains(model_id), f"Chain {chain2} was not found."
+
+    # Correctly get atoms from specific chains
+    chain1_atoms = [atom for atom in self.structure.get_atoms() if atom.get_parent().get_parent().id == chain1]  # chain A
+    chain2_atoms = [atom for atom in self.structure.get_atoms() if atom.get_parent().get_parent().id == chain2]  # chain B
+
+    return self.calculate_contacts(chain2_atoms, chain1_atoms, threshold)
 
   def calculate_hydrogen_bonds(
     self,

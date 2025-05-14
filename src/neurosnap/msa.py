@@ -10,6 +10,7 @@ import subprocess
 import tarfile
 import tempfile
 import time
+from datetime import datetime
 from collections import Counter
 from typing import Union, List, Dict, Tuple, Optional
 
@@ -21,48 +22,6 @@ from neurosnap.log import logger
 from neurosnap.constants import STANDARD_AAs
 
 ### CONSTANTS ###
-MMSEQS2_CITATION = """The MMseqs2 webserver used to generate this MSA is offered as a free service. Please support the authors in maintaining this free resource by citing them appropriately as follows:
-@article{Mirdita2019,
-  title        = {{MMseqs2 desktop and local web server app for fast, interactive sequence searches}},
-  author       = {Mirdita, Milot and Steinegger, Martin and S{"{o}}ding, Johannes},
-  year         = 2019,
-  journal      = {Bioinformatics},
-  volume       = 35,
-  number       = 16,
-  pages        = {2856--2858},
-  doi          = {10.1093/bioinformatics/bty1057},
-  pmid         = 30615063,
-  comment      = {MMseqs2 search server}
-}
-@article{Mirdita2017,
-  title        = {{Uniclust databases of clustered and deeply annotated protein sequences and alignments}},
-  author       = {Mirdita, Milot and von den Driesch, Lars and Galiez, Clovis and Martin, Maria J. and S{"{o}}ding, Johannes and Steinegger, Martin},
-  year         = 2017,
-  journal      = {Nucleic Acids Res.},
-  volume       = 45,
-  number       = {D1},
-  pages        = {D170--D176},
-  doi          = {10.1093/nar/gkw1081},
-  pmid         = 27899574,
-  comment      = {Uniclust30/UniRef30 database}
-}
-@article{Mitchell2019,
-  title        = {{MGnify: the microbiome analysis resource in 2020}},
-  author       = {Mitchell, Alex L and Almeida, Alexandre and Beracochea, Martin and Boland, Miguel and Burgin, Josephine and Cochrane, Guy and Crusoe, Michael R and Kale, Varsha and Potter, Simon C and Richardson, Lorna J and Sakharova, Ekaterina and Scheremetjew, Maxim and Korobeynikov, Anton and Shlemov, Alex and Kunyavskaya, Olga and Lapidus, Alla and Finn, Robert D},
-  year         = 2019,
-  journal      = {Nucleic Acids Res.},
-  doi          = {10.1093/nar/gkz1035},
-  comment      = {MGnify database}
-}
-@article{Mirdita2022,
-  title        = {{ColabFold: making protein folding accessible to all}},
-  author       = {Mirdita, Milot and Sch{\"u}tze, Konstantin and Moriwaki, Yoshitaka and Heo, Lim and Ovchinnikov, Sergey and Steinegger, Martin},
-  year         = 2022,
-  journal      = {Nature Methods},
-  doi          = {10.1038/s41592-022-01488-1},
-  comment      = {ColabFold API}
-}
-"""
 
 
 ### FUNCTIONS ###
@@ -364,37 +323,65 @@ def run_phmmer_mafft(query: str, ref_db_path: str, size: int = float("inf"), in_
 
 
 def run_mmseqs2(
-  seqs: str,
+  seqs: Union[str, List[str]],
   output: str,
   database: str = "mmseqs2_uniref_env",
   use_filter: bool = True,
   use_templates: bool = False,
   pairing: Optional[str] = None,
-  print_citations: bool = True,
 ) -> Tuple[List[str], Optional[List[str]]]:
-  """Generate an a3m MSA using the ColabFold API.
-  Will write all results to the output directory including templates,
-  MSAs, and accompanying files.
-
-  Code originally adapted from: https://github.com/sokrypton/ColabFold/
+  """
+  Submits amino acid sequences to the ColabFold MMseqs2 API to generate multiple sequence alignments (MSAs),
+  optionally downloading template structures. Results are written to the specified output directory, including:
+  - One combined A3M file per input sequence (named `combined_{i}.a3m`)
+  - Optional structure templates (if `use_templates=True` and supported)
 
   Parameters:
-    seqs: Amino acid sequences for protein to generate an MSA of
-    output: Output directory path, will overwrite existing results
-    database: Choose the database to use, must be either "mmseqs2_uniref_env" or "mmseqs2_uniref"
-    use_filter: Enables the diversity and msa filtering steps that ensures the MSA will not become enormously large (described in manuscript methods section of ColabFold paper)
-    use_templates: Download templates as well using the mmseqs2 results
-    pairing: Can be set to either "greedy", "complete", or None for no pairing
-    print_citations: Prints citations
+    seqs (str or List[str]):
+        One or more amino acid sequences. If a single string is provided, it is treated as one sequence.
+        Duplicates are automatically de-duplicated to reduce redundant API calls.
+
+    output (str):
+        Path to an output directory. If it exists, it will be deleted and recreated.
+
+    database (str):
+        MMseqs2 search database to use. Must be one of:
+        - "mmseqs2_uniref_env" (environmental sequences + UniRef)
+        - "mmseqs2_uniref" (UniRef only)
+
+    use_filter (bool):
+        Whether to apply diversity/length filtering to limit the size of the resulting MSA.
+        Recommended for performance and downstream quality. If False, may yield larger but noisier MSAs.
+
+    use_templates (bool):
+        Whether to fetch structural templates for each input sequence using hits from the `pdb70.m8` file.
+        Automatically disabled if `pairing` is set.
+
+    pairing (str or None):
+        If specified, activates MSA pairing mode. Must be one of:
+        - "greedy": fast pairing using best bidirectional hits
+        - "complete": exhaustive pairing of all hits
+        - None: disables pairing (default)
+
+        Note: Only one MSA is generated per pair using `pair.a3m` when pairing is enabled.
+        If this is set, `use_templates` will be ignored.
 
   Returns:
-    - ``a3m_lines``: list of a3m lines
-    - ``template_paths``: list of template paths
+    Tuple[List[str], Optional[List[str]]]:
+      - a3m_lines: A list of strings, each representing the combined MSA (in A3M format) for each input sequence,
+                   in the same order as provided. These are also written as `combined_{i}.a3m` files.
+      - template_paths: If `use_templates=True`, returns a list of template directory paths (or None for sequences with no templates found).
+                        Otherwise, returns None.
 
+  Notes:
+    - Internally deduplicates sequences but returns results in original input order.
+    - Implements robust retry logic for ColabFold’s unstable API endpoints, including long-lived 502 errors.
+    - Null bytes in A3M files are stripped to avoid downstream parsing issues.
+    - Original code adapted from ColabFold: https://github.com/sokrypton/ColabFold/
+    - Please cite ColabFold if using this in research: https://colabfold.mmseqs.com/
   """
-  if print_citations:
-    print(MMSEQS2_CITATION)
-  # API settings
+  ### Constants
+  ## Settings
   host_url = "https://api.colabfold.com"
   submission_endpoint = "ticket/pair" if pairing else "ticket/msa"
   headers = {}
@@ -402,6 +389,13 @@ def run_mmseqs2(
   # https://requests.readthedocs.io/en/latest/user/advanced/#advanced
   # "good practice to set connect timeouts to slightly larger than a multiple of 3"
   timeout = 6.02
+  # Number of seconds between subsequent failed request
+  request_delay = 15
+  # The maximum error count to tolerate
+  max_error_count = 50  # NOTE: This is intentionally set very high since the mmseqs2 API has this disgusting flaw where it will return a 502 error while it is compiling the output tar file once everything is complete. Extremely cringe!
+
+  ## Other constants
+  start = datetime.now()
 
   # set the mode
   assert database in ["mmseqs2_uniref_env", "mmseqs2_uniref"], 'database must be either "mmseqs2_uniref_env" or "mmseqs2_uniref"'
@@ -411,7 +405,6 @@ def run_mmseqs2(
     mode = "env-nofilter" if database == "mmseqs2_uniref_env" else "nofilter"
 
   if pairing:
-    use_templates = False
     # greedy is default, complete was the previous behavior
     assert pairing in ["greedy", "complete"], 'pairing must be either "greedy", "complete", or None'
     if pairing == "greedy":
@@ -423,118 +416,66 @@ def run_mmseqs2(
   if os.path.isdir(output):
     shutil.rmtree(output)
   os.mkdir(output)
-
   temp_dir = tempfile.mkdtemp()
 
-  def submit(seqs, mode, N=101):
-    n, query = N, ""
-    for seq in seqs:
-      query += f">{n}\n{seq}\n"
-      n += 1
-
-    while True:
-      error_count = 0
+  ### Functions
+  def retry_request(method, url, json_mode=True, **kwargs):
+    """Helper function for retrying requests until success or an error threshold is reached"""
+    error_count = 0
+    while error_count <= max_error_count:
       try:
-        res = requests.post(
-          f"{host_url}/{submission_endpoint}",
-          data={"q": query, "mode": mode},
-          timeout=timeout,
-          headers=headers,
-        )
+        r = method(url, timeout=timeout, headers=headers, **kwargs)
+        r.raise_for_status()
+        if not json_mode:
+          return r
+        try:
+          out = r.json()
+        except Exception as _:
+          raise Exception(f"Server didn't reply with json: {r.text}")
+
+        if out["status"] in ["UNKNOWN", "RATELIMIT"]:
+          raise Exception(f"Server failed to produce desired result (status: {out['status']})")
+        elif out["status"] == "ERROR":
+          raise Exception(
+            "MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later."
+          )
+        elif out["status"] == "MAINTENANCE":
+          raise Exception("MMseqs2 API is undergoing maintenance. Please try again in a few minutes.")
+        return out
       except Exception as e:
         error_count += 1
-        logger.warning(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
+        logger.warning(f"Error contacting MSA server. Retrying... ({error_count}/{max_error_count})")
         logger.warning(f"Error: {e}")
-        if error_count > 5:
-          raise Exception("Too many failed attempts for the MSA generation request.")
-        time.sleep(5)
-      else:
-        break
+        time.sleep(request_delay)
+    raise Exception("Too many failed attempts at MSA generation. Please review your inputs or try again in a few hours.")
 
-    try:
-      out = res.json()
-    except ValueError:
-      logger.error(f"Server didn't reply with json: {res.text}")
-      out = {"status": "ERROR"}
-    return out
-
-  def status(ID):
-    while True:
-      error_count = 0
-      try:
-        r = requests.get(f"{host_url}/ticket/{ID}", timeout=timeout, headers=headers)
-      except requests.exceptions.Timeout:
-        logger.warning("Timeout while fetching status from MSA server. Retrying...")
-        continue
-      except Exception as e:
-        error_count += 1
-        logger.warning(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
-        logger.error(f"Error: {e}")
-        time.sleep(timeout)
-        if error_count > 5:
-          raise
-        continue
-      break
-    try:
-      out = r.json()
-    except ValueError:
-      logger.error(f"Server didn't reply with json: {r.text}")
-      out = {"status": "ERROR"}
-    return out
-
-  ## call mmseqs2 api
-  # Resubmit job until it goes through
+  ### Call mmseqs2 api
+  ## Perform initial submission
   seqs = [seqs] if isinstance(seqs, str) else seqs
   seqs_unique = []
   [seqs_unique.append(x) for x in seqs if x not in seqs_unique]
-  Ms = [101 + seqs_unique.index(seq) for seq in seqs]
+  sequence_ids = [1 + seqs_unique.index(seq) for seq in seqs]
 
-  out = submit(seqs_unique, mode)
-  while out["status"] in ["UNKNOWN", "RATELIMIT"]:
-    logger.info(f"Sleeping for {timeout}s. Reason: {out['status']}")
-    # resubmit
-    time.sleep(timeout)
-    out = submit(seqs_unique, mode)
+  query = ""
+  for i, seq in enumerate(seqs, start=1):
+    query += f">{i}\n{seq}\n"
+  out = retry_request(requests.post, f"{host_url}/{submission_endpoint}", json_mode=True, data={"q": query, "mode": mode})
 
-  if out["status"] == "ERROR":
-    raise Exception(
-      "MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later."
-    )
-
-  if out["status"] == "MAINTENANCE":
-    raise Exception("MMseqs2 API is undergoing maintenance. Please try again in a few minutes.")
-
-  # wait for job to finish
   ID = out["id"]
   logger.info(f"Successfully submitted mmseqs2 API request with job ID {ID}")
-  while out["status"] in ["UNKNOWN", "RUNNING", "PENDING"]:
-    logger.info(f"Sleeping for {timeout}s. Reason: {out['status']}")
-    time.sleep(timeout)
-    out = status(ID)
 
-  if out["status"] == "ERROR" or out["status"] != "COMPLETE":
-    logger.info(out)
-    raise Exception(
-      "MMseqs2 API is giving errors. Please confirm your input is a valid protein sequence. If error persists, please try again an hour later."
-    )
+  ## Wait for job to finish
+  # possible status' that won't trigger an exception in retry_request include ["RUNNING", "PENDING", "COMPLETE"]
+  for i in range(50):
+    out = retry_request(requests.get, f"{host_url}/ticket/{ID}", json_mode=True)
+    if out["status"] == "COMPLETE":
+      break
+    logger.info(f"Checking status for MSA with ID {ID} in {request_delay}s (current: {out['status']}).")
+    time.sleep(request_delay)
 
-  # Download results
-  error_count = 0
-  while True:
-    try:
-      r = requests.get(f"{host_url}/result/download/{ID}", stream=True, timeout=timeout, headers=headers)
-    except requests.exceptions.Timeout:
-      logger.error("Timeout while fetching result from MSA server. Retrying...")
-      continue
-    except Exception as e:
-      error_count += 1
-      logger.warning(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
-      logger.error(f"Error: {e}")
-      time.sleep(timeout)
-      if error_count > 5:
-        raise
-      continue
-    break
+  ## Download results
+  r = retry_request(requests.get, f"{host_url}/result/download/{ID}", json_mode=False, stream=True)
+
   # extract files
   with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
     tar.extractall(path=temp_dir)
@@ -552,88 +493,69 @@ def run_mmseqs2(
     if mode == "env":
       a3m_files.append(f"{output}/bfd.mgnify30.metaeuk30.smag30.a3m")
 
-  # gather a3m lines
-  a3m_lines = {}
+  ## Combine a3m lines
+  a3m_lines = {seq_id: "" for seq_id in sequence_ids}
   for a3m_file in a3m_files:
-    update_M, M = True, None
+    update_M, seq_id = True, None
     for line in open(a3m_file, "r"):
       if len(line) > 0:
         if "\x00" in line:
           line = line.replace("\x00", "")
           update_M = True
         if line.startswith(">") and update_M:
-          M = int(line[1:].rstrip())
+          seq_id = int(line[1:].rstrip())
           update_M = False
-          if M not in a3m_lines:
-            a3m_lines[M] = []
-        a3m_lines[M].append(line)
+        a3m_lines[seq_id] += line
 
-  a3m_lines = ["".join(a3m_lines[n]) for n in Ms]
+  a3m_lines = [a3m_lines[n] for n in sequence_ids]
 
   # remove null bytes from all files including pair files
-  for fname in os.listdir(output):
-    if fname in ["uniref.a3m", "bfd.mgnify30.metaeuk30.smag30.a3m", "pair.a3m"]:
-      with open(f"{output}/{fname}", "r") as fin:
-        with open(f"{output}/{fname}.tmp", "w") as fout:
-          for line in fin:
-            fout.write(line.replace("\x00", ""))
+  for fname in ["uniref.a3m", "bfd.mgnify30.metaeuk30.smag30.a3m", "pair.a3m"]:
+    if os.path.exists(f"{output}/{fname}"):
+      with open(f"{output}/{fname}", "r") as fin, open(f"{output}/{fname}.tmp", "w") as fout:
+        for line in fin:
+          fout.write(line.replace("\x00", ""))
       shutil.move(f"{output}/{fname}.tmp", f"{output}/{fname}")
 
-  # templates
-  if use_templates:
+  # write combined MSAs too
+  for i, msa in enumerate(a3m_lines, start=1):
+    with open(f"{output}/combined_{i}.a3m", "w") as f:
+      f.write(msa)
+
+  ## fetch templates if applicable
+  if not pairing and use_templates:
+    # keys are input sequence IDs and values are lists of PDB IDs
     templates = {}
     for line in open(f"{output}/pdb70.m8", "r"):
       p = line.rstrip().split()
-      M, pdb, qid, e_value = p[0], p[1], p[2], p[10]
-      M = int(M)
-      if M not in templates:
-        templates[M] = []
-      templates[M].append(pdb)
+      seq_id, pdb, qid, e_value = p[0], p[1], p[2], p[10]
+      seq_id = int(seq_id)
+      if seq_id not in templates:
+        templates[seq_id] = []
+      templates[seq_id].append(pdb)
 
-    template_paths = {}
-    for k, TMPL in templates.items():
-      TMPL_PATH = f"{output}/templates_{k}"
-      if not os.path.isdir(TMPL_PATH):
-        os.mkdir(TMPL_PATH)
-        TMPL_LINE = ",".join(TMPL[:20])
-        response = None
-        while True:
-          error_count = 0
-          try:
-            # https://requests.readthedocs.io/en/latest/user/advanced/#advanced
-            # "good practice to set connect timeouts to slightly larger than a multiple of 3"
-            response = requests.get(f"{host_url}/template/{TMPL_LINE}", stream=True, timeout=6.02, headers=headers)
-          except requests.exceptions.Timeout:
-            logger.warning("Timeout while submitting to template server. Retrying...")
-            continue
-          except Exception as e:
-            error_count += 1
-            logger.warning(f"Error while fetching result from template server. Retrying... ({error_count}/5)")
-            logger.warning(f"Error: {e}")
-            time.sleep(5)
-            if error_count > 5:
-              raise
-            continue
-          break
-        with tarfile.open(fileobj=response.raw, mode="r|gz") as tar:
-          tar.extractall(path=TMPL_PATH, filter="data")
-        os.symlink("pdb70_a3m.ffindex", f"{TMPL_PATH}/pdb70_cs219.ffindex")
-        with open(f"{TMPL_PATH}/pdb70_cs219.ffdata", "w") as f:
-          f.write("")
-      template_paths[k] = TMPL_PATH
-    template_paths_ = []
-    for n in Ms:
-      if n not in template_paths:
-        template_paths_.append(None)
-        # print(f"{n-N}\tno_templates_found")
-      else:
-        template_paths_.append(template_paths[n])
-    template_paths = template_paths_
+    # keys are input sequence IDs and values file paths for the directory containing the templates
+    template_paths = {seq_id: None for seq_id in sequence_ids}
+    for seq_id, pdb_ids in templates.items():
+      template_fpath = f"{output}/templates_{seq_id}"
+      os.mkdir(template_fpath)
+      r = retry_request(requests.get, f"{host_url}/template/{','.join(pdb_ids[:20])}", json_mode=False, stream=True)
+      with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
+        tar.extractall(path=template_fpath, filter="data")
+      os.remove(f"{template_fpath}/pdb70_a3m.ffindex")
+      template_paths[seq_id] = template_fpath
+
+    # log missing templates
+    for seq_id, template_fpath in template_paths.items():
+      if template_fpath is None:
+        logger.warning(f"No templates found for {seqs_unique[seq_id]}")
+
+  logger.info(f"Finished generating MSA, took {datetime.now()-start}")
 
   if use_templates:
-    return (a3m_lines, template_paths)
+    return a3m_lines, template_paths.values()
   else:
-    return (a3m_lines, None)
+    return a3m_lines, None
 
 
 def run_mmseqs2_modes(
@@ -643,7 +565,6 @@ def run_mmseqs2_modes(
   id: int = 90,
   max_msa: int = 2048,
   mode: str = "unpaired_paired",
-  print_citations: bool = True,
 ):
   """
   Generate a multiple sequence alignment (MSA) for the given sequence(s)
@@ -660,11 +581,8 @@ def run_mmseqs2_modes(
     id: Identity threshold for the MSA
     max_msa: Maximum number of sequences in the MSA
     mode: Mode to run the MSA generation in. Must be in ``["unpaired", "paired", "unpaired_paired"]``
-    print_citations: Whether to print the citations in the output.
 
   """
-  if print_citations:
-    print(MMSEQS2_CITATION)
   # Check if HH-suite is installed and available
   hhfilter_path = shutil.which("hhfilter")
   assert hhfilter_path is not None, (
@@ -687,7 +605,7 @@ def run_mmseqs2_modes(
   # Handle paired MSA if applicable
   if mode in ["paired", "unpaired_paired"] and len(u_seqs) > 1:
     print("Getting paired MSA")
-    out_paired, _ = run_mmseqs2(u_seqs, output, pairing="greedy", print_citations=False)
+    out_paired, _ = run_mmseqs2(u_seqs, output, pairing="greedy")
     headers, sequences = [], []
     for a3m_lines in out_paired:
       n = -1
@@ -722,7 +640,7 @@ def run_mmseqs2_modes(
   # Handle unpaired MSA if applicable
   if len(msa) < max_msa and (mode in ["unpaired", "unpaired_paired"] or len(u_seqs) == 1):
     print("Getting unpaired MSA")
-    out, _ = run_mmseqs2(u_seqs, output, pairing=None, print_citations=False)
+    out, _ = run_mmseqs2(u_seqs, output, pairing=None)
     Ls = [len(seq) for seq in u_seqs]
     sub_idx = []
     sub_msa = []

@@ -506,6 +506,7 @@ def run_mmseqs2(
 
   # wait for job to finish
   ID = out["id"]
+  logger.info(f"Successfully submitted mmseqs2 API request with job ID {ID}")
   while out["status"] in ["UNKNOWN", "RUNNING", "PENDING"]:
     logger.info(f"Sleeping for {timeout}s. Reason: {out['status']}")
     time.sleep(timeout)

@@ -73,7 +73,7 @@ def read_msa(
   drop_chars: str = "",
   remove_chars: str = "*",
   uppercase: bool = True,
-  name_allow_all_chars: bool  = False,
+  name_allow_all_chars: bool = False,
 ) -> Tuple[List[str], List[str]]:
   """Reads an MSA, a3m, or fasta file and returns an array of names and seqs. Returned headers will consist of all characters up until the first space with the "|" character replaced with an underscore.
 
@@ -104,7 +104,7 @@ def read_msa(
     reg_name = re.compile(r"^>(.*)$")
   else:
     reg_name = re.compile(r"^>([\w_-\|]*)")
-  
+
   if remove_chars:
     reg_rc = re.compile(f"[{remove_chars}\\s]")
   if drop_chars:
@@ -399,6 +399,8 @@ def run_mmseqs2(
   submission_endpoint = "ticket/pair" if pairing else "ticket/msa"
   headers = {}
   headers["User-Agent"] = USER_AGENT
+  # https://requests.readthedocs.io/en/latest/user/advanced/#advanced
+  # "good practice to set connect timeouts to slightly larger than a multiple of 3"
   timeout = 6.02
 
   # set the mode
@@ -429,27 +431,30 @@ def run_mmseqs2(
     for seq in seqs:
       query += f">{n}\n{seq}\n"
       n += 1
+
     while True:
       error_count = 0
       try:
-        r = requests.post(f"{host_url}/{submission_endpoint}", data={"q": query, "mode": mode}, timeout=timeout, headers=headers)
-      except requests.exceptions.Timeout:
-        logger.warning("Timeout while submitting to MSA server. Retrying...")
-        continue
+        res = requests.post(
+          f"{host_url}/{submission_endpoint}",
+          data={"q": query, "mode": mode},
+          timeout=timeout,
+          headers=headers,
+        )
       except Exception as e:
         error_count += 1
         logger.warning(f"Error while fetching result from MSA server. Retrying... ({error_count}/5)")
-        logger.error(f"Error: {e}")
-        time.sleep(timeout)
+        logger.warning(f"Error: {e}")
         if error_count > 5:
-          raise
-        continue
-      break
+          raise Exception("Too many failed attempts for the MSA generation request.")
+        time.sleep(5)
+      else:
+        break
 
     try:
-      out = r.json()
+      out = res.json()
     except ValueError:
-      logger.error(f"Server didn't reply with json: {r.text}")
+      logger.error(f"Server didn't reply with json: {res.text}")
       out = {"status": "ERROR"}
     return out
 
@@ -536,7 +541,7 @@ def run_mmseqs2(
     src_path = os.path.join(temp_dir, file)
     if os.path.exists(src_path):
       shutil.move(src_path, os.path.join(output, file))
-  
+
   shutil.rmtree(temp_dir)
 
   if pairing:

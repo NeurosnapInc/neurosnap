@@ -579,20 +579,6 @@ def run_mmseqs2(
             fout.write(line.replace("\x00", ""))
       shutil.move(f"{output}/{fname}.tmp", f"{output}/{fname}")
 
-  if pairing is None:
-    # Concatenate to create combined file
-    with open(f"{output}/combined.a3m", "w") as fout:
-      with open(f"{output}/uniref.a3m") as f:
-        for line in f:
-          fout.write(line)
-
-      with open(f"{output}/bfd.mgnify30.metaeuk30.smag30.a3m") as f:
-        # skip first two lines
-        f.readline()
-        f.readline()
-        for line in f:
-          fout.write(line)
-
   # templates
   if use_templates:
     templates = {}

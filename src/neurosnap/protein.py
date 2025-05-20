@@ -849,7 +849,7 @@ class Protein:
     sasa_calculator = SASA.ShrakeRupley()
     sasa_calculator.compute(structure_model, level=level)
     total_sasa = sum([residue.sasa for residue in structure_model.get_residues() if residue.sasa])
-    return total_sasa
+    return float(total_sasa)
 
   def calculate_protein_volume(self, model: int = 0, chain: Optional[str] = None) -> float:
     """Compute an estimate of the protein volume using the van der Waals radii.

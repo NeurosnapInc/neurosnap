@@ -200,9 +200,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert (
-      model1 is not None
-    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    assert model1 is not None, (
+      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    )
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self) -> List[int]:
@@ -1156,7 +1156,54 @@ def getAA(query: str) -> Tuple[str, str, str]:
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
 
+def calculate_bsa(complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], model: int = 0, level: str = "R") -> float:
+  """Calculate the buried surface area (BSA) between two groups of chains.
 
+  The buried surface area is computed as the difference in solvent-accessible
+  surface area (SASA) when the two groups of chains are in complex versus separate.
+
+  Parameters:
+    complex: Complex to calculate BSA for.
+    chain_group_1: List of chain IDs for the first group.
+    chain_group_2: List of chain IDs for the second group.
+    model: Model ID to calculate BSA for, defaults to 0.
+    level: The level at which ASA values are assigned, which can be one of "A" (Atom), "R" (Residue), "C" (Chain), "M" (Model), or "S" (Structure).
+
+  Returns:
+    The buried surface area (BSA) in Å².
+  """
+  # Validate model and chains
+  if isinstance(complex, str):
+    complex = Protein(complex)
+  assert model in complex.models(), f"Model {model} not found."
+  all_chains = set(complex.chains(model))
+  assert len(all_chains) > 1, "The complex needs to have at least two chains."
+  assert len(chain_group_1) > 0, "List of chain IDs for the first group cannot be empty."
+  assert len(chain_group_2) > 0, "List of chain IDs for the second group cannot be empty."
+  assert set(chain_group_1).issubset(all_chains), "Invalid chains in group 1."
+  assert set(chain_group_2).issubset(all_chains), "Invalid chains in group 2."
+
+  sasa_complex = complex.calculate_surface_area(model=model, level=level)
+
+  with tempfile.TemporaryDirectory() as tmp_dir:
+    complex_pdb = os.path.join(tmp_dir, "complex.pdb")
+
+
+    complex.save(complex_pdb, model=model)
+
+    prot_group1 = Protein(complex_pdb)
+    for chain in chain_group_2:
+      prot_group1.remove(model=model, chain=chain)
+
+    prot_group2 = Protein(complex_pdb)
+    for chain in chain_group_1:
+      prot_group2.remove(model=model, chain=chain)
+
+
+    sasa_group1 = prot_group1.calculate_surface_area(model=model, level=level)
+    sasa_group2 = prot_group2.calculate_surface_area(model=model, level=level)
+
+  return sasa_group1 + sasa_group2 - sasa_complex
 def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
   """
   Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)

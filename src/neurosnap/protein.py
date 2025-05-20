@@ -1189,7 +1189,7 @@ def calculate_bsa(complex: Union[str, "Protein"], chain_group_1: List[str], chai
     complex_pdb = os.path.join(tmp_dir, "complex.pdb")
 
 
-    complex.save(complex_pdb, model=model)
+    complex.save(complex_pdb)
 
     prot_group1 = Protein(complex_pdb)
     for chain in chain_group_2:

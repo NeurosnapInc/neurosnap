@@ -1156,11 +1156,16 @@ def getAA(query: str) -> Tuple[str, str, str]:
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
 
-def calculate_bsa(complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], model: int = 0, level: str = "R") -> float:
+
+def calculate_bsa(
+  protein_complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], model: int = 0, level: str = "R"
+) -> float:
   """Calculate the buried surface area (BSA) between two groups of chains.
 
   The buried surface area is computed as the difference in solvent-accessible
   surface area (SASA) when the two groups of chains are in complex versus separate.
+  The BSA is defined as:
+    BSA = (SASA(group 1) + SASA(group 2)) − SASA(complex)
 
   Parameters:
     complex: Complex to calculate BSA for.
@@ -1172,24 +1177,20 @@ def calculate_bsa(complex: Union[str, "Protein"], chain_group_1: List[str], chai
   Returns:
     The buried surface area (BSA) in Å².
   """
-  # Validate model and chains
-  if isinstance(complex, str):
-    complex = Protein(complex)
-  assert model in complex.models(), f"Model {model} not found."
-  all_chains = set(complex.chains(model))
-  assert len(all_chains) > 1, "The complex needs to have at least two chains."
-  assert len(chain_group_1) > 0, "List of chain IDs for the first group cannot be empty."
-  assert len(chain_group_2) > 0, "List of chain IDs for the second group cannot be empty."
-  assert set(chain_group_1).issubset(all_chains), "Invalid chains in group 1."
-  assert set(chain_group_2).issubset(all_chains), "Invalid chains in group 2."
+  # Validate input
+  if isinstance(protein_complex, str):
+    protein_complex = Protein(protein_complex)
+  assert model in protein_complex.models(), f"Model {model} not found."
+  all_chains = set(protein_complex.chains(model))
+  assert len(chain_group_1) > 0 and len(chain_group_2) > 0, "Chain groups cannot be empty."
+  assert set(chain_group_1).isdisjoint(chain_group_2), "Chain groups must not overlap."
+  assert set(chain_group_1).union(set(chain_group_2)) == all_chains, "Chain groups must cover all chains."
 
-  sasa_complex = complex.calculate_surface_area(model=model, level=level)
+  sasa_complex = protein_complex.calculate_surface_area(model=model, level=level)
 
   with tempfile.TemporaryDirectory() as tmp_dir:
     complex_pdb = os.path.join(tmp_dir, "complex.pdb")
-
-
-    complex.save(complex_pdb)
+    protein_complex.save(complex_pdb)
 
     prot_group1 = Protein(complex_pdb)
     for chain in chain_group_2:
@@ -1199,11 +1200,12 @@ def calculate_bsa(complex: Union[str, "Protein"], chain_group_1: List[str], chai
     for chain in chain_group_1:
       prot_group2.remove(model=model, chain=chain)
 
-
     sasa_group1 = prot_group1.calculate_surface_area(model=model, level=level)
     sasa_group2 = prot_group2.calculate_surface_area(model=model, level=level)
 
-  return sasa_group1 + sasa_group2 - sasa_complex
+  return (sasa_group1 + sasa_group2) - sasa_complex
+
+
 def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
   """
   Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)

@@ -172,7 +172,7 @@ def generate(
   logger.debug(f"Generating {num_confs:,} 3D conformers.")
   params = AllChem.ETKDGv3()
   params.numThreads = 0  # Will use all available CPU cores
-  params.forceTol = 0.0001  # Indirectly increases embedding attempts
+  params.optimizerForceTol = 0.0001  # Indirectly increases embedding attempts
   params.useRandomCoords = True  # Fallback to random coordinates if necessary
   params.pruneRmsThresh = 0.1  # Allow some deviation to increase conformer count
   rdDistGeom.EmbedMultipleConfs(my_mol, numConfs=num_confs, params=params)  # NOTE: maxAttempts=100 was removed as does not work with ETKDGv3

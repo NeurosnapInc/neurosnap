@@ -200,9 +200,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert (
-      model1 is not None
-    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    assert model1 is not None, (
+      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    )
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self) -> List[int]:
@@ -849,7 +849,7 @@ class Protein:
     sasa_calculator = SASA.ShrakeRupley()
     sasa_calculator.compute(structure_model, level=level)
     total_sasa = sum([residue.sasa for residue in structure_model.get_residues() if residue.sasa])
-    return total_sasa
+    return float(total_sasa)
 
   def calculate_protein_volume(self, model: int = 0, chain: Optional[str] = None) -> float:
     """Compute an estimate of the protein volume using the van der Waals radii.
@@ -1156,6 +1156,55 @@ def getAA(query: str) -> Tuple[str, str, str]:
       return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
+
+
+def calculate_bsa(
+  protein_complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], model: int = 0, level: str = "R"
+) -> float:
+  """Calculate the buried surface area (BSA) between two groups of chains.
+
+  The buried surface area is computed as the difference in solvent-accessible
+  surface area (SASA) when the two groups of chains are in complex versus separate.
+  The BSA is defined as:
+    BSA = (SASA(group 1) + SASA(group 2)) − SASA(complex)
+
+  Parameters:
+    complex: Complex to calculate BSA for.
+    chain_group_1: List of chain IDs for the first group.
+    chain_group_2: List of chain IDs for the second group.
+    model: Model ID to calculate BSA for, defaults to 0.
+    level: The level at which ASA values are assigned, which can be one of "A" (Atom), "R" (Residue), "C" (Chain), "M" (Model), or "S" (Structure).
+
+  Returns:
+    The buried surface area (BSA) in Å².
+  """
+  # Validate input
+  if isinstance(protein_complex, str):
+    protein_complex = Protein(protein_complex)
+  assert model in protein_complex.models(), f"Model {model} not found."
+  all_chains = set(protein_complex.chains(model))
+  assert len(chain_group_1) > 0 and len(chain_group_2) > 0, "Chain groups cannot be empty."
+  assert set(chain_group_1).isdisjoint(chain_group_2), "Chain groups must not overlap."
+  assert set(chain_group_1).union(set(chain_group_2)) == all_chains, "Chain groups must cover all chains."
+
+  sasa_complex = protein_complex.calculate_surface_area(model=model, level=level)
+
+  with tempfile.TemporaryDirectory() as tmp_dir:
+    complex_pdb = os.path.join(tmp_dir, "complex.pdb")
+    protein_complex.save(complex_pdb)
+
+    prot_group1 = Protein(complex_pdb)
+    for chain in chain_group_2:
+      prot_group1.remove(model=model, chain=chain)
+
+    prot_group2 = Protein(complex_pdb)
+    for chain in chain_group_1:
+      prot_group2.remove(model=model, chain=chain)
+
+    sasa_group1 = prot_group1.calculate_surface_area(model=model, level=level)
+    sasa_group2 = prot_group2.calculate_surface_area(model=model, level=level)
+
+  return (sasa_group1 + sasa_group2) - sasa_complex
 
 
 def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):

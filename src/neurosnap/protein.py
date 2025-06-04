@@ -1120,6 +1120,7 @@ class Protein:
       io = PDBIO()
       io.set_structure(self.structure)
       io.save(fpath, preserve_atom_numbering=True)
+      # TODO: Known bug where multi-model PDB files result in all models being written as 0 (biopython sucks)
     elif format == "mmcif":
       mmcif_io = MMCIFIO()
       mmcif_io.set_structure(self.structure)

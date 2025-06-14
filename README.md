@@ -21,6 +21,9 @@ pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
 # latest version + ClusterProt dependencies
 pip install -U --no-cache-dir "neurosnap @ git+https://github.com/NeurosnapInc/neurosnap.git#egg=neurosnap[clusterprot]"
 
+# latest version + Kluster dependencies
+pip install -U --no-cache-dir "neurosnap @ git+https://github.com/NeurosnapInc/neurosnap.git#egg=neurosnap[kluster]"
+
 # latest version + development dependencies
 pip install -U --no-cache-dir "neurosnap @ git+https://github.com/NeurosnapInc/neurosnap.git#egg=neurosnap[dev]"
 ```

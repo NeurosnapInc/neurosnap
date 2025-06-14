@@ -48,6 +48,12 @@ clusterprot = [
   "plotly"
 ]
 
+kluster = [
+  "scikit-learn",
+  "umap-learn",
+  "plotly"
+]
+
 [project.urls]
 Homepage = "https://github.com/NeurosnapInc/neurosnap"
 Issues = "https://github.com/NeurosnapInc/neurosnap/issues"

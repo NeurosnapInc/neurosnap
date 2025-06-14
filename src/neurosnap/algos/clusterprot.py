@@ -26,7 +26,7 @@ def ClusterProt(
   proteins: List[Union["Protein", str]],
   model: int = 0,
   chain: Optional[str] = None,
-  umap_n_neighbors: float = 0,
+  umap_n_neighbors: int = 0,
   proj_1d_algo: str = "umap",
   dbscan_eps: float = 0,
   dbscan_min_samples: int = 0,
@@ -100,7 +100,7 @@ def ClusterProt(
   # 2D projection and cluster it using DBSCAN
   logger.debug("Creating 2D projection using UMAP")
   if umap_n_neighbors == 0:
-    umap_n_neighbors = max(7, np.sqrt(900))
+    umap_n_neighbors = max(7, int(np.sqrt(900)))
   proj_2d = UMAP(n_components=2, init="random", n_neighbors=umap_n_neighbors).fit_transform(proteins_vects)
 
   # cluster using DBSCAN and optionally calculate ideal DBSCAN params

@@ -8,6 +8,7 @@ Amani, K., Shivnauth, V., & Castroverde, C. D. M. (2023). CBP60‐DB: An AlphaFo
 import math
 import os
 import re
+import shutil
 import subprocess
 from itertools import combinations_with_replacement as cwr
 from multiprocessing import Pool
@@ -29,11 +30,12 @@ from umap import UMAP
 
 def check_alignment_tool(tool_name: str) -> str:
   """Check if the specified alignment tool exists and is executable."""
-  tool_path = os.path.join(os.path.dirname(__file__), "bin", tool_name)
-  if not os.path.exists(tool_path) or not os.access(tool_path, os.X_OK):
-    raise FileNotFoundError(f"{tool_name} executable not found at {tool_path}")
-  return tool_path
-
+  path = shutil.which(tool_name)
+  if path is None:
+    raise FileNotFoundError(f"{tool_name} executable not found at {path}")
+  if not os.access(path, os.X_OK):
+    raise FileNotFoundError(f"{tool_name} is not executable at {path}")
+  return path
 
 def run_alignment(pdb_f1: str, pdb_f2: str, alignment_tool: str, use_tmscore: bool, use_rmsd: bool) -> Dict[str, Any]:
   """Run structural alignment and extract features."""
@@ -63,7 +65,9 @@ def run_alignment(pdb_f1: str, pdb_f2: str, alignment_tool: str, use_tmscore: bo
 
 
 def _run_alignment_pair(args):
-  """Helper function for parallel alignment."""
+  """Helper function for parallel alignment.
+  alignment_tool can be "TMalign" or "USalign"
+  """
   proteins, protein_ids, combo, alignment_tool, use_tmscore, use_rmsd = args
   return run_alignment(
     proteins[protein_ids[combo[0]]],

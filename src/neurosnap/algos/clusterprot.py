@@ -66,10 +66,8 @@ def ClusterProt(
   for i, protein in enumerate(proteins):
     if isinstance(protein, Protein):
       pass
-    elif isinstance(protein, str):
-      proteins[i] = Protein(protein)
     else:
-      raise f"One of the provided proteins was not Neurosnap Protein object or a path to an existing PDB file.\nprotein: {protein}"
+      proteins[i] = Protein(protein)
 
   proteins_vects = []
   logger.debug(f"Clustering {len(proteins)} proteins")

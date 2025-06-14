@@ -99,7 +99,7 @@ def ClusterProt(
 
   # 2D projection and cluster it using DBSCAN
   if umap_n_neighbors == 0:
-    umap_n_neighbors = max(7, round(len(proteins_vects)*0.05))
+    umap_n_neighbors = max(7, round(len(proteins_vects)*0.075))
   logger.debug(f"Creating 2D projection using UMAP (n_neighbors={umap_n_neighbors})")
   proj_2d = UMAP(n_components=2, init="random", n_neighbors=umap_n_neighbors, spread=2.5).fit_transform(proteins_vects)
 

@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import matplotlib
 import matplotlib.animation as animation
@@ -200,9 +200,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert model1 is not None, (
-      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
-    )
+    assert (
+      model1 is not None
+    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self) -> List[int]:
@@ -495,13 +495,17 @@ class Protein:
     # update the pandas dataframe
     self.generate_df()
 
-  def get_backbone(self, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
+  def get_backbone(
+    self,
+    chains: Optional[Tuple[List[str], Set[str]]] = None,
+    model: Optional[int] = None,
+  ) -> np.ndarray:
     """Extract backbone atoms (N, CA, C) from the structure.
     If model or chain is not provided, extracts from all models/chains.
 
     Parameters:
+      chains: Chain ID(s) to extract from. If ``None``, all chains are included.
       model: Model ID to extract from. If ``None``, all models are included.
-      chain: Chain ID to extract from. If ``None``, all chains are included.
 
     Returns:
       A numpy array of backbone coordinates (Nx3)
@@ -512,7 +516,7 @@ class Protein:
     for m in self.structure:
       if model is None or m.id == model:
         for c in m:
-          if chain is None or c.id == chain:
+          if chains is None or c.id in chains:
             for res in c:
               for atom in res:
                 if atom.name in BACKBONE_ATOMS:
@@ -633,27 +637,27 @@ class Protein:
 
     return missing_residues
 
-  def align(self, other_protein: "Protein", model1: int = 0, model2: int = 0, chain1: List[str] = [], chain2: List[str] = []):
+  def align(self, other_protein: "Protein", chains1: List[str] = [], chains2: List[str] = [], model1: int = 0, model2: int = 0):
     """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed
     and aligned. Only compares backbone atoms (N, CA, C).
 
     Parameters:
       other_protein: Another Neurosnap Protein object to compare against
+      chains1: The chain(s) you want to include in the alignment within the reference protein, set to an empty list to use all chains.
+      chains2: The chain(s) you want to include in the alignment within the other protein, set to an empty list to use all chains.
       model1: Model ID of reference protein to align to
       model2: Model ID of other protein to transform and align to reference
-      chain1: The chain(s) you want to include in the alignment within the reference protein, set to an empty list to use all chains.
-      chain2: The chain(s) you want to include in the alignment within the other protein, set to an empty list to use all chains.
 
     """
     assert model1 in self.models(), "Specified model needs to be present in the reference structure."
     assert model2 in other_protein.models(), "Specified model needs to be present in the other structure."
     # validate chains
     avail_chains = self.chains(model1)
-    for chain in chain1:
+    for chain in chains1:
       assert chain in avail_chains, f"Chain {chain} was not found in the reference protein. Found chains include {', '.join(avail_chains)}."
     avail_chains = other_protein.chains(model2)
-    for chain in chain2:
+    for chain in chains2:
       assert chain in avail_chains, f"Chain {chain} was not found in the other protein. Found chains include {', '.join(avail_chains)}."
 
     # Use the Superimposer to align the structures
@@ -668,23 +672,29 @@ class Protein:
       return atoms
 
     sup = Superimposer()
-    sup.set_atoms(aux_get_atoms(self.structure[model1], chain1), aux_get_atoms(other_protein.structure[model2], chain2))
+    sup.set_atoms(aux_get_atoms(self.structure[model1], chains1), aux_get_atoms(other_protein.structure[model2], chains2))
     sup.apply(other_protein.structure[model2])  # Apply the transformation to the other protein
     # update the pandas dataframe
     other_protein.generate_df()
 
   def calculate_rmsd(
-    self, other_protein: "Protein", model1: int = 0, model2: int = 0, chain1: Optional[str] = None, chain2: Optional[str] = None, align: bool = True
+    self,
+    other_protein: "Protein",
+    chains1: Optional[Tuple[List[str], Set[str]]] = None,
+    chains2: Optional[Tuple[List[str], Set[str]]] = None,
+    model1: int = 0,
+    model2: int = 0,
+    align: bool = True,
   ) -> float:
     """Calculate RMSD between the current structure and another protein.
     Only compares backbone atoms (N, CA, C). RMSD is in angstroms (Å).
 
     Parameters:
       other_protein: Another Protein object to compare against
+      chains1: Chain ID of original protein, if not provided compares all chains
+      chains2: Chain ID of other protein, if not provided compares all chains
       model1: Model ID of original protein to compare
       model2: Model ID of other protein to compare
-      chain1: Chain ID of original protein, if not provided compares all chains
-      chain2: Chain ID of other protein, if not provided compares all chains
       align: Whether to align the structures first using Superimposer
 
     Returns:
@@ -696,16 +706,16 @@ class Protein:
     assert model2 in other_protein.models(), f"Model {model2} was not found in other protein."
 
     # Get backbone coordinates of both structures
-    backbone1 = self.get_backbone(model=model1, chain=chain1)
-    backbone2 = other_protein.get_backbone(model=model2, chain=chain2)
+    backbone1 = self.get_backbone(chains=chains1, model=model1)
+    backbone2 = other_protein.get_backbone(chains=chains2, model=model2)
     assert backbone1.shape == backbone2.shape, "Structures must have the same number of backbone atoms for RMSD calculation."
 
     if align:
-      self.align(other_protein, model1=model1, model2=model2)
+      self.align(other_protein, model1=model1, model2=model2, chains1=chains1, chains2=chains2)
 
     # Get new backbone coordinates of both structures
-    backbone1 = self.get_backbone(model=model1, chain=chain1)
-    backbone2 = other_protein.get_backbone(model=model2, chain=chain2)
+    backbone1 = self.get_backbone(chains=chains1, model=model1)
+    backbone2 = other_protein.get_backbone(chains=chains2, model=model2)
 
     diff = backbone1 - backbone2
     rmsd = np.sqrt(np.sum(diff**2) / backbone1.shape[0])

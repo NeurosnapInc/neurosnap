@@ -168,12 +168,12 @@ def seqid(seq1: str, seq2: str) -> float:
   """Calculate the pairwise sequence identity of two same length sequences or alignments.
   Will not perform any alignment steps.
 
-  Parameters:
-    seq1: The 1st sequence / aligned sequence.
-    seq2: The 2nd sequence / aligned sequence.
+  Args:
+      seq1: The 1st sequence / aligned sequence.
+      seq2: The 2nd sequence / aligned sequence.
 
   Returns:
-    The pairwise sequence identity, 0 means no matches found, 100 means sequences were identical.
+      The pairwise sequence identity, 0 means no matches found, 100 means sequences were identical.
   """
   assert len(seq1) == len(seq2), "Sequences are not the same length."
   assert len(seq1) > 0, "Sequence cannot have a length of 0."
@@ -190,10 +190,10 @@ def consensus_sequence(sequences: List[str]) -> str:
   The consensus is formed by taking the most common character at each position.
 
   Args:
-      sequences (List[str]): A list of equal-length sequences (e.g., amino acid or DNA).
+      sequences: A list of equal-length sequences (e.g., amino acid or DNA).
 
   Returns:
-      str: The consensus sequence.
+      The consensus sequence.
 
   Raises:
       ValueError: If the sequence list is empty or sequences are of unequal lengths.

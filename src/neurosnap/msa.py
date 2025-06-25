@@ -10,16 +10,17 @@ import subprocess
 import tarfile
 import tempfile
 import time
-from datetime import datetime
 from collections import Counter
-from typing import Union, List, Dict, Tuple, Optional
+from datetime import datetime
+from itertools import combinations
+from typing import Dict, List, Optional, Tuple, Union
 
 import requests
 from Bio import SearchIO
 
 from neurosnap.api import USER_AGENT
-from neurosnap.log import logger
 from neurosnap.constants import STANDARD_AAs
+from neurosnap.log import logger
 
 ### CONSTANTS ###
 
@@ -164,7 +165,7 @@ def pad_seqs(seqs: List[str], char: str = "-", truncate: Union[bool, int] = Fals
   return seqs
 
 
-def get_seqid(seq1: str, seq2: str) -> float:
+def seqid(seq1: str, seq2: str) -> float:
   """Calculate the pairwise sequence identity of two same length sequences or alignments.
   Will not perform any alignment steps.
 
@@ -174,9 +175,9 @@ def get_seqid(seq1: str, seq2: str) -> float:
 
   Returns:
     The pairwise sequence identity, 0 means no matches found, 100 means sequences were identical.
-
   """
   assert len(seq1) == len(seq2), "Sequences are not the same length."
+  assert len(seq1) == 0, "Sequence cannot have a length of 0."
   num_matches = 0
   for a, b in zip(seq1, seq2):
     if a == b:

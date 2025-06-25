@@ -12,7 +12,6 @@ import tempfile
 import time
 from collections import Counter
 from datetime import datetime
-from itertools import combinations
 from typing import Dict, List, Optional, Tuple, Union
 
 import requests

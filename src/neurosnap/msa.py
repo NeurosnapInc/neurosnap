@@ -184,6 +184,36 @@ def seqid(seq1: str, seq2: str) -> float:
   return 100 * num_matches / len(seq1)
 
 
+def consensus_sequence(sequences: List[str]) -> str:
+  """Generates the consensus sequence from a list of aligned sequences.
+
+  The consensus is formed by taking the most common character at each position.
+
+  Args:
+      sequences (List[str]): A list of equal-length sequences (e.g., amino acid or DNA).
+
+  Returns:
+      str: The consensus sequence.
+
+  Raises:
+      ValueError: If the sequence list is empty or sequences are of unequal lengths.
+  """
+  if not sequences:
+    raise ValueError("The sequence list is empty.")
+
+  seq_length = len(sequences[0])
+  if any(len(seq) != seq_length for seq in sequences):
+    raise ValueError("All sequences must be of the same length.")
+
+  consensus = []
+  for i in range(seq_length):
+    column = [seq[i] for seq in sequences]
+    most_common, _ = Counter(column).most_common(1)[0]
+    consensus.append(most_common)
+
+  return "".join(consensus)
+
+
 def run_phmmer(query: str, database: str, evalue: float = 10.0, cpu: int = 2) -> List[str]:
   """Run phmmer using a query sequence against a database and
   return all the sequences that are considered as hits.

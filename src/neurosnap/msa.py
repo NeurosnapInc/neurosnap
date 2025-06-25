@@ -176,7 +176,7 @@ def seqid(seq1: str, seq2: str) -> float:
     The pairwise sequence identity, 0 means no matches found, 100 means sequences were identical.
   """
   assert len(seq1) == len(seq2), "Sequences are not the same length."
-  assert len(seq1) == 0, "Sequence cannot have a length of 0."
+  assert len(seq1) > 0, "Sequence cannot have a length of 0."
   num_matches = 0
   for a, b in zip(seq1, seq2):
     if a == b:

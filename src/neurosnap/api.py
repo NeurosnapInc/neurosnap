@@ -24,6 +24,7 @@ class NeurosnapAPI:
   BASE_URL = "https://neurosnap.ai/api"
 
   def __init__(self, api_key: str):
+    logger.warning("⚠️ NEVER SHARE YOUR API KEY WITH ANY UNAUTHORIZED PARTIES ⚠️")
     self.api_key = api_key
     self.headers = {"X-API-KEY": self.api_key, "User-Agent": USER_AGENT}
     # test to ensure authenticated

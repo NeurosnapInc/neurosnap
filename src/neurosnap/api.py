@@ -104,7 +104,7 @@ class NeurosnapAPI:
       print(json.dumps(jobs, indent=2))
     return jobs
 
-  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str], note : Optional[str] = None) -> Dict:
+  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str], note: Optional[str] = None) -> Dict:
     """Submit a Neurosnap job.
 
     Parameters:
@@ -341,3 +341,20 @@ class NeurosnapAPI:
     elif format_type == "json":
       print(json.dumps(jobs, indent=2))
     return jobs
+
+  def get_pipeline(self, pipeline_id: str) -> Dict:
+    """Fetches the pipeline data associated with a submitted Neurosnap pipeline.
+
+    Parameters:
+      pipeline_id: The ID of the pipeline to fetch.
+
+    Returns:
+      Pipeline object.
+
+    Raises:
+      HTTPError: If the API request fails.
+
+    """
+    r = requests.get(f"{self.BASE_URL}/pipelines/status/{pipeline_id}", headers=self.headers)
+    r.raise_for_status()
+    return r.json()

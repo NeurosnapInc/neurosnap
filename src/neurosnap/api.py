@@ -1,7 +1,7 @@
 import json
 import urllib.parse
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Union
 
 import requests
 from tabulate import tabulate
@@ -191,21 +191,19 @@ class NeurosnapAPI:
       print(json.dumps(files, indent=2))
     return files
 
-  def get_job_file(self, job_id: str, file_type: str, file_name: str, save_path: str, share_id: str = None) -> Tuple[str, bool]:
-    """Fetches a specific file from a completed Neurosnap job and saves it to the specified path.
+  def get_job_file(self, job_id: str, file_type: str, file_name: str, save_path: Union[str, None] = None, share_id: str = None) -> Union[str, None]:
+    """Fetches a specific file from a completed Neurosnap job and saves it to the specified path or
+    returns it as a string if no path is provided.
 
     Parameters:
       job_id: The ID of the job.
       file_type: The type of file to fetch.
-      file_name: The name of the specific file to fetch.
+      file_name: The name of the specific file to fetch (can be ``in`` or ``out``).
       save_path: The path where the file content will be saved.
       share_id: The share ID, if any.
 
     Returns:
-      Tuple of the form ``(save_path, download_succeeded)``
-
-        - ``save_path``: The path where the file is saved.
-        - ``download_succeeded``: True if the file was downloaded successfully, False otherwise.
+      Contents of the file fetched as a string or ``None`` if save_path is not provided.
 
     Raises:
       HTTPError: If the API request fails.
@@ -217,16 +215,14 @@ class NeurosnapAPI:
       url += f"?share={share_id}"
 
     # Make the request and check the status
-    response = requests.get(url, headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-    try:
+    r = requests.get(url, headers=self.headers)
+    r.raise_for_status()
+    if save_path is None:
+      return r.text
+    else:
       with open(save_path, "wb") as f:
-        f.write(response.content)
-      print(f"File saved to {save_path}")
-      return save_path, True
-    except Exception as e:
-      print(f"Failed to save file: {e}")
-      return save_path, False
+        f.write(r.content)
+      logger.info(f"File saved to {save_path}")
 
   def set_job_note(self, job_id: str, note: str) -> None:
     """Set a note for a submitted job.

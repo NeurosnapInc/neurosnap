@@ -166,7 +166,6 @@ class NeurosnapAPI:
 
     Raises:
       HTTPError: If the API request fails.
-      Exception: If job fails.
 
     """
     status = ""

@@ -34,11 +34,27 @@ class NeurosnapAPI:
       logger.error(
         f"Invalid API key provided (status code: {r.status_code}). Failed to setup the NeurosnapAPI object, please ensure your API key is correct."
       )
-      raise ValueError("Invalid token provided")
+      raise ValueError("Invalid API key provided")
     else:
       logger.info(
         "Successfully connected to the Neurosnap API.\n - For information visit https://neurosnap.ai/blog/post/66b00dacec3f2aa9b4be703a\n - For support visit https://neurosnap.ai/support\n - For bug reports visit https://github.com/NeurosnapInc/neurosnap"
       )
+
+  def _check_request(self, response: requests.Response):
+    """Utility function for checking whether a request was sent and responded to correctly.
+    Basically just a cleaner way of doing r.raise_for_status() with a more descriptive error.
+
+    Parameters:
+      response: The response object to check.
+
+    Raises:
+      HTTPError: If the API request fails.
+
+    """
+    if response.status_code != 200:
+      msg = f"Expected status code 200, got {response.status_code}. Error: {response.text}"
+      logger.error(msg)
+      raise requests.HTTPError(msg)
 
   def get_services(self, format_type: Optional[str] = None) -> List[Dict]:
     """Fetches and returns a list of available Neurosnap services. Optionally prints the services.
@@ -56,9 +72,9 @@ class NeurosnapAPI:
       HTTPError: If the API request fails.
 
     """
-    response = requests.get(f"{self.BASE_URL}/services", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-    services = response.json()
+    r = requests.get(f"{self.BASE_URL}/services", headers=self.headers)
+    self._check_request(r)
+    services = r.json()
 
     def format_service(service):
       """Helper to format individual service details."""
@@ -91,9 +107,10 @@ class NeurosnapAPI:
       HTTPError: If the API request fails.
 
     """
-    response = requests.get(f"{self.BASE_URL}/jobs", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-    jobs = response.json()
+    r = requests.get(f"{self.BASE_URL}/jobs", headers=self.headers)
+    self._check_request(r)
+
+    jobs = r.json()
     for job in jobs:
       if "Submitted" in job:
         timestamp = job["Submitted"] // 1000  # Convert milliseconds to seconds
@@ -130,12 +147,10 @@ class NeurosnapAPI:
     url = f"{self.BASE_URL}/job/submit/{service_name}"
     if note is not None:
       url += f"?note={note}"
-    response = requests.post(url, headers=self.headers, files=files_dict, data=filtered_data)
 
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-
-    # Return the job ID
-    return response.json()
+    r = requests.post(url, headers=self.headers, files=files_dict, data=filtered_data)
+    self._check_request(r)
+    return r.json()
 
   def get_job_status(self, job_id: str) -> str:
     """Fetches the status of a specified job.
@@ -151,7 +166,7 @@ class NeurosnapAPI:
 
     """
     r = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
-    assert r.status_code == 200, f"Expected status code 200, got {r.status_code}. Error: {r.text}"
+    self._check_request(r)
     return r.json()
 
   def wait_job_status(self, job_id: str, delay: int = 5) -> str:
@@ -172,7 +187,7 @@ class NeurosnapAPI:
     while status != "completed" and status != "failed":
       time.sleep(5)
       r = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
-      r.raise_for_status()
+      self._check_request(r)
       status = r.json()
       logger.info(f"Waiting for Neurosnap job with ID {job_id} (current status: {status})")
     return status
@@ -200,11 +215,13 @@ class NeurosnapAPI:
     url = f"{self.BASE_URL}/job/files/{job_id}/{file_type}"
     if share_id:
       url += f"?share={share_id}"
+
     # Make the request and check the status
-    response = requests.get(url, headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
+    r = requests.get(url, headers=self.headers)
+    self._check_request(r)
+
     # Parse the response
-    files = response.json()
+    files = r.json()
     # Optionally format the output based on the format_type
     format_type = format_type.lower()
     if format_type == "table":
@@ -240,7 +257,7 @@ class NeurosnapAPI:
 
     # Make the request and check the status
     r = requests.get(url, headers=self.headers)
-    r.raise_for_status()
+    self._check_request(r)
     if save_path is None:
       return r.text
     else:
@@ -259,11 +276,11 @@ class NeurosnapAPI:
     # Prepare the request data
     payload = {"job_id": job_id, "note": note}
     # Send the POST request
-    response = requests.post(f"{self.BASE_URL}/job/note/set", headers=self.headers, json=payload)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-    print(f"Note set successfully for job ID {job_id}.")
+    r = requests.post(f"{self.BASE_URL}/job/note/set", headers=self.headers, json=payload)
+    self._check_request(r)
+    logger.info(f"Note set successfully for job ID {job_id}.")
 
-  def set_job_share(self, job_id: str) -> Dict:
+  def set_job_share(self, job_id: str) -> str:
     """Enables the sharing feature of a job and makes it public.
 
     Parameters:
@@ -274,9 +291,12 @@ class NeurosnapAPI:
 
     """
     # Send the request to set job share
-    response = requests.get(f"{self.BASE_URL}/job/share/set/{job_id}", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-    return response.json()  # Return the JSON output containing the share ID
+    r = requests.get(f"{self.BASE_URL}/job/share/set/{job_id}", headers=self.headers)
+    self._check_request(r)
+
+    share_id = r.json()
+    logger.info(f"Job with ID {job_id} is now public with share ID {share_id}.")
+    return share_id
 
   def delete_job_share(self, job_id: str) -> None:
     """Disables the sharing feature of a job and makes the job private.
@@ -286,10 +306,9 @@ class NeurosnapAPI:
 
     """
     # Send the request to delete job share
-    response = requests.get(f"{self.BASE_URL}/job/share/delete/{job_id}", headers=self.headers)
-
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-    print(f"Job ID {job_id} is now private.")
+    r = requests.get(f"{self.BASE_URL}/job/share/delete/{job_id}", headers=self.headers)
+    self._check_request(r)
+    logger.info(f"Job with ID {job_id} is now private.")
 
   def get_team_info(self, format_type: Optional[str] = None) -> Dict:
     """Fetches your team's information if you are part of a Neurosnap Team.
@@ -304,10 +323,10 @@ class NeurosnapAPI:
       HTTPError: If the API request fails.
 
     """
-    response = requests.get(f"{self.BASE_URL}/teams/info", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
+    r = requests.get(f"{self.BASE_URL}/teams/info", headers=self.headers)
+    self._check_request(r)
 
-    team_info = response.json()
+    team_info = r.json()
     format_type = format_type.lower()
     if format_type == "table":
       # Prepare data for tabulation
@@ -347,13 +366,13 @@ class NeurosnapAPI:
       HTTPError: If the API request fails.
 
     """
-    response = requests.get(f"{self.BASE_URL}/teams/jobs", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
+    r = requests.get(f"{self.BASE_URL}/teams/jobs", headers=self.headers)
+    self._check_request(r)
 
-    jobs = response.json()
+    jobs = r.json()
     for job in jobs:
       if "Submitted" in job:
-        timestamp = job["Submitted"] // 1000  # Convert milliseconds to seconds
+        timestamp = job["Submitted"] / 1000  # Convert milliseconds to seconds
         job["Submitted"] = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
     format_type = format_type.lower()
     if format_type == "table":
@@ -376,5 +395,5 @@ class NeurosnapAPI:
 
     """
     r = requests.get(f"{self.BASE_URL}/pipelines/status/{pipeline_id}", headers=self.headers)
-    r.raise_for_status()
+    self._check_request(r)
     return r.json()

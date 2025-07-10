@@ -122,7 +122,7 @@ class NeurosnapAPI:
       print(json.dumps(jobs, indent=2))
     return jobs
 
-  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str], note: Optional[str] = None) -> Dict:
+  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str], note: Optional[str] = None) -> str:
     """Submit a Neurosnap job.
 
     Parameters:
@@ -150,6 +150,9 @@ class NeurosnapAPI:
 
     r = requests.post(url, headers=self.headers, files=files_dict, data=filtered_data)
     self._check_request(r)
+
+    job_id = r.json()
+    logger.info(f"{service_name} job successfully submitted with ID {job_id}.")
     return r.json()
 
   def get_job_status(self, job_id: str) -> str:

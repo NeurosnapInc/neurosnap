@@ -2,9 +2,11 @@ import json
 import time
 import urllib.parse
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
+from copy import deepcopy
 
 import requests
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 from tabulate import tabulate
 
 from neurosnap.log import logger
@@ -122,33 +124,42 @@ class NeurosnapAPI:
       print(json.dumps(jobs, indent=2))
     return jobs
 
-  def submit_job(self, service_name: str, files: Dict[str, str], data: Dict[str, str], note: Optional[str] = None) -> str:
-    """Submit a Neurosnap job.
+  def submit_job(self, service_name: str, fields: Union[MultipartEncoder, Dict[str, Any]], note: Optional[str] = None) -> str:
+    """
+    Submit a job to the Neurosnap platform.
+
+    This function handles the submission of a job to a specified Neurosnap service using
+    either a dictionary of input fields or a pre-constructed `MultipartEncoder` object.
 
     Parameters:
-      service_name: The name of the service to run.
-      files: A dictionary mapping file names to file paths.
-      data: A dictionary of additional data to be passed to the service.
+      - service_name: The name of the Neurosnap service (e.g., "TemStaPro", "NetSolP", "Boltz-1") to submit the job to.
+      - fields: Either:
+        - A dictionary mapping field names to values (which will be encoded automatically), or
+        - A `MultipartEncoder` instance if you want full control over encoding.
+        Refer to the API section of the tool's page on https://neurosnap.ai for required field names and formats.
+      note (Optional[str]): An optional note or tag to include in the job submission (e.g., "optimization_run_3").
 
     Returns:
-      The job ID of the submitted job.
+      The job ID assigned to the submitted job.
 
     Raises:
-      HTTPError: If the API request fails.
-
+      HTTPError: If the API request fails or returns a non-200 status code.
     """
-    # Filter out data fields with value 'false'
-    filtered_data = {k: v for k, v in data.items() if v != "false"}
+    # prepare input fields
+    if isinstance(fields, MultipartEncoder):
+      multipart_data = fields
+    else:
+      multipart_data = MultipartEncoder(fields=fields)
 
-    # Open the files in binary mode
-    files_dict = {k: open(v, "rb") for k, v in files.items()}
-
-    # Make the POST request
+    # build URL
     url = f"{self.BASE_URL}/job/submit/{service_name}"
     if note is not None:
       url += f"?note={note}"
 
-    r = requests.post(url, headers=self.headers, files=files_dict, data=filtered_data)
+    # send post request
+    headers = deepcopy(self.headers)
+    headers["Content-Type"] = multipart_data.content_type
+    r = requests.post(url, headers=headers, data=multipart_data)
     self._check_request(r)
 
     job_id = r.json()

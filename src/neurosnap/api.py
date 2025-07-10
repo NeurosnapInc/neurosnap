@@ -221,8 +221,8 @@ class NeurosnapAPI:
 
     Parameters:
       job_id: The ID of the job.
-      file_type: The type of file to fetch.
-      file_name: The name of the specific file to fetch (can be ``in`` or ``out``).
+      file_type: The type of file to fetch (can be ``in`` or ``out``).
+      file_name: The name of the specific file to fetch.
       save_path: The path where the file content will be saved.
       share_id: The share ID, if any.
 

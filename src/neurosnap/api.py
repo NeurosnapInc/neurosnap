@@ -1,4 +1,5 @@
 import json
+import time
 import urllib.parse
 from datetime import datetime
 from typing import Dict, List, Optional, Union
@@ -136,7 +137,7 @@ class NeurosnapAPI:
     # Return the job ID
     return response.json()
 
-  def get_job_status(self, job_id: str) -> Dict:
+  def get_job_status(self, job_id: str) -> str:
     """Fetches the status of a specified job.
 
     Parameters:
@@ -149,9 +150,33 @@ class NeurosnapAPI:
       HTTPError: If the API request fails.
 
     """
-    response = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
-    assert response.status_code == 200, f"Expected status code 200, got {response.status_code}. Error: {response.text}"
-    return response.json()
+    r = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
+    assert r.status_code == 200, f"Expected status code 200, got {r.status_code}. Error: {r.text}"
+    return r.json()
+
+  def wait_job_status(self, job_id: str, delay: int = 5) -> str:
+    """Waits for the status of a job to either change to ``completed`` or ``failed``.
+
+    Parameters:
+      job_id: The ID of the job.
+      delay: The delay between requests in seconds.
+
+    Returns:
+      The status of the job.
+
+    Raises:
+      HTTPError: If the API request fails.
+      Exception: If job fails.
+
+    """
+    status = ""
+    while status != "completed" and status != "failed":
+      time.sleep(5)
+      r = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
+      r.raise_for_status()
+      status = r.json()
+      logger.info(f"Waiting for Neurosnap job with ID {job_id} (current status: {status})")
+    return status
 
   def get_job_files(self, job_id: str, file_type: str, share_id: str = None, format_type: Optional[str] = None) -> List[str]:
     """Fetches all files from a completed Neurosnap job and optionally prints them.

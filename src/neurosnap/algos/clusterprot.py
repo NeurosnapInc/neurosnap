@@ -74,8 +74,7 @@ def ClusterProt(
   proteins_vects = []
   logger.debug(f"Clustering {len(proteins)} proteins")
 
-  if len(proteins) < 5:
-    raise "ClusterProt requires at least 5 proteins in order to work."
+  assert len(proteins) >= 5, "ClusterProt requires at least 5 proteins in order to work."
 
   # compute distance matrices
   logger.debug("Computing distance matrices")

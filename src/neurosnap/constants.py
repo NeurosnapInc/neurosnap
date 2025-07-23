@@ -2,42 +2,19 @@
 This file contains constants.
 """
 
-
 # Names of atoms that are part of a protein's backbone structure
 BACKBONE_ATOMS = {"N", "CA", "C"}
-# Codes for both RNA and DNA
+# Codes for standard nucleotides (both RNA and DNA)
 STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG", "DU"}
-## Standard amino acids excluding the unknown character ("X")
-## Currently excludes
-# O | pyl | pyrrolysine
-# U | sec | selenocysteine
-# B | asx | asparagine/aspartic acid
-# Z | glx | glutamine/glutamic acid
-# J | xle | leucine/isoleucine
-# X | UNK | unknown codon
-# * | TRM | termination codon
-STANDARD_AAs = "ACDEFGHIKLMNPQRSTVWY"
-STANDARD_AAs_ABR = {
-  "ALA",
-  "ARG",
-  "ASN",
-  "ASP",
-  "CYS",
-  "GLN",
-  "GLU",
-  "GLY",
-  "HIS",
-  "ILE",
-  "LEU",
-  "LYS",
-  "MET",
-  "PHE",
-  "PRO",
-  "SER",
-  "THR",
-  "TRP",
-  "TYR",
-  "VAL",
+# Codes for standard amino acids
+STANDARD_AAs = set("ACDEFGHIKLMNPQRSTVWY")
+# Maps non-standard amino acids to equivalent standard amino acids (if possible)
+NON_STANDARD_AAs_TO_STANDARD_AAs = {
+  "O": "K",  # Pyrrolysine → closest to Lysine
+  "U": "C",  # Selenocysteine → closest to Cysteine
+  "B": "D",  # Asparagine/Aspartic Acid → map to Aspartic Acid
+  "Z": "E",  # Glutamine/Glutamic Acid → map to Glutamic Acid
+  "J": "L",  # Leucine/Isoleucine → map to Leucine
 }
 # List of hydrophobic residues
 HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
@@ -64,12 +41,14 @@ AAs_FULL_TABLE = [
   ["W", "TRP", "TRYPTOPHAN"],
   ["Y", "TYR", "TYROSINE"],
   ["V", "VAL", "VALINE"],
+  # NON-STANDARD AMINO ACIDS
   ["O", "PYL", "PYRROLYSINE"],
   ["U", "SEC", "SELENOCYSTEINE"],
   ["B", "ASX", "ASPARAGINE/ASPARTIC ACID"],
   ["Z", "GLX", "GLUTAMINE/GLUTAMIC ACID"],
   ["J", "XLE", "LEUCINE/ISOLEUCINE"],
-  ["X", "UNK", "UNKNOWN CODON"],
+  ["X", "UNK", "UNKNOWN"],
+  ["*", "TRM", "TERMINATION"],
 ]
 AA_CODE_TO_ABR = {}
 AA_CODE_TO_NAME = {}

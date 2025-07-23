@@ -44,7 +44,8 @@ from neurosnap.constants import (
   BACKBONE_ATOMS,
   HYDROPHOBIC_RESIDUES,
   STANDARD_NUCLEOTIDES,
-  STANDARD_AAs_ABR,
+  NON_STANDARD_AAs_TO_STANDARD_AAs,
+  STANDARD_AAs,
 )
 from neurosnap.log import logger
 from neurosnap.msa import read_msa
@@ -290,12 +291,13 @@ class Protein:
       model = self.models()[0]
     assert model in self.structure, f'Protein does not contain model "{model}"'
     assert chain in self.structure[model], f'Model {model} does not contain chain "{chain}"'
-
     seq = ""
     for res in self.structure[model][chain]:
       resn = res.get_resname()
-      if resn in STANDARD_AAs_ABR:
+      try:
         seq += getAA(resn)[0]
+      except:
+        pass
 
     return seq
 
@@ -1166,6 +1168,53 @@ def getAA(query: str) -> Tuple[str, str, str]:
       return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
   except KeyError:
     raise ValueError(f"Unknown amino acid for {query}")
+
+
+def sanitize_aa_seq(seq: str, non_standard: str = "reject", trim_term: bool = True, uppercase=True, clean_whitespace: bool = True) -> str:
+  """
+  Validates and sanitizes an amino acid sequence string.
+
+  Parameters:
+      seq: The input amino acid sequence.
+      non_standard: How to handle non-standard amino acids.
+          Must be one of:
+          - "reject": Raise an error if any non-standard residue is found (default).
+          - "convert": Replace non-standard residues with standard equivalents, if possible.
+          - "allow": Keep non-standard residues unchanged.
+      trim_term: If True, trims terminal stop codons ("*") from the end of the sequence. Default is True.
+      uppercase: If True, converts the sequence to uppercase before processing. Default is True.
+      clean_whitespace: If True, removes all whitespace characters from the sequence. Default is True.
+
+  Returns:
+      The sanitized amino acid sequence.
+
+  Raises:
+      ValueError: If an invalid residue is found and `non_standard` is set to "reject",
+                  or if a residue cannot be converted when `non_standard` is "convert".
+      AssertionError: If `non_standard` is not one of "allow", "convert", or "reject".
+  """
+  assert non_standard in ("allow", "convert", "reject"), f'Unknown value of "{non_standard}" supplied for non_standard parameter.'
+
+  if uppercase:
+    seq = seq.upper()
+
+  if clean_whitespace:
+    seq = re.sub(r"\s", "", seq)
+
+  if trim_term:
+    seq = seq.rstrip("*")
+
+  new_seq = ""
+  for i, x in enumerate(seq, start=1):
+    if x not in STANDARD_AAs:
+      if non_standard == "allow":
+        pass
+      elif non_standard == "convert":
+        x = NON_STANDARD_AAs_TO_STANDARD_AAs[x]
+      else:
+        raise ValueError(f'Invalid amino acid "{x}" specified at position {i}.')
+    new_seq += x
+  return new_seq
 
 
 def calculate_bsa(

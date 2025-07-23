@@ -68,7 +68,7 @@ def read_msa(
     reg_rc = re.compile(f"[{remove_chars}\\s]")
   if drop_chars:
     reg_dc = re.compile(f"[{drop_chars}]")
-  reg_ac = re.compile(f"^[{STANDARD_AAs+allow_chars}]*$")
+  reg_ac = re.compile(f"^[{''.join(STANDARD_AAs)+allow_chars}]*$")
 
   if isinstance(input_fasta, str):
     if os.path.exists(input_fasta):

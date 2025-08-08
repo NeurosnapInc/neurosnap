@@ -136,7 +136,7 @@ def get_ccds(fpath: str = "~/.cache/ccd_codes.json") -> Set[str]:
       if "_chem_comp.three_letter_code" in line:
         code = line.split()[-1]
         if code != "?":
-          codes.append(code)
+          codes.append(code.upper())
 
     with open(fpath, "w") as f:
       json.dump(codes, f)
@@ -169,6 +169,7 @@ def fetch_ccd(ccd_code: str, fpath: str):
       - CCD Information: https://www.wwpdb.org/data/ccd
       - SDF File Download: https://files.rcsb.org/ligands/download/{CCD_CODE}_ideal.sdf
   """
+  ccd_code = ccd_code.upper()
   logger.info(f"Fetching CCD with code {ccd_code} from rcsb.org...")
   r = requests.get(f"https://files.rcsb.org/ligands/download/{ccd_code}_ideal.sdf")
   r.raise_for_status()

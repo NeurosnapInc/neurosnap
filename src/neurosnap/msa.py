@@ -249,7 +249,12 @@ def run_phmmer(query: str, database: str, evalue: float = 10.0, cpu: int = 2) ->
   return hit_names
 
 
-def align_mafft(seqs: Union[str, List[str], Dict[str, str]], ep: float = 0.0, op: float = 1.53) -> Tuple[List[str], List[str]]:
+def align_mafft(
+  seqs: Union[str, List[str], Dict[str, str]],
+  ep: float = 0.0,
+  op: float = 1.53,
+  threads: int = 8,
+) -> Tuple[List[str], List[str]]:
   """Generates an alignment using mafft.
 
   Parameters:
@@ -260,18 +265,18 @@ def align_mafft(seqs: Union[str, List[str], Dict[str, str]], ep: float = 0.0, op
       - dictionary where values are AA sequences and keys are their corresponding names/IDs
     ep: ep value for mafft, default is 0.00
     op: op value for mafft, default is 1.53
+    threads: Number of MAFFT threads to use (default: 8)
 
   Returns:
     A tuple of the form ``(out_names, out_seqs)``
 
     - ``out_names``: list of aligned protein names
     - ``out_seqs``: list of corresponding protein sequences
-
   """
-  # check if mafft is actually present
   assert (
     shutil.which("mafft") is not None
   ), "Cannot create alignment without mafft being installed. Please install mafft either using a package manager or from https://mafft.cbrc.jp/alignment/software/"
+
   with tempfile.TemporaryDirectory() as tmp_dir:
     tmp_fasta_path = f"{tmp_dir}/tmp.fasta"
     if isinstance(seqs, str):
@@ -289,17 +294,16 @@ def align_mafft(seqs: Union[str, List[str], Dict[str, str]], ep: float = 0.0, op
         f"Input seqs cannot be of type {type(seqs)}. Can be fasta file path, list of sequences, or dictionary where values are AA sequences and keys are their corresponding names/IDs."
       )
 
-    # logger.info(f"[*] Generating alignment with {len(seqs)} using mafft.")
     align_out = subprocess.run(
-      ["mafft", "--thread", "8", "--maxiterate", "1000", "--globalpair", "--ep", str(ep), "--op", str(op), tmp_fasta_path],
+      ["mafft", "--thread", str(threads), "--maxiterate", "1000", "--globalpair", "--ep", str(ep), "--op", str(op), tmp_fasta_path],
       stdout=subprocess.PIPE,
       stderr=subprocess.PIPE,
     )
     try:
       align_out.check_returncode()
     except:  # noqa: E722
-      logger.error(align_out.stderr)
-      raise Exception()
+      # Keep behavior similar to original; surface stderr
+      raise Exception(align_out.stderr.decode("utf-8", errors="ignore"))
 
   return read_msa(io.StringIO(align_out.stdout.decode("utf-8")), allow_chars="-")
 

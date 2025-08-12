@@ -303,52 +303,62 @@ def align_mafft(seqs: Union[str, List[str], Dict[str, str]], ep: float = 0.0, op
   return read_msa(io.StringIO(align_out.stdout.decode("utf-8")), allow_chars="-")
 
 
-def run_phmmer_mafft(query: str, ref_db_path: str, size: int = float("inf"), in_name: str = "input_sequence") -> Tuple[List[str], List[str]]:
+def run_phmmer_mafft(
+  query: str, ref_db_path: str, size: Optional[int] = None, in_name: str = "input_sequence", phmmer_cpu: int = 2, mafft_threads: int = 8
+) -> Tuple[List[str], List[str]]:
   """Generate MSA using phmmer and mafft from reference sequences.
 
   Parameters:
     query: Amino acid sequence of the protein whose MSA you want to create
     ref_db_path: Path to reference database of sequences with which you want to search for hits and create and alignment
-    size: Top n number of sequences to keep
+    size: Total number of sequences to return, including the query. Use None to include all hits. Must be a positive integer greater than 1.
     in_name: Optional name for input sequence to put in the output
+    phmmer_cpu: The number of CPU cores to be used to run phmmer (default: 2)
+    mafft_threads: Number of MAFFT threads to use (default: 8)
 
   Returns:
     A tuple of the form ``(out_names, out_seqs)``
 
     - ``out_names``: list of aligned protein names
     - ``out_seqs``: list of corresponding protein sequences
-
   """
+  assert size is None or (isinstance(size, int) and size > 1), "size must be None or a positive integer greater than 1."
   with tempfile.TemporaryDirectory() as tmp_dir:
     tmp_fasta_path = f"{tmp_dir}/tmp.fasta"
+
     # clean input fasta
     names, seqs = read_msa(ref_db_path, remove_chars="*-", drop_chars="X")
+
     # ensure no duplicate IDs
     reference_seqs = {}
     for i, (name, seq) in enumerate(zip(names, seqs)):
-      if name not in seq:
-        reference_seqs[name] = seq
-      else:
-        reference_seqs[f"{name}_{i}"] = seq
+      key = name if name not in reference_seqs else f"{name}_{i}"
+      reference_seqs[key] = seq
+
     # write cleaned fasta
-    write_msa(tmp_fasta_path, reference_seqs.keys(), reference_seqs.values())
+    write_msa(tmp_fasta_path, list(reference_seqs.keys()), list(reference_seqs.values()))
 
     # find hits
-    hits = run_phmmer(query, tmp_fasta_path)
+    hits = run_phmmer(query, tmp_fasta_path, cpu=phmmer_cpu)
     logger.info(f"Found {len(hits)}/{len(names)} in reference DB for query.")
     unaligned_seqs = {in_name: query}  # keep target sequence at the top
-    found_names = set(in_name)
-    found_seqs = set(query)
-    for i in range(min(size, len(hits) - 1)):
-      hit_name = hits[i]
-      hit_seq = reference_seqs[hit_name]
-      if hit_name not in found_names and hit_seq not in found_seqs:
+    found_names = {in_name}
+    found_seqs = {query}
+
+    # choose up to `size` hits
+    chosen = hits if size is None else hits[: size - 1]
+
+    for hit_name in chosen:
+      hit_seq = reference_seqs.get(hit_name)
+      if hit_seq is None:
+        continue
+      if (hit_name not in found_names) and (hit_seq not in found_seqs):
         found_names.add(hit_name)
         found_seqs.add(hit_seq)
         unaligned_seqs[hit_name] = hit_seq
 
   # generate alignment and return
-  return align_mafft(unaligned_seqs)
+  return align_mafft(unaligned_seqs, threads=mafft_threads)
 
 
 def run_mmseqs2(

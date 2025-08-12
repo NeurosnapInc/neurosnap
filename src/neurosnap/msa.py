@@ -249,12 +249,7 @@ def run_phmmer(query: str, database: str, evalue: float = 10.0, cpu: int = 2) ->
   return hit_names
 
 
-def align_mafft(
-  seqs: Union[str, List[str], Dict[str, str]],
-  ep: float = 0.0,
-  op: float = 1.53,
-  threads: int = 8,
-) -> Tuple[List[str], List[str]]:
+def align_mafft(seqs: Union[str, List[str], Dict[str, str]], ep: float = 0.0, op: float = 1.53, threads: int = 8) -> Tuple[List[str], List[str]]:
   """Generates an alignment using mafft.
 
   Parameters:

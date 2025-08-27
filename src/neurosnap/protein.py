@@ -1266,6 +1266,7 @@ def calculate_bsa(
 
   return (sasa_group1 + sasa_group2) - sasa_complex
 
+
 def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0, template_smiles_map=None):
   """
   Extract non-biopolymer molecules from a PDB and write each as SDF in Kekulé form.
@@ -1274,6 +1275,7 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0, 
 
   def is_biopolymer(molecule):
     biopolymer_keywords = {
+      # Amino acids
       "GLY",
       "ALA",
       "VAL",
@@ -1294,6 +1296,7 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0, 
       "LYS",
       "ARG",
       "HIS",
+      # Nucleotide bases
       "DA",
       "DT",
       "DG",

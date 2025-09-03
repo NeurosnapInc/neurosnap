@@ -148,38 +148,53 @@ def _calc_pdockq_from_arrays(chain_coords: dict, chain_plddt: dict, dist_thresh:
   return float(pdockq), float(ppv)
 
 
-def calculate_pDockQ(structure: Union[str, Protein], chain_id1: str, chain_id2: str, dist_thresh: float = 8.0) -> Tuple[float, float]:
+def calculate_pDockQ(structure: Union[str, Protein], chain1: str = None, chain2: str = None, dist_thresh: float = 8.0) -> Tuple[float, float]:
   """
   Calculate the predicted DockQ (pDockQ) score and corresponding PPV
   for a two-chain complex.
 
   Args:
       structure: Protein object or a path/ID string that can be parsed by neurosnap.protein.Protein
-      chain_id1: Chain ID for the first chain (e.g., "A")
-      chain_id2: Chain ID for the second chain (e.g., "B")
+      chain1: Chain ID for the first chain (e.g., "A"). If None, auto-detected if only 2 chains exist.
+      chain2: Chain ID for the second chain (e.g., "B"). If None, auto-detected if only 2 chains exist.
       dist_thresh: Distance threshold (Å) for interface contacts, default 8.0
 
   Returns:
-      (pdockq, ppv)
+      (pdockq, ppv):
+          - pdockq (float): Predicted DockQ score between 0 and 1. Higher values suggest
+            greater confidence that the predicted interface is correct.
+          - ppv (float): Estimated positive predictive value (precision) corresponding to
+            the pDockQ score. Represents the minimum expected probability that the
+            predicted interface is correct (bounded roughly 0.55-0.98 with higher being better).
   """
   # Normalize/obtain a Protein object
   prot = structure if isinstance(structure, Protein) else Protein(structure, format="auto")
 
+  chains = prot.chains(prot.models()[0])
+
+  # Auto-detect if chains are not specified
+  if chain1 is None or chain2 is None:
+    if len(chains) == 2:
+      chain1, chain2 = chains
+    else:
+      raise ValueError(
+        f"Ambiguous chain selection: structure has {len(chains)} chains " f"({', '.join(chains)}). Please specify chain_id1 and chain_id2 explicitly."
+      )
+
   # Basic chain validation
-  chains = set(prot.chains(prot.models()[0]))
-  if chain_id1 not in chains:
-    raise ValueError(f'Chain "{chain_id1}" not found. Available chains: {sorted(chains)}')
-  if chain_id2 not in chains:
-    raise ValueError(f'Chain "{chain_id2}" not found. Available chains: {sorted(chains)}')
-  if chain_id1 == chain_id2:
+  if chain1 not in chains:
+    raise ValueError(f'Chain "{chain1}" not found. Available chains: {chains}')
+  if chain2 not in chains:
+    raise ValueError(f'Chain "{chain2}" not found. Available chains: {chains}')
+  if chain1 == chain2:
     raise ValueError("chain_id1 and chain_id2 must be different.")
 
   # Extract chain representatives and plDDT
-  coords1, plddt1 = _chain_cb_or_gly_ca(prot, chain_id1)
-  coords2, plddt2 = _chain_cb_or_gly_ca(prot, chain_id2)
+  coords1, plddt1 = _chain_cb_or_gly_ca(prot, chain1)
+  coords2, plddt2 = _chain_cb_or_gly_ca(prot, chain2)
 
-  chain_coords = {chain_id1: coords1, chain_id2: coords2}
-  chain_plddt = {chain_id1: plddt1, chain_id2: plddt2}
+  chain_coords = {chain1: coords1, chain2: coords2}
+  chain_plddt = {chain1: plddt1, chain2: plddt2}
 
   # Compute and return
   return _calc_pdockq_from_arrays(chain_coords, chain_plddt, dist_thresh)

@@ -40,6 +40,7 @@ Example
 """
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from openmm import LangevinIntegrator, Platform, unit
@@ -124,23 +125,23 @@ def _compute_rmsd(ref_positions, new_positions):
 
 
 def minimize(
-  pdb_file,
-  output_minimized_pdb="minimized.pdb",
-  max_iterations=1000,
-  tolerance=1.0,  # Default tolerance of 1.0 Kcal/mol
-  use_gpu=True,
-  properties={},
+  pdb_file: str,
+  output_minimized_pdb: str = "minimized.pdb",
+  max_iterations: int = 1000,
+  tolerance: float = 1.0,  # Default tolerance of 1.0 Kcal/mol
+  use_gpu: bool = True,
+  properties: dict[str, Any] = {},
 ):
   """
   Loads a PDB file and performs energy minimization with a specified tolerance.
 
   Args:
-      pdb_file (str): Path to input PDB file.
-      output_minimized_pdb (str): Path to output minimized PDB file.
-      max_iterations (int): Number of minimization iterations.
-      tolerance (float): Convergence tolerance in Kcal/mol (range: 0.1 - 10.0).
-      use_gpu (bool): Whether to use GPU (CUDA). Defaults to True.
-      properties (dict[str, Any]): Platform properties to provide to OpenMM if needed.
+      pdb_file: Path to input PDB file.
+      output_minimized_pdb: Path to output minimized PDB file.
+      max_iterations: Number of minimization iterations.
+      tolerance: Convergence tolerance in Kcal/mol (range: 0.1 - 10.0).
+      use_gpu: Whether to use GPU (CUDA). Defaults to True.
+      properties: Platform properties to provide to OpenMM if needed.
 
   Returns:
       dict: Contains RMSD, initial energy, and final energy.

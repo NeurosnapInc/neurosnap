@@ -185,7 +185,7 @@ def minimize(
   if use_gpu:
     platform = Platform.getPlatformByName("CUDA")
     properties["CudaPrecision"] = "mixed"
-    properties["DisablePmeStream"] = "true"  # may be needed when successive failures occur
+    # properties["DisablePmeStream"] = "true"  # may be needed when successive failures occur
   else:
     platform = Platform.getPlatformByName("CPU")
     properties = {}

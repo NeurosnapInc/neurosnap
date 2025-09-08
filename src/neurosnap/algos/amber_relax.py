@@ -220,6 +220,6 @@ def minimize(
   _apply_bfactors_to_pdb(input_bfactor_map, tmp_minimized, output_minimized_pdb)
   Path(tmp_minimized).unlink(missing_ok=True)
 
-  logger.info(f"Minimization complete! Minimized structure saved as {output_minimized_pdb}")
+  logger.info(f"Minimization complete, minimized structure saved to {output_minimized_pdb}")
 
   return {"rmsd": rmsd, "final_energy": final_energy, "initial_energy": initial_energy}

@@ -164,6 +164,7 @@ def minimize(
   fixer.findNonstandardResidues()
   fixer.replaceNonstandardResidues()
   fixer.findMissingAtoms()
+  fixer.findMissingResidues()
   fixer.addMissingAtoms()
 
   # Set up force field and Modeller-based fixes

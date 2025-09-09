@@ -163,7 +163,7 @@ def minimize(
   fixer = PDBFixer(filename=pdb_file)
   fixer.findNonstandardResidues()
   fixer.replaceNonstandardResidues()
-  # (We intentionally do NOT call fixer.addMissingAtoms/Hydrogens here since redundant with modeller)
+  fixer.addMissingAtoms()
 
   # Set up force field and Modeller-based fixes
   forcefield = ForceField("amber14-all.xml", "amber14/tip3p.xml")
@@ -172,7 +172,6 @@ def minimize(
   modeller = Modeller(fixer.topology, fixer.positions)
 
   # Order matters to avoid redundancy and to let FF drive what's added
-  modeller.addMissingAtoms(forcefield)  # fill heavy atoms using FF templates
   modeller.addHydrogens(forcefield, pH=7.0)  # then add Hs based on FF/pH
   modeller.addExtraParticles(forcefield)  # e.g., lone pairs/virtual sites; safe no-op for TIP3P
 

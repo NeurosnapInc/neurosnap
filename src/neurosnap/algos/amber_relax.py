@@ -163,6 +163,7 @@ def minimize(
   fixer = PDBFixer(filename=pdb_file)
   fixer.findNonstandardResidues()
   fixer.replaceNonstandardResidues()
+  fixer.findMissingResidues()
   fixer.addMissingAtoms()
 
   # Set up force field and Modeller-based fixes

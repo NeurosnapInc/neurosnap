@@ -131,7 +131,7 @@ def minimize(
   tolerance: float = 1.0,  # Default tolerance of 1.0 Kcal/mol
   use_gpu: bool = True,
   properties: dict[str, Any] = {},
-):
+) -> dict[str, float]:
   """
   Loads a PDB file and performs energy minimization with a specified tolerance.
 
@@ -159,24 +159,24 @@ def minimize(
   # snapshot B-factors from the cleaned input
   input_bfactor_map = _load_bfactors_from_pdb(pdb_file)
 
-  # Fix PDB issues (missing residues, hydrogens, etc.)
+  # Fix only what's necessary with PDBFixer (nonstandard residues)
   fixer = PDBFixer(filename=pdb_file)
-  fixer.findMissingResidues()
   fixer.findNonstandardResidues()
-  fixer.findMissingAtoms()
   fixer.replaceNonstandardResidues()
-  fixer.addMissingAtoms()
-  fixer.addMissingHydrogens(pH=7.0)
+  # (We intentionally do NOT call fixer.addMissingAtoms/Hydrogens here since redundant with modeller)
 
-  # Write the fixed PDB
-  with open(pdb_file, "w") as f:
-    PDBFile.writeFile(fixer.topology, fixer.positions, f)
-
-  # Set up force field
+  # Set up force field and Modeller-based fixes
   forcefield = ForceField("amber14-all.xml", "amber14/tip3p.xml")
 
-  # Create OpenMM system
+  # Build modeller from the (possibly still incomplete) topology/positions
   modeller = Modeller(fixer.topology, fixer.positions)
+
+  # Order matters to avoid redundancy and to let FF drive what's added
+  modeller.addMissingAtoms(forcefield)  # fill heavy atoms using FF templates
+  modeller.addHydrogens(forcefield, pH=7.0)  # then add Hs based on FF/pH
+  modeller.addExtraParticles(forcefield)  # e.g., lone pairs/virtual sites; safe no-op for TIP3P
+
+  # Create OpenMM system
   system = forcefield.createSystem(modeller.topology, nonbondedMethod=NoCutoff, constraints=HBonds)
 
   # Set up integrator
@@ -185,8 +185,8 @@ def minimize(
   # Select GPU or CPU
   if use_gpu:
     platform = Platform.getPlatformByName("CUDA")
-    properties["CudaPrecision"] = "mixed"
-    # properties["DisablePmeStream"] = "true"  # may be needed when successive failures occur
+    properties = {**properties, "CudaPrecision": "mixed"}
+    # properties["DisablePmeStream"] = "true"  # optional for certain GPUs
   else:
     platform = Platform.getPlatformByName("CPU")
     properties = {}
@@ -209,7 +209,7 @@ def minimize(
   minimized_positions = state.getPositions()
 
   # Compute RMSD
-  rmsd = _compute_rmsd(fixer.positions, minimized_positions).value_in_unit(unit.angstroms)
+  rmsd = _compute_rmsd(modeller.positions, minimized_positions).value_in_unit(unit.angstroms)
 
   # Save minimized structure to a temp path first
   tmp_minimized = str(Path(output_minimized_pdb).with_suffix(".tmp.pdb"))

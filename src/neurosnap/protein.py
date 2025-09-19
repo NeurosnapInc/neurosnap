@@ -326,6 +326,7 @@ class Protein:
 
     Raises:
         ValueError: If a specified chain or residue in the selector does not exist in the structure.
+        ValueError: If selector string is empty.
     """
     if model is None:
       model = self.models().pop(0)
@@ -349,6 +350,8 @@ class Protein:
     # remove ",," if present
     while ",," in selectors:
       selectors = selectors.replace(",,", ",")
+
+    assert selectors, "Provided selectors string is empty"
 
     # get selection
     for selector in selectors.split(","):

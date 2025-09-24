@@ -82,6 +82,9 @@ def validate_smiles(smiles: str) -> bool:
   Raises:
     Exception: Logs any exception encountered during validation.
   """
+  if not smiles:
+    logger.error("Invalid input SMILES provided. SMILES string cannot be empty.")
+    return False
   try:
     mol: Optional[Chem.Mol] = Chem.MolFromSmiles(smiles)
     return mol is not None

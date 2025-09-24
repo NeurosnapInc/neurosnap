@@ -334,7 +334,7 @@ class Protein:
       raise ValueError(f'Protein does not contain model "{model}"')
 
     # get chains and create output object
-    chains = self.chains()
+    chains = self.chains(model)
     output = {}
     for chain in chains:
       output[chain] = set()

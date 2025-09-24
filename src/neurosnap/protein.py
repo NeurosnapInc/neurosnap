@@ -362,7 +362,6 @@ class Protein:
 
       # if select entire chain
       if len(selector) == 1:
-        self.df[(self.df["chain"] == chain)]
         output[chain] = output[chain].union(self.df[(self.df["chain"] == chain)]["res_id"].to_list())
         continue
 

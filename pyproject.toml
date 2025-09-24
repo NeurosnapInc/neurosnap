@@ -61,3 +61,11 @@ Issues = "https://github.com/NeurosnapInc/neurosnap/issues"
 [tool.ruff]
 line-length = 150
 indent-width = 2
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+markers = [
+  "slow: may take >10s",
+  "integration: crosses module boundaries / uses real IO",
+  "mmseqs2: requires ColabFold MMseqs2 API/network access",
+]

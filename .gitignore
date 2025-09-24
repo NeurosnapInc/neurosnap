@@ -4,7 +4,8 @@
 **/.venv
 **/.vscode
 neurosnap.egg-info
-test_files/
+tests/test_tmp.py
+.pytest_cache
 dist/
 
 # sphinx

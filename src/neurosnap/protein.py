@@ -1372,6 +1372,7 @@ def net_charge(sequence: str, pH: float, pKa: dict[str, float] = DEFAULT_PKA) ->
 def isoelectric_point(
   sequence: str,
   pKa: dict[str, float] = DEFAULT_PKA,
+  *,
   pH_low: float = 0.0,
   pH_high: float = 14.0,
   tol: float = 1e-4,

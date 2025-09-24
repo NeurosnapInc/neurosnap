@@ -205,9 +205,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert (
-      model1 is not None
-    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    assert model1 is not None, (
+      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
+    )
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self) -> List[int]:
@@ -305,7 +305,7 @@ class Protein:
 
     return seq
 
-  def select_residues(self, selectors: str, invert : bool = False, model: Optional[int] = None) -> Dict[str, List[int]]:
+  def select_residues(self, selectors: str, invert: bool = False, model: Optional[int] = None) -> Dict[str, List[int]]:
     """Select residues from a protein structure using a string selector.
 
     This method allows for flexible selection of residues in a protein structure
@@ -405,16 +405,16 @@ class Protein:
         empty.append(chain)
     for chain in empty:
       del output[chain]
-    
+
     if invert:
       output_inverted = {}
       for chain in chains:
         avail_resis = set(dfm[(dfm["chain"] == chain)]["res_id"].to_list())
-        if chain in output: # chain is in output so get all residues not specified
+        if chain in output:  # chain is in output so get all residues not specified
           diff_resis = avail_resis - set(output[chain])
           if diff_resis:
             output_inverted[chain] = diff_resis
-        else: # chain is not in output so the entire chain is selected
+        else:  # chain is not in output so the entire chain is selected
           output_inverted[chain] = avail_resis
       output = output_inverted
 
@@ -1239,7 +1239,7 @@ def sanitize_aa_seq(seq: str, non_standard: str = "reject", trim_term: bool = Tr
   return new_seq
 
 
-def molecular_weight(sequence: str, aa_mws : dict[str, float] = AA_WEIGHTS_PROTEIN_AVG) -> float:
+def molecular_weight(sequence: str, aa_mws: dict[str, float] = AA_WEIGHTS_PROTEIN_AVG) -> float:
   """
   Calculate the molecular weight of a protein or peptide sequence.
 
@@ -1276,19 +1276,19 @@ def molecular_weight(sequence: str, aa_mws : dict[str, float] = AA_WEIGHTS_PROTE
   """
   # Remove whitespace and convert to uppercase
   sequence = sequence.strip().upper()
-  
+
   # Sum molecular weights
   weight = 0.0
   for aa in sequence:
     if aa not in aa_mws:
       raise ValueError(f"Invalid amino acid: {aa}")
     weight += aa_mws[aa]
-  
+
   # Adjust for water loss during peptide bond formation
   # Each peptide bond loses one H2O (18.015 Da)
   if len(sequence) > 1:
     weight -= (len(sequence) - 1) * 18.015
-  
+
   return weight
 
 
@@ -1296,9 +1296,11 @@ def _fraction_protonated_basic(pH: float, pKa: float) -> float:
   """For BH+ <-> B + H+, returns fraction in the protonated (+1) form."""
   return 1.0 / (1.0 + 10.0 ** (pH - pKa))
 
+
 def _fraction_deprotonated_acidic(pH: float, pKa: float) -> float:
   """For HA <-> A- + H+, returns fraction in the deprotonated (-1) form."""
   return 1.0 / (1.0 + 10.0 ** (pKa - pH))
+
 
 def net_charge(sequence: str, pH: float, pKa: dict[str, float] = DEFAULT_PKA) -> float:
   """
@@ -1354,29 +1356,24 @@ def net_charge(sequence: str, pH: float, pKa: dict[str, float] = DEFAULT_PKA) ->
 
   # Side chains
   pos = (
-    counts.get("K", 0) * _fraction_protonated_basic(pH, pKa["K"]) +
-    counts.get("R", 0) * _fraction_protonated_basic(pH, pKa["R"]) +
-    counts.get("H", 0) * _fraction_protonated_basic(pH, pKa["H"])
+    counts.get("K", 0) * _fraction_protonated_basic(pH, pKa["K"])
+    + counts.get("R", 0) * _fraction_protonated_basic(pH, pKa["R"])
+    + counts.get("H", 0) * _fraction_protonated_basic(pH, pKa["H"])
   )
 
   neg = (
-    counts.get("D", 0) * _fraction_deprotonated_acidic(pH, pKa["D"]) +
-    counts.get("E", 0) * _fraction_deprotonated_acidic(pH, pKa["E"]) +
-    counts.get("C", 0) * _fraction_deprotonated_acidic(pH, pKa["C"]) +
-    counts.get("Y", 0) * _fraction_deprotonated_acidic(pH, pKa["Y"]) +
-    counts.get("U", 0) * _fraction_deprotonated_acidic(pH, pKa["U"])  # optional
+    counts.get("D", 0) * _fraction_deprotonated_acidic(pH, pKa["D"])
+    + counts.get("E", 0) * _fraction_deprotonated_acidic(pH, pKa["E"])
+    + counts.get("C", 0) * _fraction_deprotonated_acidic(pH, pKa["C"])
+    + counts.get("Y", 0) * _fraction_deprotonated_acidic(pH, pKa["Y"])
+    + counts.get("U", 0) * _fraction_deprotonated_acidic(pH, pKa["U"])  # optional
   )
 
   return (nterm + pos) - (cterm + neg)
 
+
 def isoelectric_point(
-  sequence: str,
-  pKa: dict[str, float] = DEFAULT_PKA,
-  *,
-  pH_low: float = 0.0,
-  pH_high: float = 14.0,
-  tol: float = 1e-4,
-  max_iter: int = 100
+  sequence: str, pKa: dict[str, float] = DEFAULT_PKA, *, pH_low: float = 0.0, pH_high: float = 14.0, tol: float = 1e-4, max_iter: int = 100
 ) -> float:
   """
   Estimate the isoelectric point (pI) of a protein or peptide.
@@ -1447,7 +1444,7 @@ def isoelectric_point(
         best = mid
       lo += 0.1
       hi -= 0.1
-    return best if 'best' in locals() else (lo + hi) / 2.0
+    return best if "best" in locals() else (lo + hi) / 2.0
 
   for _ in range(max_iter):
     mid = (lo + hi) / 2.0

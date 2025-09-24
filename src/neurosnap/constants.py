@@ -147,7 +147,7 @@ AA_WEIGHTS_FREE = {
   'T': 119.12, # Threonine
   'W': 204.23, # Tryptophan
   'Y': 181.19, # Tyrosine
-  'V': 117.15  # Valine
+  'V': 117.15, # Valine
   'O': 255.31, # Pyrrolysine (free)
   'U': 168.06, # Selenocysteine (free)
 }

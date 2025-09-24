@@ -302,7 +302,7 @@ class Protein:
 
     return seq
 
-  def select_residues(self, selectors: str, model: Optional[int] = None) -> Dict[str, List[int]]:
+  def select_residues(self, selectors: str, invert : bool = False, model: Optional[int] = None) -> Dict[str, List[int]]:
     """Select residues from a protein structure using a string selector.
 
     This method allows for flexible selection of residues in a protein structure
@@ -318,6 +318,7 @@ class Protein:
 
     Parameters:
         selectors: A string specifying the residue selection query.
+        invert: Whether to invert the selection.
         model: The ID of the model to select from. If None, the first model is used.
 
     Returns:
@@ -332,6 +333,9 @@ class Protein:
       model = self.models().pop(0)
     elif model not in self.structure:
       raise ValueError(f'Protein does not contain model "{model}"')
+
+    # prepare model dataframe
+    dfm = self.df[self.df["model"] == model]
 
     # get chains and create output object
     chains = self.chains(model)
@@ -362,14 +366,14 @@ class Protein:
 
       # if select entire chain
       if len(selector) == 1:
-        output[chain] = output[chain].union(self.df[(self.df["chain"] == chain)]["res_id"].to_list())
+        output[chain] = output[chain].union(dfm[(dfm["chain"] == chain)]["res_id"].to_list())
         continue
 
       # if select single residue
       found = pattern_res_single.search(selector)
       if found:
         resi = int(found.group(1))
-        if self.df[(self.df["chain"] == chain) & (self.df["res_id"] == resi)].empty:
+        if dfm[(dfm["chain"] == chain) & (dfm["res_id"] == resi)].empty:
           raise ValueError(f'Residue "{resi}" in selector "{selector}" does not exist in the specified chain.')
         else:
           output[chain].add(resi)
@@ -383,7 +387,7 @@ class Protein:
         if resi_start > resi_end:
           raise ValueError(f'Invalid residue range selector "{selector}". The starting residue cannot be greater than the ending residue.')
         for resi in range(resi_start, resi_end + 1):
-          if self.df[(self.df["chain"] == chain) & (self.df["res_id"] == resi)].empty:
+          if dfm[(dfm["chain"] == chain) & (dfm["res_id"] == resi)].empty:
             raise ValueError(f'Residue "{resi}" in selector "{selector}" does not exist in the specified chain.')
           else:
             output[chain].add(resi)
@@ -398,6 +402,18 @@ class Protein:
         empty.append(chain)
     for chain in empty:
       del output[chain]
+    
+    if invert:
+      output_inverted = {}
+      for chain in chains:
+        avail_resis = set(dfm[(dfm["chain"] == chain)]["res_id"].to_list())
+        if chain in output: # chain is in output so get all residues not specified
+          diff_resis = avail_resis - set(output[chain])
+          if diff_resis:
+            output_inverted[chain] = diff_resis
+        else: # chain is not in output so the entire chain is selected
+          output_inverted[chain] = avail_resis
+      output = output_inverted
 
     return output
 

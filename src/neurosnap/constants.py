@@ -151,3 +151,23 @@ AA_WEIGHTS_FREE = {
   'O': 255.31, # Pyrrolysine (free)
   'U': 168.06, # Selenocysteine (free)
 }
+
+## pKa Values
+# Default pKa set (EMBOSS-like). Values are typical textbook approximations.
+# You can swap these for another set (e.g., Bjellqvist, IPC) if desired.
+DEFAULT_PKA = {
+  # termini
+  "N_TERMINUS": 8.6,
+  "C_TERMINUS": 3.6,
+  # acidic side chains (deprotonate to -1)
+  "C": 8.5,   # Cys
+  "D": 3.9,   # Asp
+  "E": 4.1,   # Glu
+  "Y": 10.1,  # Tyr
+  # basic side chains (protonate to +1)
+  "H": 6.5,   # His
+  "K": 10.8,  # Lys
+  "R": 12.5,  # Arg
+  # optional uncommon residue
+  "U": 5.2,   # Selenocysteine (approx.; behaves like acidic thiol/selenol)
+}

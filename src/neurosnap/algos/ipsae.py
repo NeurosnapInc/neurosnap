@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from neurosnap.protein import Protein
+
 
 def ptm_func(x: np.ndarray | float, d0: float) -> np.ndarray | float:
   return 1.0 / (1.0 + (x / d0) ** 2.0)
@@ -152,9 +154,9 @@ def _classify_chains(chains: np.ndarray, residue_names: np.ndarray) -> Dict[str,
 
 
 def calculate_ipSAE(
-  protein,  # Neurosnap Protein
-  plddt: np.ndarray,  # (N,) per-residue pLDDT aligned to derived residues
-  pae_matrix: np.ndarray,  # (N,N) PAE aligned to derived residues
+  protein: "Protein",
+  plddt: np.ndarray,
+  pae_matrix: np.ndarray,
   *,
   model: Optional[int] = None,
   pae_cutoff: float = 10.0,
@@ -209,6 +211,7 @@ def calculate_ipSAE(
   ipsae_d0dom_asymres = init_pairdict_scalar(chains, init_val=0.0)
   ipsae_d0res_asymres = init_pairdict_scalar(chains, init_val=0.0)
 
+  # symmetric MAX
   iptm_d0chn_max = init_pairdict_scalar(chains)
   ipsae_d0chn_max = init_pairdict_scalar(chains)
   ipsae_d0dom_max = init_pairdict_scalar(chains)
@@ -218,6 +221,17 @@ def calculate_ipSAE(
   ipsae_d0chn_maxres = init_pairdict_scalar(chains, init_val=0.0)
   ipsae_d0dom_maxres = init_pairdict_scalar(chains, init_val=0.0)
   ipsae_d0res_maxres = init_pairdict_scalar(chains, init_val=0.0)
+
+  # symmetric MIN
+  iptm_d0chn_min = init_pairdict_scalar(chains)
+  ipsae_d0chn_min = init_pairdict_scalar(chains)
+  ipsae_d0dom_min = init_pairdict_scalar(chains)
+  ipsae_d0res_min = init_pairdict_scalar(chains)
+
+  iptm_d0chn_minres = init_pairdict_scalar(chains, init_val=0.0)
+  ipsae_d0chn_minres = init_pairdict_scalar(chains, init_val=0.0)
+  ipsae_d0dom_minres = init_pairdict_scalar(chains, init_val=0.0)
+  ipsae_d0res_minres = init_pairdict_scalar(chains, init_val=0.0)
 
   n0chn = init_pairdict_scalar(chains)
   n0dom = init_pairdict_scalar(chains)
@@ -230,6 +244,12 @@ def calculate_ipSAE(
   d0dom_max = init_pairdict_scalar(chains)
   d0res = init_pairdict_scalar(chains)
   d0res_max = init_pairdict_scalar(chains)
+
+  # NEW: companions for MIN winners
+  n0dom_min = init_pairdict_scalar(chains)
+  d0dom_min = init_pairdict_scalar(chains)
+  n0res_min = init_pairdict_scalar(chains)
+  d0res_min = init_pairdict_scalar(chains)
 
   n0res_byres = init_pairdict_array(chains, N)
   d0res_byres = init_pairdict_array(chains, N)
@@ -372,7 +392,7 @@ def calculate_ipSAE(
         ptm_row_d0res = ptm_func_vec(pae_matrix[i], d0res_row[i])
         ipsae_d0res_byres[c1][c2][i] = float(ptm_row_d0res[row_mask].mean()) if row_mask.any() else 0.0
 
-  # -------- asym maxima & symmetric maxima --------
+  # -------- asym maxima & symmetric max/min --------
   for c1 in uniq_chains:
     for c2 in uniq_chains:
       if c1 == c2:
@@ -412,12 +432,23 @@ def calculate_ipSAE(
           out_max[c1][c2] = out_max[c2][c1] = v21
           out_max_res[c1][c2] = out_max_res[c2][c1] = asym_res[c2][c1]
 
+      def set_pair_min(asym, asym_res, out_min, out_min_res):
+        v12 = asym[c1][c2]
+        v21 = asym[c2][c1]
+        if v12 <= v21:
+          out_min[c1][c2] = out_min[c2][c1] = v12
+          out_min_res[c1][c2] = out_min_res[c2][c1] = asym_res[c1][c2]
+        else:
+          out_min[c1][c2] = out_min[c2][c1] = v21
+          out_min_res[c1][c2] = out_min_res[c2][c1] = asym_res[c2][c1]
+
+      # MAX winners
       set_pair_max(iptm_d0chn_asym, iptm_d0chn_asymres, iptm_d0chn_max, iptm_d0chn_maxres)
       set_pair_max(ipsae_d0chn_asym, ipsae_d0chn_asymres, ipsae_d0chn_max, ipsae_d0chn_maxres)
       set_pair_max(ipsae_d0dom_asym, ipsae_d0dom_asymres, ipsae_d0dom_max, ipsae_d0dom_maxres)
       set_pair_max(ipsae_d0res_asym, ipsae_d0res_asymres, ipsae_d0res_max, ipsae_d0res_maxres)
 
-      # carry n0/d0 companions from the winning directions
+      # carry n0/d0 companions from the MAX winning directions
       if ipsae_d0dom_max[c1][c2] == ipsae_d0dom_asym[c1][c2]:
         n0dom_max[c1][c2] = n0dom_max[c2][c1] = n0dom[c1][c2]
         d0dom_max[c1][c2] = d0dom_max[c2][c1] = d0dom[c1][c2]
@@ -432,36 +463,35 @@ def calculate_ipSAE(
         n0res_max[c1][c2] = n0res_max[c2][c1] = n0res[c2][c1]
         d0res_max[c1][c2] = d0res_max[c2][c1] = d0res[c2][c1]
 
+      # MIN winners
+      set_pair_min(iptm_d0chn_asym, iptm_d0chn_asymres, iptm_d0chn_min, iptm_d0chn_minres)
+      set_pair_min(ipsae_d0chn_asym, ipsae_d0chn_asymres, ipsae_d0chn_min, ipsae_d0chn_minres)
+      set_pair_min(ipsae_d0dom_asym, ipsae_d0dom_asymres, ipsae_d0dom_min, ipsae_d0dom_minres)
+      set_pair_min(ipsae_d0res_asym, ipsae_d0res_asymres, ipsae_d0res_min, ipsae_d0res_minres)
+
+      # carry n0/d0 companions from the MIN winning directions
+      if ipsae_d0dom_min[c1][c2] == ipsae_d0dom_asym[c1][c2]:
+        n0dom_min[c1][c2] = n0dom_min[c2][c1] = n0dom[c1][c2]
+        d0dom_min[c1][c2] = d0dom_min[c2][c1] = d0dom[c1][c2]
+      else:
+        n0dom_min[c1][c2] = n0dom_min[c2][c1] = n0dom[c2][c1]
+        d0dom_min[c1][c2] = d0dom_min[c2][c1] = d0dom[c2][c1]
+
+      if ipsae_d0res_min[c1][c2] == ipsae_d0res_asym[c1][c2]:
+        n0res_min[c1][c2] = n0res_min[c2][c1] = n0res[c1][c2]
+        d0res_min[c1][c2] = d0res_min[c2][c1] = d0res[c1][c2]
+      else:
+        n0res_min[c1][c2] = n0res_min[c2][c1] = n0res[c2][c1]
+        d0res_min[c1][c2] = d0res_min[c2][c1] = d0res[c2][c1]
+
   # optional PyMOL script (same coloring scheme)
   pml = None
   if return_pml:
     chaincolor = {
-      "A": "magenta",
-      "B": "marine",
-      "C": "lime",
-      "D": "orange",
-      "E": "yellow",
-      "F": "cyan",
-      "G": "lightorange",
-      "H": "pink",
-      "I": "deepteal",
-      "J": "forest",
-      "K": "lightblue",
-      "L": "slate",
-      "M": "violet",
-      "N": "arsenic",
-      "O": "iodine",
-      "P": "silver",
-      "Q": "red",
-      "R": "sulfur",
-      "S": "purple",
-      "T": "olive",
-      "U": "palegreen",
-      "V": "green",
-      "W": "blue",
-      "X": "palecyan",
-      "Y": "limon",
-      "Z": "chocolate",
+      "A": "magenta","B": "marine","C": "lime","D": "orange","E": "yellow","F": "cyan","G": "lightorange",
+      "H": "pink","I": "deepteal","J": "forest","K": "lightblue","L": "slate","M": "violet","N": "arsenic",
+      "O": "iodine","P": "silver","Q": "red","R": "sulfur","S": "purple","T": "olive","U": "palegreen",
+      "V": "green","W": "blue","X": "palecyan","Y": "limon","Z": "chocolate",
     }
     lines = []
     for c1 in uniq_chains:
@@ -507,6 +537,16 @@ def calculate_ipSAE(
       "ipsae_d0dom_res": ipsae_d0dom_maxres,
       "ipsae_d0res_res": ipsae_d0res_maxres,
     },
+    "min": {  # NEW
+      "iptm_d0chn": iptm_d0chn_min,
+      "ipsae_d0chn": ipsae_d0chn_min,
+      "ipsae_d0dom": ipsae_d0dom_min,
+      "ipsae_d0res": ipsae_d0res_min,
+      "iptm_d0chn_res": iptm_d0chn_minres,
+      "ipsae_d0chn_res": ipsae_d0chn_minres,
+      "ipsae_d0dom_res": ipsae_d0dom_minres,
+      "ipsae_d0res_res": ipsae_d0res_minres,
+    },
     "counts": {
       "n0chn": n0chn,
       "d0chn": d0chn,
@@ -518,6 +558,10 @@ def calculate_ipSAE(
       "d0res": d0res,
       "n0res_max": n0res_max,
       "d0res_max": d0res_max,
+      "n0dom_min": n0dom_min,  # NEW
+      "d0dom_min": d0dom_min,  # NEW
+      "n0res_min": n0res_min,  # NEW
+      "d0res_min": d0res_min,  # NEW
       "pairs_with_pae_lt_cutoff": valid_pair_counts,
       "pairs_with_pae_lt_cutoff_and_dist": dist_valid_pair_counts,
       "unique_res_chain1": uniq_res_chain1,

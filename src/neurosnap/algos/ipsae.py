@@ -164,14 +164,80 @@ def calculate_ipSAE(
   pDockQ_cutoff: float = 8.0,
   return_pml: bool = False,
 ) -> Dict[str, Any]:
-  """
-  Derives residue ordering from `Protein` and computes ipSAE, ipTM (d0chn),
-  pDockQ, pDockQ2, and LIS for each chain pair.
+  """Compute ipSAE/ipTM and related interface scores for all chain pairs.
+
+  Uses a Neurosnap ``Protein`` to derive an ordered residue list (one
+  representative atom per residue) and evaluates multiple interface
+  confidence metrics between every ordered pair of chains:
+  ipSAE (three d0 variants), inter-chain ipTM (d0chn), pDockQ, pDockQ2,
+  and LIS. Symmetric summaries include both per-direction asymmetry and
+  pairwise maxima **and** minima.
 
   Alignment contract:
-    - We produce an ordered list of residues (biopolymers with a valid proxy atom).
-    - `plddt` and `pae_matrix` **must** be in that exact order.
-      If you built them from AF outputs, map them to this residue list first.
+    The function derives the residue order from the structure (biopolymer
+    residues only) and expects ``plddt`` (N,) and ``pae_matrix`` (N, N)
+    to match that order exactly. If they originate from AlphaFold/Boltz,
+    map them to this residue list first.
+
+  Args:
+    protein: Neurosnap ``Protein`` containing the structure. Only standard
+      amino acids and nucleotides with a valid representative atom are used.
+    plddt: Per-residue pLDDT aligned to the derived residue order.
+    pae_matrix: Residue–residue PAE (Å) aligned to the same order.
+    model: Structure model ID to analyze. Defaults to the first model.
+    pae_cutoff: PAE threshold (Å) for ipSAE and counting “valid” pairs.
+    dist_cutoff: Distance cutoff (Å) for interface-restricted counts.
+    pDockQ_cutoff: Distance cutoff (Å) used by pDockQ/pDockQ2 neighbor tests.
+    return_pml: If True, returns a PyMOL coloring alias script under ``pml``.
+
+  Returns:
+    A dictionary with the following top-level keys:
+
+    - **by_residue**: Per-direction arrays (length N) for each chain pair:
+      - ``iptm_d0chn``: ipTM using d0 based on total residues in the pair.
+      - ``ipsae_d0chn``: ipSAE with PAE cutoff, same d0 as above.
+      - ``ipsae_d0dom``: ipSAE with PAE cutoff, d0 from count of residues
+        that have inter-chain PAE < cutoff (domain-level).
+      - ``ipsae_d0res``: ipSAE with PAE cutoff, d0 per row from the number
+        of valid partners in the other chain (residue-level).
+      - ``n0res_byres`` / ``d0res_byres``: Companion per-row counts and d0.
+    - **asym**: Best single-residue values per direction (A→B, B→A) and
+      the residue identifier strings that achieve them:
+      - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
+      - ``*_res`` entries contain the winning residue labels.
+    - **max**: Symmetric maxima for each metric across directions plus
+      the residue label responsible for the maximum:
+      - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
+      - ``*_res`` contain the max-residue labels.
+    - **min**: Symmetric minima for each metric across directions plus
+      the residue label responsible for the minimum:
+      - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
+      - ``*_res`` contain the min-residue labels.
+    - **counts**: Supporting counts and d0 companions:
+      - ``n0chn``, ``d0chn``: Total residues and d0 for each chain pair.
+      - ``n0dom``, ``d0dom`` and their ``*_max``/``*_min`` counterparts.
+      - ``n0res``, ``d0res`` and their ``*_max``/``*_min`` counterparts.
+      - Pair/unique-residue tallies with and without distance constraints.
+    - **scores**: Interface-level auxiliary scores:
+      - ``pDockQ``, ``pDockQ2``, ``LIS``.
+    - **params**: The parameters actually used (cutoffs, model).
+    - **pml**: Optional PyMOL alias script string (if ``return_pml`` is True).
+    - **residue_order**: The derived residue metadata:
+      - ``names`` (3-letter codes), ``chains`` (chain IDs), ``numbers`` (seq IDs).
+
+  Raises:
+    ValueError: If the derived residue list is empty, or if ``plddt``/``pae_matrix``
+      shapes do not match the derived residue count/order.
+
+  Notes:
+    - Representative atom per residue:
+      * Proteins: Cβ (GLY→Cα; fallback to Cα if Cβ missing).
+      * Nucleic acids: prefer C3′/C3*, then C1′/C1*, then P.
+    - Chain-type classification (protein vs nucleic acid) sets a minimum d0
+      (2.0 for any pair containing NA; 1.0 otherwise) and influences d0
+      via the standard length-based formula.
+    - pDockQ neighbors use ``pDockQ_cutoff`` on the representative-atom distances.
+    - LIS averages ``(12 - PAE) / 12`` for PAE ≤ 12 Å over inter-chain pairs only.
   """
   residue_names, chains, residue_nums, coords_cb = _protein_to_residue_arrays(protein, model=model)
   N = len(chains)
@@ -488,10 +554,32 @@ def calculate_ipSAE(
   pml = None
   if return_pml:
     chaincolor = {
-      "A": "magenta","B": "marine","C": "lime","D": "orange","E": "yellow","F": "cyan","G": "lightorange",
-      "H": "pink","I": "deepteal","J": "forest","K": "lightblue","L": "slate","M": "violet","N": "arsenic",
-      "O": "iodine","P": "silver","Q": "red","R": "sulfur","S": "purple","T": "olive","U": "palegreen",
-      "V": "green","W": "blue","X": "palecyan","Y": "limon","Z": "chocolate",
+      "A": "magenta",
+      "B": "marine",
+      "C": "lime",
+      "D": "orange",
+      "E": "yellow",
+      "F": "cyan",
+      "G": "lightorange",
+      "H": "pink",
+      "I": "deepteal",
+      "J": "forest",
+      "K": "lightblue",
+      "L": "slate",
+      "M": "violet",
+      "N": "arsenic",
+      "O": "iodine",
+      "P": "silver",
+      "Q": "red",
+      "R": "sulfur",
+      "S": "purple",
+      "T": "olive",
+      "U": "palegreen",
+      "V": "green",
+      "W": "blue",
+      "X": "palecyan",
+      "Y": "limon",
+      "Z": "chocolate",
     }
     lines = []
     for c1 in uniq_chains:

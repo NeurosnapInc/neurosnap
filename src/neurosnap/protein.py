@@ -676,13 +676,20 @@ class Protein:
     """
     assert model1 in self.models(), "Specified model needs to be present in the reference structure."
     assert model2 in other_protein.models(), "Specified model needs to be present in the other structure."
-    # validate chains
+    # validate chains1
     avail_chains = self.chains(model1)
-    for chain in chains1:
-      assert chain in avail_chains, f"Chain {chain} was not found in the reference protein. Found chains include {', '.join(avail_chains)}."
+    if chains1:
+      for chain in chains1:
+        assert chain in avail_chains, f"Chain {chain} was not found in the reference protein. Found chains include {', '.join(avail_chains)}."
+    else:
+      chains1 = avail_chains
+    # validate chains2
     avail_chains = other_protein.chains(model2)
-    for chain in chains2:
-      assert chain in avail_chains, f"Chain {chain} was not found in the other protein. Found chains include {', '.join(avail_chains)}."
+    if chains2:
+      for chain in chains2:
+        assert chain in avail_chains, f"Chain {chain} was not found in the other protein. Found chains include {', '.join(avail_chains)}."
+    else:
+      chains2 = avail_chains
 
     # Use the Superimposer to align the structures
     def aux_get_atoms(sample_model, chains):

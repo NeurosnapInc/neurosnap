@@ -47,6 +47,7 @@ from neurosnap.constants import (
   STANDARD_NUCLEOTIDES,
   NON_STANDARD_AAs_TO_STANDARD_AAs,
   STANDARD_AAs,
+  AA_WEIGHTS_PROTEIN_AVG
 )
 from neurosnap.log import logger
 from neurosnap.msa import read_msa
@@ -1235,6 +1236,64 @@ def sanitize_aa_seq(seq: str, non_standard: str = "reject", trim_term: bool = Tr
     new_seq += x
   return new_seq
 
+
+def molecular_weight(sequence: str, aa_mws : dict[str, float] = AA_WEIGHTS_PROTEIN_AVG) -> float:
+  """
+  Calculate the molecular weight of a protein or peptide sequence.
+
+  This function computes the molecular weight of a protein by summing the
+  residue masses for each amino acid in the input sequence. By default,
+  it uses average amino acid residue masses (AA_WEIGHTS_PROTEIN_AVG),
+  but a custom mass dictionary (e.g. monoisotopic or free amino acid masses)
+  can be provided.
+
+  The calculation accounts for the loss of one water molecule (H2O, 18.015 Da)
+  for each peptide bond formed during polymerization. Therefore, for a sequence
+  of length n, (n-1) * 18.015 Da is subtracted from the total.
+
+  Parameters
+  ----------
+  sequence : str
+      Amino acid sequence (one-letter codes).
+  aa_mws : dict[str, float], optional
+      Dictionary mapping amino acid one-letter codes to molecular weights
+      (defaults to AA_WEIGHTS_PROTEIN_AVG).
+
+  Returns
+  -------
+  float
+      Estimated molecular weight of the protein/peptide in Daltons (Da).
+
+  Raises
+  ------
+  ValueError
+      If the sequence contains an invalid or unsupported amino acid code.
+
+  Notes
+  -----
+  - Use `AA_WEIGHTS_PROTEIN_MONO` for monoisotopic mass calculations,
+    typically used in mass spectrometry.
+  - Use `AA_WEIGHTS_PROTEIN_AVG` (default) for average residue masses,
+    appropriate for bulk molecular weight estimation.
+  - For free amino acids (not incorporated in peptides), use `AA_WEIGHTS_FREE`.
+  - Weight dictionaries are found in constants.py
+  """
+  # Remove whitespace and convert to uppercase
+  sequence = sequence.strip().upper()
+  
+  # Sum molecular weights
+  weight = 0.0
+  for aa in sequence:
+    if aa not in aa_mws:
+      raise ValueError(f"Invalid amino acid: {aa}")
+    weight += aa_mws[aa]
+  
+  # Adjust for water loss during peptide bond formation
+  # Each peptide bond loses one H2O (18.015 Da)
+  if len(sequence) > 1:
+    weight -= (len(sequence) - 1) * 18.015
+  
+  return weight
 
 def calculate_bsa(
   protein_complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], model: int = 0, level: str = "R"

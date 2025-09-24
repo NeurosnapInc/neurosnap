@@ -496,9 +496,14 @@ def run_mmseqs2(
   ### Call mmseqs2 api
   ## Perform initial submission
   seqs = [seqs] if isinstance(seqs, str) else seqs
-  seqs_unique = []
-  [seqs_unique.append(x) for x in seqs if x not in seqs_unique]
-  sequence_ids = [1 + seqs_unique.index(seq) for seq in seqs]
+  if pairing:
+    # In pairing mode, do not deduplicate; MMseqs2 uses positional headers (>1, >2, ...) for each input.
+    seqs_unique = list(seqs)
+    sequence_ids = list(range(1, len(seqs) + 1))
+  else:
+    seqs_unique = []
+    [seqs_unique.append(x) for x in seqs if x not in seqs_unique]
+    sequence_ids = [1 + seqs_unique.index(seq) for seq in seqs]
 
   query = ""
   for i, seq in enumerate(seqs, start=1):
@@ -596,7 +601,7 @@ def run_mmseqs2(
 
   logger.info(f"Finished generating MSA, took {datetime.now()-start}")
 
-  if use_templates:
+  if not pairing and use_templates:
     return a3m_lines, template_paths.values()
   else:
     return a3m_lines, None

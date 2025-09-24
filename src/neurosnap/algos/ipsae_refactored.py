@@ -1,9 +1,10 @@
 # Originally written by https://github.com/DunbrackLab/IPSAE
-# Heavily modified in this works to make easier to use
-
-# Script for calculating the ipSAE score for scoring pairwise protein-protein interactions in AlphaFold2 and AlphaFold3 models
+# Heavily modified in this work to make easier to use
+#
+# Script for calculating the ipSAE score for scoring pairwise protein-protein interactions
+# in AlphaFold2 and AlphaFold3 models
 # https://www.biorxiv.org/content/10.1101/2025.02.10.637595v1
-
+#
 # Also calculates:
 #    pDockQ: Bryant, Pozotti, and Eloffson. https://www.nature.com/articles/s41467-022-28865-w
 #    pDockQ2: Zhu, Shenoy, Kundrotas, Elofsson. https://academic.oup.com/bioinformatics/article/39/7/btad424/7219714
@@ -67,7 +68,7 @@ def init_pairdict_set(chains: np.ndarray) -> Dict[str, Dict[str, set]]:
   return {c1: {c2: set() for c2 in uniq if c2 != c1} for c1 in uniq}
 
 
-# ------------------ new: derive residue-level arrays from Protein ------------------
+# ------------------ derive residue-level arrays from Protein ------------------
 
 AA_SET = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"}
 NA_SET = {"DA", "DC", "DT", "DG", "A", "C", "U", "G"}  # DNA/RNA (common 3-letter)
@@ -154,34 +155,28 @@ def calculate_ipSAE(
   protein,  # Neurosnap Protein
   plddt: np.ndarray,  # (N,) per-residue pLDDT aligned to derived residues
   pae_matrix: np.ndarray,  # (N,N) PAE aligned to derived residues
-  cb_plddt: Optional[np.ndarray] = None,  # (N,) for pDockQ; if None, uses plddt
   *,
   model: Optional[int] = None,
   pae_cutoff: float = 10.0,
   dist_cutoff: float = 10.0,
   pDockQ_cutoff: float = 8.0,
-  iptm_external: Optional[float | Dict[str, Dict[str, float]]] = None,
   return_pml: bool = False,
 ) -> Dict[str, Any]:
   """
-  Same outputs as before, but we derive residue arrays from a `Protein`.
+  Derives residue ordering from `Protein` and computes ipSAE, ipTM (d0chn),
+  pDockQ, pDockQ2, and LIS for each chain pair.
 
   Alignment contract:
     - We produce an ordered list of residues (biopolymers with a valid proxy atom).
-    - `plddt`, `cb_plddt` (if provided), and `pae_matrix` **must** be in that exact order.
+    - `plddt` and `pae_matrix` **must** be in that exact order.
       If you built them from AF outputs, map them to this residue list first.
   """
   residue_names, chains, residue_nums, coords_cb = _protein_to_residue_arrays(protein, model=model)
   N = len(chains)
 
-  if cb_plddt is None:
-    cb_plddt = plddt
-
   # shape checks
   if plddt.shape != (N,):
     raise ValueError(f"plddt shape {plddt.shape} does not match derived residue count {N}.")
-  if cb_plddt.shape != (N,):
-    raise ValueError(f"cb_plddt shape {cb_plddt.shape} does not match derived residue count {N}.")
   if pae_matrix.shape != (N, N):
     raise ValueError(f"pae_matrix shape {pae_matrix.shape} does not match ({N},{N}).")
 
@@ -269,7 +264,7 @@ def calculate_ipSAE(
             pdockq_uniq_res[c1][c2].add(j)
       if npairs > 0:
         idx = list(pdockq_uniq_res[c1][c2])
-        mean_plddt = float(cb_plddt[idx].mean()) if idx else 0.0
+        mean_plddt = float(plddt[idx].mean()) if idx else 0.0
         x = mean_plddt * math.log10(npairs)
         pDockQ[c1][c2] = 0.724 / (1.0 + math.exp(-0.052 * (x - 152.611))) + 0.018
       else:
@@ -291,7 +286,7 @@ def calculate_ipSAE(
           s += ptm_func_vec(pae_matrix[i][near], 10.0).sum()
       if npairs > 0:
         idx = list(pdockq_uniq_res[c1][c2])
-        mean_plddt = float(cb_plddt[idx].mean()) if idx else 0.0
+        mean_plddt = float(plddt[idx].mean()) if idx else 0.0
         mean_ptm = s / npairs
         x = mean_plddt * mean_ptm
         pDockQ2[c1][c2] = 1.31 / (1.0 + math.exp(-0.075 * (x - 84.733))) + 0.005
@@ -437,20 +432,6 @@ def calculate_ipSAE(
         n0res_max[c1][c2] = n0res_max[c2][c1] = n0res[c2][c1]
         d0res_max[c1][c2] = d0res_max[c2][c1] = d0res[c2][c1]
 
-  # external ipTM (optional)
-  iptm_external_used = init_pairdict_scalar(chains, init_val=float("nan"))
-  if iptm_external is not None:
-    if isinstance(iptm_external, (int, float)):
-      for c1 in uniq_chains:
-        for c2 in uniq_chains:
-          if c1 != c2:
-            iptm_external_used[c1][c2] = float(iptm_external)
-    elif isinstance(iptm_external, dict):
-      for c1 in uniq_chains:
-        for c2 in uniq_chains:
-          if c1 != c2 and c1 in iptm_external and c2 in iptm_external[c1]:
-            iptm_external_used[c1][c2] = float(iptm_external[c1][c2])
-
   # optional PyMOL script (same coloring scheme)
   pml = None
   if return_pml:
@@ -545,7 +526,6 @@ def calculate_ipSAE(
       "dist_unique_res_chain2": dist_uniq_res_chain2,
     },
     "scores": {"pDockQ": pDockQ, "pDockQ2": pDockQ2, "LIS": LIS},
-    "iptm_external_used": iptm_external_used,
     "params": {
       "pae_cutoff": float(pae_cutoff),
       "dist_cutoff": float(dist_cutoff),

@@ -117,6 +117,11 @@ def read_msa(
         seqs[-1] += line
 
   f.close()
+
+  # ensure all sequences are valid
+  for name, seq in zip(names, seqs):
+    assert len(seq), f"Invalid sequence for entry with name {name}. Sequence is empty."
+
   assert len(names) == len(seqs), "Invalid MSA/fasta. The number sequences and headers found do not match."
   return names, seqs
 

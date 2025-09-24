@@ -43,13 +43,13 @@ from neurosnap.constants import (
   AA_CODE_TO_NAME,
   AA_NAME_TO_ABR,
   AA_NAME_TO_CODE,
+  AA_WEIGHTS_PROTEIN_AVG,
   BACKBONE_ATOMS,
+  DEFAULT_PKA,
   HYDROPHOBIC_RESIDUES,
   STANDARD_NUCLEOTIDES,
   NON_STANDARD_AAs_TO_STANDARD_AAs,
   STANDARD_AAs,
-  AA_WEIGHTS_PROTEIN_AVG,
-  DEFAULT_PKA,
 )
 from neurosnap.log import logger
 from neurosnap.msa import read_msa

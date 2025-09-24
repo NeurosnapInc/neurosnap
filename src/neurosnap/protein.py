@@ -12,6 +12,7 @@ import shutil
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from collections import Counter
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import matplotlib
@@ -47,7 +48,8 @@ from neurosnap.constants import (
   STANDARD_NUCLEOTIDES,
   NON_STANDARD_AAs_TO_STANDARD_AAs,
   STANDARD_AAs,
-  AA_WEIGHTS_PROTEIN_AVG
+  AA_WEIGHTS_PROTEIN_AVG,
+  DEFAULT_PKA,
 )
 from neurosnap.log import logger
 from neurosnap.msa import read_msa
@@ -1288,6 +1290,179 @@ def molecular_weight(sequence: str, aa_mws : dict[str, float] = AA_WEIGHTS_PROTE
     weight -= (len(sequence) - 1) * 18.015
   
   return weight
+
+
+def _fraction_protonated_basic(pH: float, pKa: float) -> float:
+  """For BH+ <-> B + H+, returns fraction in the protonated (+1) form."""
+  return 1.0 / (1.0 + 10.0 ** (pH - pKa))
+
+def _fraction_deprotonated_acidic(pH: float, pKa: float) -> float:
+  """For HA <-> A- + H+, returns fraction in the deprotonated (-1) form."""
+  return 1.0 / (1.0 + 10.0 ** (pKa - pH))
+
+def net_charge(sequence: str, pH: float, pKa: dict[str, float] = DEFAULT_PKA) -> float:
+  """
+  Calculate the net charge of a protein or peptide sequence at a given pH.
+
+  This function applies the Henderson–Hasselbalch equation to estimate
+  the protonation state of titratable groups (N-terminus, C-terminus,
+  and ionizable side chains) and computes the overall net charge.
+
+  Args:
+      sequence: Amino acid sequence in one-letter codes. Supports the 20
+          canonical residues and optionally 'U' (selenocysteine).
+          Non-ionizable residues are ignored.
+      pH: The solution pH at which to evaluate the net charge.
+      pKa: Dictionary of pKa values for titratable groups. Must include
+          keys "N_TERMINUS", "C_TERMINUS", "D", "E", "C", "Y",
+          "H", "K", and "R". If 'U' is present in the sequence, it
+          should also include "U".
+
+  Returns:
+      Estimated net charge of the sequence at the given pH.
+
+  Notes:
+      Positive charges come from protonated groups:
+      - N-terminus
+      - Lysine (K)
+      - Arginine (R)
+      - Histidine (H)
+
+      Negative charges come from deprotonated groups:
+      - C-terminus
+      - Aspartic acid (D)
+      - Glutamic acid (E)
+      - Cysteine (C)
+      - Tyrosine (Y)
+      - Selenocysteine (U), if included
+
+      The calculation assumes independent ionization equilibria and does
+      not account for local environment or structural effects. It is best
+      interpreted as an approximate charge profile.
+  """
+  seq = sequence.strip().upper()
+  if not seq:
+    return 0.0
+
+  counts = Counter(seq)
+
+  # N-terminus (+1 when protonated)
+  nterm = _fraction_protonated_basic(pH, pKa["N_TERMINUS"])
+
+  # C-terminus (-1 when deprotonated)
+  cterm = _fraction_deprotonated_acidic(pH, pKa["C_TERMINUS"])
+
+  # Side chains
+  pos = (
+    counts.get("K", 0) * _fraction_protonated_basic(pH, pKa["K"]) +
+    counts.get("R", 0) * _fraction_protonated_basic(pH, pKa["R"]) +
+    counts.get("H", 0) * _fraction_protonated_basic(pH, pKa["H"])
+  )
+
+  neg = (
+    counts.get("D", 0) * _fraction_deprotonated_acidic(pH, pKa["D"]) +
+    counts.get("E", 0) * _fraction_deprotonated_acidic(pH, pKa["E"]) +
+    counts.get("C", 0) * _fraction_deprotonated_acidic(pH, pKa["C"]) +
+    counts.get("Y", 0) * _fraction_deprotonated_acidic(pH, pKa["Y"]) +
+    counts.get("U", 0) * _fraction_deprotonated_acidic(pH, pKa["U"])  # optional
+  )
+
+  return (nterm + pos) - (cterm + neg)
+
+def isoelectric_point(
+  sequence: str,
+  pKa: dict[str, float] = DEFAULT_PKA,
+  pH_low: float = 0.0,
+  pH_high: float = 14.0,
+  tol: float = 1e-4,
+  max_iter: int = 100
+) -> float:
+  """
+  Estimate the isoelectric point (pI) of a protein or peptide.
+
+  The pI is the pH at which the net charge of the molecule is zero.
+  This function computes the net charge across pH and uses a bisection
+  search to find the root.
+
+  Args:
+      sequence: Amino acid sequence (one-letter codes). Supports the 20
+          canonical residues and optionally 'U' (selenocysteine).
+          Non-titratable residues contribute no charge.
+      pKa: Dictionary of pKa values for titratable groups. Must include
+          keys "N_TERMINUS", "C_TERMINUS", and for side chains
+          "D", "E", "C", "Y", "H", "K", "R". If 'U' appears in the
+          sequence, include "U" (default ~5.2, approximate).
+      pH_low: Lower bound of the bracketing interval for the bisection
+          search (default 0.0).
+      pH_high: Upper bound of the bracketing interval for the bisection
+          search (default 14.0).
+      tol: Target absolute net charge tolerance at the solution
+          (default 1e-4).
+      max_iter: Maximum iterations for the bisection search (default 100).
+
+  Returns:
+      Estimated pI.
+
+  Notes:
+      - Results depend on the chosen pKa set. For consistency with common
+        tools, you may substitute a different pKa dictionary
+        (e.g., Bjellqvist or IPC sets).
+      - Pyrrolysine ('O') is not included by default due to scarce
+        consensus pKa data; it is treated as non-titratable here.
+        You can add an entry if you have a value.
+      - This model ignores sequence-context and microenvironment effects
+        (local shifts in pKa due to neighbors or structure). It’s a good
+        heuristic, not a guarantee.
+  """
+  seq = sequence.strip().upper()
+  if not seq:
+    return 0.0
+
+  # Validate sequence characters
+  valid = STANDARD_AAs | {"U", "O"}
+  for aa in seq:
+    if aa not in valid:
+      raise ValueError(f"Invalid amino acid: {aa}")
+
+  # Bisection search
+  lo, hi = pH_low, pH_high
+  q_lo = net_charge(seq, lo, pKa)
+  q_hi = net_charge(seq, hi, pKa)
+
+  # If the bracket doesn't change sign, still proceed but clamp toward the side
+  # where |charge| is smaller to avoid errors on unusual sequences.
+  if q_lo == 0:
+    return lo
+  if q_hi == 0:
+    return hi
+  if q_lo * q_hi > 0:
+    # No sign change; do a guarded search by nudging bounds inward.
+    # This keeps the function robust for edge cases (e.g., extremely acidic/basic sequences).
+    for _ in range(20):
+      mid = (lo + hi) / 2.0
+      q_mid = net_charge(seq, mid, pKa)
+      if abs(q_mid) < abs(q_lo) and abs(q_mid) < abs(q_hi):
+        # Use the best we have if we can't bracket
+        best = mid
+      lo += 0.1
+      hi -= 0.1
+    return best if 'best' in locals() else (lo + hi) / 2.0
+
+  for _ in range(max_iter):
+    mid = (lo + hi) / 2.0
+    q_mid = net_charge(seq, mid, pKa)
+
+    if abs(q_mid) <= tol:
+      return mid
+    # Decide which subinterval keeps the sign change
+    if q_lo * q_mid < 0:
+      hi, q_hi = mid, q_mid
+    else:
+      lo, q_lo = mid, q_mid
+
+  # Fallback if not converged within max_iter
+  return (lo + hi) / 2.0
+
 
 def calculate_bsa(
   protein_complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], model: int = 0, level: str = "R"

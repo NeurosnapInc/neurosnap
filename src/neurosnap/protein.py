@@ -1241,42 +1241,36 @@ def molecular_weight(sequence: str, aa_mws : dict[str, float] = AA_WEIGHTS_PROTE
   """
   Calculate the molecular weight of a protein or peptide sequence.
 
-  This function computes the molecular weight of a protein by summing the
-  residue masses for each amino acid in the input sequence. By default,
-  it uses average amino acid residue masses (AA_WEIGHTS_PROTEIN_AVG),
-  but a custom mass dictionary (e.g. monoisotopic or free amino acid masses)
-  can be provided.
+  This function computes the molecular weight by summing the residue
+  masses for each amino acid in the input sequence. By default, it uses
+  average amino acid residue masses (`AA_WEIGHTS_PROTEIN_AVG`), but you
+  can provide a custom mass dictionary (e.g., monoisotopic or free amino
+  acid masses).
 
-  The calculation accounts for the loss of one water molecule (H2O, 18.015 Da)
-  for each peptide bond formed during polymerization. Therefore, for a sequence
-  of length n, (n-1) * 18.015 Da is subtracted from the total.
+  The calculation accounts for the loss of one water molecule (H₂O,
+  18.015 Da) for each peptide bond formed. For a sequence of length n,
+  (n - 1) * 18.015 Da is subtracted from the total.
 
-  Parameters
-  ----------
-  sequence : str
-      Amino acid sequence (one-letter codes).
-  aa_mws : dict[str, float], optional
-      Dictionary mapping amino acid one-letter codes to molecular weights
-      (defaults to AA_WEIGHTS_PROTEIN_AVG).
+  Args:
+      sequence: Amino acid sequence (one-letter codes).
+      aa_mws: Dictionary mapping amino acid one-letter codes to molecular
+          weights. Defaults to `AA_WEIGHTS_PROTEIN_AVG`.
 
-  Returns
-  -------
-  float
-      Estimated molecular weight of the protein/peptide in Daltons (Da).
+  Returns:
+      Estimated molecular weight of the protein or peptide in Daltons (Da).
 
-  Raises
-  ------
-  ValueError
-      If the sequence contains an invalid or unsupported amino acid code.
+  Raises:
+      ValueError: If the sequence contains an invalid or unsupported
+      amino acid code.
 
-  Notes
-  -----
-  - Use `AA_WEIGHTS_PROTEIN_MONO` for monoisotopic mass calculations,
-    typically used in mass spectrometry.
-  - Use `AA_WEIGHTS_PROTEIN_AVG` (default) for average residue masses,
-    appropriate for bulk molecular weight estimation.
-  - For free amino acids (not incorporated in peptides), use `AA_WEIGHTS_FREE`.
-  - Weight dictionaries are found in constants.py
+  Notes:
+      - Use `AA_WEIGHTS_PROTEIN_MONO` for monoisotopic mass calculations,
+        typically used in mass spectrometry.
+      - Use `AA_WEIGHTS_PROTEIN_AVG` (default) for average residue masses,
+        appropriate for bulk molecular weight estimation.
+      - For free amino acids (not incorporated in peptides), use
+        `AA_WEIGHTS_FREE`.
+      - Weight dictionaries are defined in `constants.py`.
   """
   # Remove whitespace and convert to uppercase
   sequence = sequence.strip().upper()

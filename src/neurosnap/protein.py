@@ -1011,9 +1011,10 @@ class Protein:
 
   def calculate_hydrogen_bonds(
     self,
-    model: Optional[int] = None,
     chain: Optional[str] = None,
     chain_other: Optional[str] = None,
+    model: Optional[int] = None,
+    *,
     donor_acceptor_cutoff: float = 3.5,
     angle_cutoff: float = 120.0,
   ) -> int:
@@ -1108,6 +1109,137 @@ class Protein:
                     hydrogen_bonds += 1
 
     return hydrogen_bonds
+
+  def calculate_interface_hydrogen_bonding_residues(
+      self,
+      chain: Optional[str] = None,
+      chain_other: Optional[str] = None,
+      *,
+      model: Optional[int] = None,
+      donor_acceptor_cutoff: float = 3.5,
+      angle_cutoff: float = 120.0,
+  ) -> int:
+      """
+      Count the number of unique residues that participate in hydrogen bonds at an interface.
+
+      A residue is considered hydrogen-bonding if at least one of its atoms participates in a
+      hydrogen bond that satisfies both:
+        - donor–acceptor distance <= donor_acceptor_cutoff (Å)
+        - donor–H–acceptor angle >= angle_cutoff (degrees)
+
+      Hydrogen atoms must be explicitly present; add missing hydrogens with a tool like 'reduce'.
+
+      If 'chain_other' is None:
+        - Hydrogen bonds are evaluated within 'chain' (intra-chain), or across all chains if 'chain' is None.
+      If 'chain_other' is provided:
+        - Only inter-chain hydrogen bonds between 'chain' and 'chain_other' are considered.
+        - If 'chain_other' is provided but 'chain' is not, an exception is raised.
+
+      Parameters:
+        model: Model index to evaluate. If None, defaults to the first model.
+        chain: Primary chain ID to evaluate. If None and 'chain_other' is also None, all chains are considered.
+        chain_other: Secondary chain ID for inter-chain evaluation. If None, intra-chain bonds are considered.
+        donor_acceptor_cutoff: Maximum donor–acceptor distance (Å). Default 3.5.
+        angle_cutoff: Minimum donor–H–acceptor angle (degrees). Default 120.0.
+
+      Returns:
+        Integer count of unique residues (from all evaluated chains) that participate in at least one hydrogen bond.
+
+      Raises:
+        ValueError if 'chain_other' is provided but 'chain' is not, or if a specified chain does not exist.
+      """
+      hydrogen_distance_cutoff = 1.2  # Typical donor–H bond length (Å)
+
+      # Default to the first model if model is None
+      if model is None:
+          model = self.models()[0]
+      model_obj = self.structure[model]
+
+      # Input validation
+      if chain_other is not None and chain is None:
+          raise ValueError("`chain_other` is specified, but `chain` is not. Provide both for inter-chain evaluation.")
+      if chain is not None and chain not in self.chains():
+          raise ValueError(f"Chain {chain} does not exist within the input structure.")
+      if chain_other is not None and chain_other not in self.chains():
+          raise ValueError(f"Chain {chain_other} does not exist within the input structure.")
+
+      # Helper to create a stable residue identifier
+      def resid_tuple(res):
+          # res.get_id() returns a tuple like (' ', seq_id, insertion_code)
+          return (res.get_parent().id, res.get_id())
+
+      hb_residues = set()  # set of (chain_id, res_id_tuple)
+
+      # Determine which chains to iterate as "donor side"
+      donor_chains = [chain] if chain is not None else [c.id for c in model_obj]
+
+      for donor_chain_id in donor_chains:
+          donor_chain = model_obj[donor_chain_id]
+
+          # Determine which chains to search as "acceptor side"
+          if chain_other:
+              acceptor_chain_ids = [chain_other]
+          else:
+              # Intra-chain if chain is specified; else across all chains (including same chain)
+              acceptor_chain_ids = [donor_chain_id] if chain is not None else [c.id for c in model_obj]
+
+          for donor_res in donor_chain:
+              for donor_atom in donor_res:
+                  # Only N/O donors
+                  if getattr(donor_atom, "element", None) not in ("N", "O"):
+                      continue
+
+                  # Collect explicit hydrogens bonded to this donor
+                  bonded_hydrogens = [
+                      atom for atom in donor_res
+                      if getattr(atom, "element", None) == "H"
+                      and np.linalg.norm(donor_atom.coord - atom.coord) <= hydrogen_distance_cutoff
+                  ]
+                  if not bonded_hydrogens:
+                      continue
+
+                  # Scan acceptor chains
+                  for acc_chain_id in acceptor_chain_ids:
+                      acc_chain = model_obj[acc_chain_id]
+
+                      # If inter-chain only, skip same-chain pairs
+                      if chain_other and acc_chain_id == donor_chain_id:
+                          continue
+
+                      for acceptor_res in acc_chain:
+                          for acceptor_atom in acceptor_res:
+                              # Only N/O acceptors and not the same atom
+                              if getattr(acceptor_atom, "element", None) not in ("N", "O"):
+                                  continue
+                              if acceptor_atom is donor_atom:
+                                  continue
+
+                              # Distance check (donor–acceptor)
+                              da_dist = np.linalg.norm(donor_atom.coord - acceptor_atom.coord)
+                              if da_dist > donor_acceptor_cutoff:
+                                  continue
+
+                              # Angle check for any bonded hydrogen
+                              for hydrogen in bonded_hydrogens:
+                                  v_dh = hydrogen.coord - donor_atom.coord
+                                  v_da = acceptor_atom.coord - donor_atom.coord
+                                  # Guard against zero-length vectors
+                                  if np.linalg.norm(v_dh) == 0 or np.linalg.norm(v_da) == 0:
+                                      continue
+
+                                  cos_theta = np.dot(v_dh, v_da) / (np.linalg.norm(v_dh) * np.linalg.norm(v_da))
+                                  # Numerical stability
+                                  cos_theta = max(min(cos_theta, 1.0), -1.0)
+                                  angle = np.degrees(np.arccos(cos_theta))
+
+                                  if angle >= angle_cutoff:
+                                      hb_residues.add(resid_tuple(donor_res))
+                                      hb_residues.add(resid_tuple(acceptor_res))
+                                      # Once accepted for this acceptor/donor pair, no need to keep checking more Hs
+                                      break
+
+      return len(hb_residues)
+
 
   def to_sdf(self, fpath: str):
     """Save the current protein structure as an SDF file.

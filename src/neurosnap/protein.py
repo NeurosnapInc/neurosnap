@@ -945,11 +945,11 @@ class Protein:
     Calculates the number of atomic contacts between two chains in a protein structure.
 
     Parameters:
-        chain1 (str): ID of the first chain (e.g., the target).
-        chain2 (str): ID of the second chain (e.g., the binder).
-        model (Optional[int]): Index of the model to use (if structure contains multiple models).
+        chain1: ID of the first chain (e.g., the target).
+        chain2: ID of the second chain (e.g., the binder).
+        model: Index of the model to use (if structure contains multiple models).
                                Defaults to the first model if not specified.
-        threshold (float): Distance threshold in Ångströms to consider atoms as being in contact.
+        threshold: Distance threshold in Ångströms to consider atoms as being in contact.
                            Defaults to 4.5 Å.
 
     Returns:
@@ -967,6 +967,47 @@ class Protein:
     chain2_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain2]  # chain B
 
     return self.calculate_contacts(chain2_atoms, chain1_atoms, threshold)
+
+  def calculate_interface_residues(self,chain1: str,chain2: str,model: Optional[int] = None,threshold: float = 4.5) -> int:
+    """
+    Calculates the number of unique residues from two chains that participate
+    in inter-chain contacts within a given distance threshold.
+
+    A residue is considered part of the interface if at least one of its atoms
+    is within `threshold` Å of any atom in the opposing chain.
+
+    Parameters:
+        chain1: ID of the first chain (e.g., the target).
+        chain2: ID of the second chain (e.g., the binder).
+        model: Index of the model to use (if structure contains multiple models).
+                              Defaults to the first model if not specified.
+        threshold: Distance threshold in Ångströms to define inter-chain contacts.
+                          Defaults to 4.5 Å.
+
+    Returns:
+        int: Total number of unique residues (from both chains) that are part of the interface.
+    """
+    # Default to the first model if model is None
+    if model is None:
+      model = self.models()[0]
+
+    assert chain1 in self.chains(model), f"Chain {chain1} was not found."
+    assert chain2 in self.chains(model), f"Chain {chain2} was not found."
+
+    # Get atoms from the specified chains
+    chain1_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain1]
+    chain2_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain2]
+
+    interface_residues = set()
+    for atom1 in chain1_atoms:
+      for atom2 in chain2_atoms:
+        distance = (atom1.coord - atom2.coord).dot(atom1.coord - atom2.coord) ** 0.5  # Euclidean distance
+        if distance <= threshold:
+          # Add the residues (not atoms) from both chains
+          interface_residues.add(atom1.get_parent())  
+          interface_residues.add(atom2.get_parent())  
+
+    return len(interface_residues)
 
   def calculate_hydrogen_bonds(
     self,

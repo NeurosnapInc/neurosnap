@@ -182,7 +182,7 @@ def calculate_ipSAE(
   Args:
     protein: Neurosnap ``Protein`` containing the structure. Only standard
       amino acids and nucleotides with a valid representative atom are used.
-    plddt: Per-residue pLDDT aligned to the derived residue order.
+    plddt: Per-residue pLDDT aligned to the derived residue order (normalized to [0-100] NOT [0-1]).
     pae_matrix: Residue–residue PAE (Å) aligned to the same order.
     model: Structure model ID to analyze. Defaults to the first model.
     pae_cutoff: PAE threshold (Å) for ipSAE and counting “valid” pairs.

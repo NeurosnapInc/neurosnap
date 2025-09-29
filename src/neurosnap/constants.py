@@ -2,68 +2,85 @@
 This file contains constants.
 """
 
+from dataclasses import dataclass
+from typing import Dict, Optional
+
 # Names of atoms that are part of a protein's backbone structure
 BACKBONE_ATOMS = {"N", "CA", "C"}
 # Codes for standard nucleotides (both RNA and DNA)
 STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG"}
 # Codes for standard amino acids
 STANDARD_AAs = set("ACDEFGHIKLMNPQRSTVWY")
-# Maps non-standard amino acids to equivalent standard amino acids (if possible)
-NON_STANDARD_AAs_TO_STANDARD_AAs = {
-  "O": "K",  # Pyrrolysine → closest to Lysine
-  "U": "C",  # Selenocysteine → closest to Cysteine
-  "B": "D",  # Asparagine/Aspartic Acid → map to Aspartic Acid
-  "Z": "E",  # Glutamine/Glutamic Acid → map to Glutamic Acid
-  "J": "L",  # Leucine/Isoleucine → map to Leucine
-}
 # List of hydrophobic residues
 HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
 
-## Full amino acids table
-AAs_FULL_TABLE = [
-  ["A", "ALA", "ALANINE"],
-  ["R", "ARG", "ARGININE"],
-  ["N", "ASN", "ASPARAGINE"],
-  ["D", "ASP", "ASPARTIC ACID"],
-  ["C", "CYS", "CYSTEINE"],
-  ["Q", "GLN", "GLUTAMINE"],
-  ["E", "GLU", "GLUTAMIC ACID"],
-  ["G", "GLY", "GLYCINE"],
-  ["H", "HIS", "HISTIDINE"],
-  ["I", "ILE", "ISOLEUCINE"],
-  ["L", "LEU", "LEUCINE"],
-  ["K", "LYS", "LYSINE"],
-  ["M", "MET", "METHIONINE"],
-  ["F", "PHE", "PHENYLALANINE"],
-  ["P", "PRO", "PROLINE"],
-  ["S", "SER", "SERINE"],
-  ["T", "THR", "THREONINE"],
-  ["W", "TRP", "TRYPTOPHAN"],
-  ["Y", "TYR", "TYROSINE"],
-  ["V", "VAL", "VALINE"],
-  # NON-STANDARD AMINO ACIDS
-  ["O", "PYL", "PYRROLYSINE"],
-  ["U", "SEC", "SELENOCYSTEINE"],
-  ["B", "ASX", "ASPARAGINE/ASPARTIC ACID"],
-  ["Z", "GLX", "GLUTAMINE/GLUTAMIC ACID"],
-  ["J", "XLE", "LEUCINE/ISOLEUCINE"],
-  ["X", "UNK", "UNKNOWN"],
-  ["*", "TRM", "TERMINATION"],
-]
-AA_CODE_TO_ABR = {}
-AA_CODE_TO_NAME = {}
-AA_ABR_TO_CODE = {}
-AA_ABR_TO_NAME = {}
-AA_NAME_TO_CODE = {}
-AA_NAME_TO_ABR = {}
-for code, abr, name in AAs_FULL_TABLE:
-  AA_CODE_TO_ABR[code] = abr
-  AA_CODE_TO_NAME[code] = name
-  AA_ABR_TO_CODE[abr] = code
-  AA_ABR_TO_NAME[abr] = name
-  AA_NAME_TO_ABR[name] = abr
-  AA_NAME_TO_CODE[name] = code
 
+# Amino acid Record class
+@dataclass(frozen=True)
+class AARecord:
+  code: Optional[str]  # 1-letter code; None for if unavailable
+  abr: str  # 3-letter abbreviation or CCD code
+  name: str  # full name (upper-cased)
+  is_standard: bool  # True for the 20 canonical AAs
+  standard_equiv_abr: Optional[str]  # e.g., "LYS" for KCX; None if standard or unknown
+
+
+## Amino acids keyed by ABR
+AA_RECORDS: Dict[str, AARecord] = {
+  # STANDARD AMINO ACIDS
+  "ALA": AARecord("A", "ALA", "ALANINE", True, None),
+  "ARG": AARecord("R", "ARG", "ARGININE", True, None),
+  "ASN": AARecord("N", "ASN", "ASPARAGINE", True, None),
+  "ASP": AARecord("D", "ASP", "ASPARTIC ACID", True, None),
+  "CYS": AARecord("C", "CYS", "CYSTEINE", True, None),
+  "GLN": AARecord("Q", "GLN", "GLUTAMINE", True, None),
+  "GLU": AARecord("E", "GLU", "GLUTAMIC ACID", True, None),
+  "GLY": AARecord("G", "GLY", "GLYCINE", True, None),
+  "HIS": AARecord("H", "HIS", "HISTIDINE", True, None),
+  "ILE": AARecord("I", "ILE", "ISOLEUCINE", True, None),
+  "LEU": AARecord("L", "LEU", "LEUCINE", True, None),
+  "LYS": AARecord("K", "LYS", "LYSINE", True, None),
+  "MET": AARecord("M", "MET", "METHIONINE", True, None),
+  "PHE": AARecord("F", "PHE", "PHENYLALANINE", True, None),
+  "PRO": AARecord("P", "PRO", "PROLINE", True, None),
+  "SER": AARecord("S", "SER", "SERINE", True, None),
+  "THR": AARecord("T", "THR", "THREONINE", True, None),
+  "TRP": AARecord("W", "TRP", "TRYPTOPHAN", True, None),
+  "TYR": AARecord("Y", "TYR", "TYROSINE", True, None),
+  "VAL": AARecord("V", "VAL", "VALINE", True, None),
+  # NON-STANDARD / SPECIAL AMINO ACIDS (sequence-level)
+  "PYL": AARecord("O", "PYL", "PYRROLYSINE", False, "LYS"),
+  "SEC": AARecord("U", "SEC", "SELENOCYSTEINE", False, "CYS"),
+  "ASX": AARecord("B", "ASX", "ASPARAGINE/ASPARTIC ACID", False, "ASP"),
+  "GLX": AARecord("Z", "GLX", "GLUTAMINE/GLUTAMIC ACID", False, "GLU"),
+  "XLE": AARecord("J", "XLE", "LEUCINE/ISOLEUCINE", False, "LEU"),
+  "UNK": AARecord("X", "UNK", "UNKNOWN", False, None),
+  "TRM": AARecord("*", "TRM", "TERMINATION", False, None),
+  # NON-STANDARD / MODIFIED (from CCD)
+  "LLP": AARecord(None, "LLP", "Nε-LIPOYL-LYSINE", False, "LYS"),
+  "TPO": AARecord(None, "TPO", "O-PHOSPHOTHREONINE", False, "THR"),
+  "CSS": AARecord(None, "CSS", "SULFONATED CYSTEINE", False, "CYS"),
+  "OCS": AARecord(None, "OCS", "CYSTEINE-S-SULFONIC ACID", False, "CYS"),
+  "CSO": AARecord(None, "CSO", "S-HYDROXYCYSTEINE (CYSTEINE SULFINIC ACID)", False, "CYS"),
+  "PCA": AARecord(None, "PCA", "PYROGLUTAMIC ACID", False, "GLU"),
+  "KCX": AARecord(None, "KCX", "CARBOXYLYSINE", False, "LYS"),
+  "CME": AARecord(None, "CME", "S-METHYLCYSTEINE", False, "CYS"),
+  "MLY": AARecord(None, "MLY", "Nε-METHYLLYSINE", False, "LYS"),
+  "SEP": AARecord(None, "SEP", "O-PHOSPHOSERINE", False, "SER"),
+  "CSX": AARecord(None, "CSX", "CYSTEINE OXIDATION PRODUCT (UNSPECIFIED)", False, "CYS"),
+  "CSD": AARecord(None, "CSD", "CYSTEINE DISULFIDE", False, "CYS"),
+  "MSE": AARecord(None, "MSE", "SELENOMETHIONINE", False, "MET"),
+  "MHO": AARecord(None, "MHO", "METHIONINE SULFOXIDE", False, "MET"),
+}
+
+# Alias map: every searchable token → ABR
+# (1-letter codes, 3-letter codes, and names)
+AA_ALIASES: Dict[str, str] = {}
+for abr, rec in AA_RECORDS.items():
+  if rec.code is not None:
+    AA_ALIASES[rec.code] = abr
+  AA_ALIASES[abr] = abr
+  AA_ALIASES[rec.name] = abr
 
 ## Amino acid molecular weights
 # Average residue masses (in Daltons) for amino acids *as incorporated into peptides/proteins*.

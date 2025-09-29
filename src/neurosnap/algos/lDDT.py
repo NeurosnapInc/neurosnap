@@ -175,7 +175,7 @@ def get_dist_thresh_b_indices(dmap, thresh, comparator):
 
 
 # Calculate lDDT using numpy scheme
-def get_LDDT(true_map, pred_map, R=15, sep_thresh=-1, T_set=[0.5, 1, 2, 4], precision=4):
+def get_lDDT(true_map, pred_map, R=15, sep_thresh=-1, T_set=[0.5, 1, 2, 4], precision=4):
   """
   Mariani V, Biasini M, Barbato A, Schwede T.
   lDDT: a local superposition-free score for comparing protein structures and models using distance difference tests.

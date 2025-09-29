@@ -5,7 +5,7 @@ This file contains constants.
 # Names of atoms that are part of a protein's backbone structure
 BACKBONE_ATOMS = {"N", "CA", "C"}
 # Codes for standard nucleotides (both RNA and DNA)
-STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG", "DU"}
+STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG"}
 # Codes for standard amino acids
 STANDARD_AAs = set("ACDEFGHIKLMNPQRSTVWY")
 # Maps non-standard amino acids to equivalent standard amino acids (if possible)

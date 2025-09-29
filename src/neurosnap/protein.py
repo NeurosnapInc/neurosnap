@@ -1845,7 +1845,7 @@ def calc_lDDT(ref_pdb: str, sample_pdb: str) -> float:
   """
   ref_L, ref_dmap, ref_rnames = lDDT.pdb2dmap(ref_pdb)
   mod_L, mod_dmap, mod_rnames = lDDT.pdb2dmap(sample_pdb)
-  return lDDT.get_LDDT(ref_dmap, mod_dmap)
+  return lDDT.get_lDDT(ref_dmap, mod_dmap)
 
 
 def fetch_accessions(accessions: Iterable[str], batch_size: int = 150) -> Dict[str, Union[str, None]]:

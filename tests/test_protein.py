@@ -13,7 +13,6 @@ from neurosnap.protein import (
   animate_pseudo_3D,
   calculate_bsa,
   extract_non_biopolymers,
-  fetch_accessions,
   fetch_uniprot,
   getAA,
   isoelectric_point,

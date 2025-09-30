@@ -257,10 +257,15 @@ class Protein:
           for atom in res:
             # get residue type
             res_type = "HETEROGEN"
-            if res.id[0] == " " and res.resname in AA_ABR_TO_CODE:
-              res_type = "AMINO_ACID"
-            elif res.id[0] == " " and res.resname in STANDARD_NUCLEOTIDES:
-              res_type = "NUCLEOTIDE"
+            if res.id[0] == " ":
+              if res.resname in STANDARD_NUCLEOTIDES:
+                res_type = "NUCLEOTIDE"
+              else:
+                try:
+                  getAA(res.resname, non_standard="allow")
+                  res_type = "AMINO_ACID"
+                except:
+                  pass
             df["model"].append(model.id)
             df["chain"].append(chain.id)
             df["res_id"].append(res.id[1])
@@ -499,7 +504,7 @@ class Protein:
 
     """
     # List of standard amino acids and nucleotides (biopolymer residues)
-    biopolymer_residues = set(AA_ABR_TO_CODE.keys()).union(STANDARD_NUCLEOTIDES)
+    biopolymer_residues = set(AA_RECORDS.keys()).union(STANDARD_NUCLEOTIDES)
     biopolymer_residues.remove("UNK")
 
     for m in self.structure:
@@ -1437,7 +1442,7 @@ def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool =
       if non_standard == "allow":
         pass
       elif non_standard == "convert":
-        x = getAA(x, non_standard = "convert").code
+        x = getAA(x, non_standard="convert").code
       else:
         raise ValueError(f'Invalid amino acid "{x}" specified at position {i}.')
     new_seq += x

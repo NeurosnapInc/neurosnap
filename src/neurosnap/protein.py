@@ -1721,145 +1721,80 @@ def calculate_bsa(
   return (sasa_group1 + sasa_group2) - sasa_complex
 
 
-def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0, template_smiles_map=None):
+def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
   """
-  Extract non-biopolymer molecules from a PDB and write each as SDF in Kekulé form.
-  - template_smiles_map: optional dict like {"LIG": "c1ccccc1"} to assign bond orders from a template.
+  Extracts all non-biopolymer molecules (ligands, heteroatoms, etc.)
+  from the specified PDB file and writes them to SDF files.
+  Each molecule is saved as a separate SDF file in the output directory.
+  Automatically adds hydrogens to molecules. Attempts to sanitize
+  the molecule if possible; logs a warning if sanitization fails.
+
+  Parameters:
+      pdb_file: Path to the input PDB file.
+      output_dir: Directory where the SDF files will be saved. Will overwrite existing directory.
+      min_atoms: Minimum number of atoms a molecule must have to be saved. Molecules with fewer atoms are skipped.
   """
 
   def is_biopolymer(molecule):
-    biopolymer_keywords = {
-      # Amino acids
-      "GLY",
-      "ALA",
-      "VAL",
-      "LEU",
-      "ILE",
-      "MET",
-      "PHE",
-      "TYR",
-      "TRP",
-      "SER",
-      "THR",
-      "CYS",
-      "PRO",
-      "ASN",
-      "GLN",
-      "ASP",
-      "GLU",
-      "LYS",
-      "ARG",
-      "HIS",
-      # Nucleotide bases
-      "DA",
-      "DT",
-      "DG",
-      "DC",
-      "A",
-      "T",
-      "G",
-      "C",
-      "U",
-    }
+    """
+    Determines if a molecule is a biopolymer (protein or nucleotide) based on specific characteristics.
+    Returns True if it is a biopolymer; False otherwise.
+    """
+    # Check for peptide bonds or nucleotide backbones
+    # Simplified logic: exclude molecules with standard amino acids or nucleotide bases
+    biopolymer_keywords = set(AA_RECORDS.keys()).union(STANDARD_NUCLEOTIDES)
     for atom in molecule.GetAtoms():
-      ri = atom.GetPDBResidueInfo()
-      if ri and ri.GetResidueName().strip() in biopolymer_keywords:
-        return True
+      residue_info = atom.GetPDBResidueInfo()
+      if residue_info:
+        res_name = residue_info.GetResidueName().strip()
+        if res_name in biopolymer_keywords:
+          return True
     return False
 
-  def get_resname(mol):
-    # return a single residue name if all heavy atoms share it; else None
-    names = set()
-    for a in mol.GetAtoms():
-      if a.GetAtomicNum() == 1:  # ignore H
-        continue
-      ri = a.GetPDBResidueInfo()
-      if ri:
-        names.add(ri.GetResidueName().strip())
-    return list(names)[0] if len(names) == 1 else None
-
-  def assign_bond_orders(mol):
-    """
-    Assign bond orders either from a provided template (preferred) or by Hueckel method.
-    Modifies and returns `mol`.
-    """
-    # 1) Try template by residue name (if provided)
-    if template_smiles_map:
-      res = get_resname(mol)
-      if res and res in template_smiles_map:
-        tpl = Chem.MolFromSmiles(template_smiles_map[res])
-        if tpl is not None:
-          tpl = Chem.AddHs(tpl)  # match to 3D with Hs
-          try:
-            assigned = Chem.AssignBondOrdersFromTemplate(tpl, Chem.Mol(mol))
-            return assigned
-          except Exception as e:
-            logger.warning(f"Template assign failed for {res}: {e}")
-
-    # 2) Fall back to geometric/Hückel assignment
-    m = Chem.Mol(mol)
-    try:
-      # uses coordinates + valence rules to guess orders and aromaticity
-      rdDetermineBonds.DetermineBonds(m, charge=0, useHueckel=True)
-      return m
-    except Exception as e:
-      logger.warning(f"Hückel bond-order assignment failed: {e}")
-      return mol  # as-is (likely single bonds only)
-
-  # Prepare output dir
+  # Create output directory if it doesn't exist
   if os.path.exists(output_dir):
     shutil.rmtree(output_dir)
   os.makedirs(output_dir)
 
-  # Read whole PDB (no sanitize yet)
+  # Read the PDB file
   mol = Chem.MolFromPDBFile(pdb_file, removeHs=False, sanitize=False)
   if mol is None:
-    raise ValueError(f"Failed to read PDB file: {pdb_file}")
+    raise ValueError(f"Failed to read PDB file: {pdb_file}.")
 
-  frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
-  n_written = 0
+  # Split the molecule into fragments (separate entities in the PDB)
+  fragments = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
+  molecule_count = 1
 
-  for i, frag in enumerate(frags):
+  for i, frag in enumerate(fragments):
     if frag is None:
-      logger.warning(f"Skipping fragment {i}: None")
+      logger.warning(f"Skipping fragment {i} due to processing failure.")
       continue
 
-    # Skip obvious biopolymers and tiny bits
+    try:
+      # Add hydrogens and sanitize molecule
+      Chem.SanitizeMol(frag)
+    except Exception as e:
+      logger.warning(f"Failed to sanitize fragment {i}: {e}")
+      continue
+
+    # Check if the fragment is a biopolymer
     if is_biopolymer(frag):
       logger.info(f"Skipping biopolymer fragment {i}.")
       continue
+
+    # Skip small molecules based on atom count
     if frag.GetNumAtoms() < min_atoms:
-      logger.info(f"Skipping small fragment {i} (atoms={frag.GetNumAtoms()}).")
+      logger.info(f"Skipping small molecule fragment {i} (atom count: {frag.GetNumAtoms()}).")
       continue
 
-    # Assign bond orders first (critical for Kekulé to work)
-    frag_bo = assign_bond_orders(frag)
+    # Save fragment to SDF
+    sdf_file = os.path.join(output_dir, f"ligand_{molecule_count}.sdf")
+    writer = Chem.SDWriter(sdf_file)
+    writer.write(frag)
+    writer.close()
+    molecule_count += 1
 
-    # Now sanitize (valence/aromaticity perception)
-    try:
-      Chem.SanitizeMol(frag_bo)
-    except Exception as e:
-      logger.warning(f"Sanitization failed for fragment {i}: {e}")
-      continue
-
-    # Kekulize to explicit single/double
-    frag_kek = Chem.Mol(frag_bo)
-    try:
-      Chem.Kekulize(frag_kek, clearAromaticFlags=True)
-    except Exception as e:
-      logger.warning(f"Kekulization failed for fragment {i}: {e} (writing aromatic instead)")
-      frag_to_write = frag_bo  # aromatic as fallback
-    else:
-      frag_to_write = frag_kek
-
-    # Write SDF
-    n_written += 1
-    sdf_path = os.path.join(output_dir, f"ligand_{n_written}.sdf")
-    w = Chem.SDWriter(sdf_path)
-    w.write(frag_to_write)
-    w.close()
-
-  logger.info(f"Wrote {n_written} ligand(s) to {output_dir}.")
+  logger.info(f"Extracted {molecule_count - 1} non-biopolymer molecules to {output_dir}.")
 
 
 def calc_LDDT(ref_pdb: str, sample_pdb: str) -> float:

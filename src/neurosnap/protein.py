@@ -299,7 +299,7 @@ class Protein:
     for res in self.structure[model][chain]:
       resn = res.get_resname()
       try:
-        seq += getAA(resn)[0]
+        seq += getAA(resn).code
       except:
         pass
 

@@ -1786,7 +1786,7 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
       continue
 
     # Save fragment to SDF
-    sdf_file = os.path.join(output_dir, f"ligand_{molecule_count}.sdf")
+    sdf_file = os.path.join(output_dir, f"mol_{molecule_count}.sdf")
     writer = Chem.SDWriter(sdf_file)
     writer.write(frag)
     writer.close()

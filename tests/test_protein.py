@@ -236,9 +236,13 @@ def test_extract_non_biopolymers(tmp_path):
 
 def test_getAA_and_sanitize_and_mw_and_charge_and_pi():
   # getAA
-  assert getAA("A") == ("A", "ALA", "ALANINE")
-  assert getAA("ala") == ("A", "ALA", "ALANINE")
-  with pytest.raises(ValueError):
+  rec = getAA("A")
+  assert (rec.code, rec.abr, rec.name) == ("A", "ALA", "ALANINE")
+
+  rec2 = getAA("ala")  # case-insensitive
+  assert (rec2.code, rec2.abr, rec2.name) == ("A", "ALA", "ALANINE")
+
+  with pytest.raises(ValueError, match=r"Unknown amino acid identifier"):
     getAA("???")
 
   # sanitize
@@ -265,6 +269,23 @@ def test_getAA_and_sanitize_and_mw_and_charge_and_pi():
   assert q_acidic < 0 and q_basic > 0
   pi = isoelectric_point("ACDEFGHIKLMNPQRSTVWY")
   assert 0.0 <= pi <= 14.0
+
+def test_getAA_non_standard_handling():
+  # Non-standard example: MSE (selenomethionine)
+  # reject -> ValueError with helpful guidance
+  with pytest.raises(ValueError, match=r"Encountered non-standard amino acid"):
+    getAA("MSE", non_standard="reject")
+
+  # allow -> returns the non-standard record unchanged
+  rec_allow = getAA("MSE", non_standard="allow")
+  assert rec_allow.abr == "MSE"
+  assert rec_allow.name.upper().startswith("SELENO")  # "SELENOMETHIONINE"
+  # 1-letter code may be unavailable; implementation may use "?" as a sentinel
+  assert rec_allow.code in (None, "?")
+
+  # convert -> mapped to its standard equivalent MET
+  rec_conv = getAA("MSE", non_standard="convert")
+  assert (rec_conv.code, rec_conv.abr, rec_conv.name) == ("M", "MET", "METHIONINE")
 
 
 # -----------------------

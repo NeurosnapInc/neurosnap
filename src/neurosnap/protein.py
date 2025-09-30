@@ -29,7 +29,6 @@ from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
 from matplotlib import collections as mcoll
 from rdkit import Chem
-from rdkit.Chem import rdDetermineBonds
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from scipy.special import expit as sigmoid
 from tqdm import tqdm

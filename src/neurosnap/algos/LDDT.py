@@ -1,5 +1,5 @@
 """
-Code for lDDT (Local Distance Difference Test) calculation, adapted from https://github.com/ba-lab/disteval/blob/main/LDDT.ipynb
+Code for LDDT (Local Distance Difference Test) calculation, adapted from https://github.com/ba-lab/disteval/blob/main/LDDT.ipynb
 """
 
 import numpy as np
@@ -174,8 +174,8 @@ def get_dist_thresh_b_indices(dmap, thresh, comparator):
   return threshed
 
 
-# Calculate lDDT using numpy scheme
-def get_lDDT(true_map, pred_map, R=15, sep_thresh=-1, T_set=[0.5, 1, 2, 4], precision=4):
+# Calculate LDDT using numpy scheme
+def get_LDDT(true_map, pred_map, R=15, sep_thresh=-1, T_set=[0.5, 1, 2, 4], precision=4):
   """
   Mariani V, Biasini M, Barbato A, Schwede T.
   lDDT: a local superposition-free score for comparing protein structures and models using distance difference tests.
@@ -207,14 +207,14 @@ def get_lDDT(true_map, pred_map, R=15, sep_thresh=-1, T_set=[0.5, 1, 2, 4], prec
   # Number of pairs in L
   L_n = L_indices.sum()
 
-  # Calculated lDDT
+  # Calculated LDDT
   preserved_fractions = []
   for _thresh in T_set:
     _n_preserved = get_n_preserved(true_flat_in_L, pred_flat_in_L, _thresh)
     _f_preserved = _n_preserved / L_n
     preserved_fractions.append(_f_preserved)
 
-  lDDT = np.mean(preserved_fractions)
+  LDDT = np.mean(preserved_fractions)
   if precision > 0:
-    lDDT = round(lDDT, precision)
-  return lDDT
+    LDDT = round(LDDT, precision)
+  return LDDT

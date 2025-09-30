@@ -1344,39 +1344,65 @@ class Protein:
 
 
 ### FUNCTIONS ###
-def getAA(query: str) -> Tuple[str, str, str]:
-  """Efficiently get any amino acid using either their 1 letter code,
-  3 letter abbreviation, or full name. See AAs_FULL_TABLE
-  for a list of all supported amino acids and codes.
+def getAA(query: str, *, non_standard: str = "reject") -> AARecord:
+  """Resolve an amino acid identifier to a canonical record.
 
-  Parameters:
-    query: Amino acid code, abbreviation, or name
+  This function accepts either a **1-letter code**, **3-letter abbreviation**,
+  or **full name** (case-insensitive) and returns the corresponding `AARecord`.
 
-  Returns:
-    A triple of the form ``(code, abr, name)``.
+  Parameters
+  ----------
+  query : str
+      Amino acid identifier (1-letter code, 3-letter CCD abbreviation,
+      or full name).
+  non_standard : {"reject", "convert", "allow"}, optional
+      Policy for handling non-standard amino acids (default: "reject"):
 
-    - ``code`` is the amino acid 1 letter abbreviation / code
-    - ``abr`` is the amino acid 3 letter abbreviation / code
-    - ``name`` is the amino acid full name
+      - "reject": Raise an error if the amino acid is non-standard.
+      - "convert": Map non-standard amino acids to their closest
+        standard equivalent (e.g., MSE → MET).
+      - "allow": Return the non-standard amino acid unchanged.
 
+  Returns
+  -------
+  AARecord
+      A record containing:
+      - `code`: 1-letter code (may be "?" if unavailable for non-standard AAs).
+      - `abr`: 3-letter abbreviation.
+      - `name`: Full amino acid name.
+      - `is_standard`: Whether the residue is one of the 20 canonical amino acids.
+      - `standard_equiv_abr`: 3-letter abbreviation of the standard equivalent
+        (if applicable).
+
+  Raises
+  ------
+  ValueError
+      If `query` does not match any supported amino acid identifier.
+      If `non_standard="reject"` and the amino acid is non-standard.
+      If `non_standard="convert"` but no standard equivalent is defined.
   """
   query = query.upper()
   try:
-    if len(query) == 1:
-      return query, AA_CODE_TO_ABR[query], AA_CODE_TO_NAME[query]
-    elif len(query) == 3:
-      return AA_ABR_TO_CODE[query], query, AA_ABR_TO_NAME[query]
-    else:
-      return AA_NAME_TO_CODE[query], AA_NAME_TO_ABR[query], query
+    abr = AA_ALIASES[query]
+    rec = AA_RECORDS[abr]
   except KeyError:
-    raise ValueError(f"Unknown amino acid for {query}")
+    raise ValueError(f"Unknown amino acid identifier: '{query}'. Expected a 1-letter code, 3-letter code, or full name.")
+
+  if not rec.is_standard:
+    if non_standard == "reject":
+      raise ValueError(
+        f"Encountered non-standard amino acid '{rec.abr}' ({rec.name}). "
+        "To handle these, set `non_standard='allow'` to keep them "
+        "or `non_standard='convert'` to map them to a standard equivalent."
+      )
+    elif non_standard == "convert":
+      if not rec.standard_equiv_abr:
+        raise ValueError(f"Non-standard amino acid '{rec.abr}' ({rec.name}) does not have a standard equivalent and cannot be converted.")
+      rec = AA_RECORDS[rec.standard_equiv_abr]
+  return rec
 
 
-def sanitize_aa_seq(seq: str, non_standard: str = "reject", trim_term: bool = True, uppercase=True, clean_whitespace: bool = True) -> str:
-  """
-  Validates and sanitizes an amino acid sequence string.
-
-  Parameters:
+def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool = True, uppercase=True, clean_whitespace: bool = True) -> str:
       seq: The input amino acid sequence.
       non_standard: How to handle non-standard amino acids.
           Must be one of:

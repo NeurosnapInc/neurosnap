@@ -1439,7 +1439,7 @@ def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool =
       if non_standard == "allow":
         pass
       elif non_standard == "convert":
-        x = AA_CODE_NON_STANDARD_TO_STANDARD[x]
+        x = getAA(x, non_standard = "convert").code
       else:
         raise ValueError(f'Invalid amino acid "{x}" specified at position {i}.')
     new_seq += x

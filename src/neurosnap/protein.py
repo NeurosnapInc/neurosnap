@@ -1765,22 +1765,21 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
   fragments = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
   molecule_count = 1
 
-  for i, frag in enumerate(fragments):
+  for i, frag in enumerate(fragments, start=1):
     if frag is None:
-      logger.warning(f"Skipping fragment {i} due to processing failure.")
-      continue
-
-    try:
-      # Add hydrogens and sanitize molecule
-      Chem.SanitizeMol(frag)
-    except Exception as e:
-      logger.warning(f"Failed to sanitize fragment {i}: {e}")
+      logger.warning(f"Skipping fragment {i} due to processing failure (frag is None).")
       continue
 
     # Check if the fragment is a biopolymer
     if is_biopolymer(frag):
       logger.info(f"Skipping biopolymer fragment {i}.")
       continue
+
+    try:
+      # Add hydrogens and sanitize molecule
+      Chem.SanitizeMol(frag)
+    except Exception as e:
+      raise ValueError(f"Failed to sanitize fragment {i}: {e}")
 
     # Skip small molecules based on atom count
     if frag.GetNumAtoms() < min_atoms:

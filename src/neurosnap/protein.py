@@ -37,9 +37,7 @@ from tqdm import tqdm
 import neurosnap.algos.lDDT as lDDT
 from neurosnap.api import USER_AGENT
 from neurosnap.constants import (
-  AA_ABR_TO_CODE,
   AA_ALIASES,
-  AA_CODE_NON_STANDARD_TO_STANDARD,
   AA_RECORDS,
   AA_WEIGHTS_PROTEIN_AVG,
   BACKBONE_ATOMS,

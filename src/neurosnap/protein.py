@@ -1733,6 +1733,8 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
       output_dir: Directory where the SDF files will be saved. Will overwrite existing directory.
       min_atoms: Minimum number of atoms a molecule must have to be saved. Molecules with fewer atoms are skipped.
   """
+  biopolymer_keywords = set(AA_RECORDS.keys()).union(STANDARD_NUCLEOTIDES)
+  biopolymer_keywords.remove("UNK")
 
   def is_biopolymer(molecule):
     """
@@ -1741,7 +1743,6 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
     """
     # Check for peptide bonds or nucleotide backbones
     # Simplified logic: exclude molecules with standard amino acids or nucleotide bases
-    biopolymer_keywords = set(AA_RECORDS.keys()).union(STANDARD_NUCLEOTIDES)
     for atom in molecule.GetAtoms():
       residue_info = atom.GetPDBResidueInfo()
       if residue_info:

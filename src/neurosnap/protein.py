@@ -1764,7 +1764,7 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
   fragments = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False)
   molecule_count = 1
 
-  for i, frag in enumerate(fragments, start=1):
+  for i, frag in enumerate(fragments):
     if frag is None:
       logger.warning(f"Skipping fragment {i} due to processing failure (frag is None).")
       continue

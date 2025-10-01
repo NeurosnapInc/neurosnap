@@ -206,27 +206,23 @@ class NeurosnapAPI:
       logger.info(f"Waiting for Neurosnap job with ID {job_id} (current status: {status})")
     return status
 
-  def get_job_files(self, job_id: str, file_type: str, share_id: str = None, format_type: Optional[str] = None) -> List[str]:
-    """Fetches all files from a completed Neurosnap job and optionally prints them.
+  def get_job_data(self, job_id: str, share_id: str = None) -> Dict[str, Any]:
+    """
+    Fetches the config and all files from a Neurosnap job.
+    Output files are only included once the job has completed.
 
     Parameters:
       job_id: The ID of the job.
-      file_type: The type of files to fetch.
       share_id: The share ID, if any.
-      format_type:
-        - "table": Prints the files in a tabular format.
-        - "json": Prints the files in formatted JSON.
-        - None (default): No printing.
 
     Returns:
-      A list of file names from the job.
+      Dictionary with keys ``config``, ``in``, and ``out`` corresponding to config used, input files, and output files.
 
     Raises:
       HTTPError: If the API request fails.
-
     """
     # Construct the URL for the request
-    url = f"{self.BASE_URL}/job/files/{job_id}/{file_type}"
+    url = f"{self.BASE_URL}/job/data/{job_id}"
     if share_id:
       url += f"?share={share_id}"
 
@@ -236,14 +232,6 @@ class NeurosnapAPI:
 
     # Parse the response
     files = r.json()
-    # Optionally format the output based on the format_type
-    format_type = format_type.lower()
-    if format_type == "table":
-      # Print the file details in a table format
-      print(tabulate(files, headers=["File Name", "File Size"]))
-    elif format_type == "json":
-      # Print the file details in JSON format
-      print(json.dumps(files, indent=2))
     return files
 
   def get_job_file(self, job_id: str, file_type: str, file_name: str, save_path: Union[str, None] = None, share_id: str = None) -> Union[str, None]:

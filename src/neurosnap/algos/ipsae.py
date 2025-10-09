@@ -671,3 +671,55 @@ def calculate_ipSAE(
       "numbers": residue_nums,
     },
   }
+
+
+def extract_interchain_metrics(res: dict) -> dict:
+  """Extracts major inter-chain confidence metrics from a calculate_ipSAE() result.
+
+  This helper flattens the most relevant directional interface metrics into a clean,
+  consistent structure suitable for export or downstream analysis. It includes the
+  primary ipSAE/ipTM scores and auxiliary interface predictors like pDockQ, pDockQ2,
+  and LIS.
+
+  Args:
+      res (dict): Output dictionary from `calculate_ipSAE()`. Must contain "asym" and
+          "scores" keys as returned by the main ipSAE computation.
+
+  Returns:
+      dict: Nested dictionary of the form:
+          {
+            "iptm_d0chn": {chain1: {chain2: float}},
+            "ipsae_d0chn": {chain1: {chain2: float}},
+            "ipsae_d0dom": {chain1: {chain2: float}},
+            "ipsae_d0res": {chain1: {chain2: float}},
+            "pDockQ": {chain1: {chain2: float}},
+            "pDockQ2": {chain1: {chain2: float}},
+            "LIS": {chain1: {chain2: float}},
+          }
+
+          Each key corresponds to a metric describing the confidence or stability of
+          the interaction between two chains (e.g., "A"→"B" and "B"→"A").
+  """
+  return {
+    # Inter-chain ipTM: global interface score using d₀ based on total chain length.
+    # Reflects large-scale structural agreement between two chains.
+    "iptm_d0chn": res["asym"]["iptm_d0chn"],
+    # ipSAE with d₀ based on total residues of both chains.
+    # Measures interface accuracy with a chain-scale normalization.
+    "ipsae_d0chn": res["asym"]["ipsae_d0chn"],
+    # ipSAE with d₀ based on residues that actually form the interface (domain level).
+    # More localized and sensitive to interface size and contact density.
+    "ipsae_d0dom": res["asym"]["ipsae_d0dom"],
+    # ipSAE with d₀ computed per residue from the number of valid partner residues.
+    # The most fine-grained measure, capturing local interface uncertainty.
+    "ipsae_d0res": res["asym"]["ipsae_d0res"],
+    # pDockQ: Empirical interface quality predictor based on contact count and mean pLDDT.
+    # Approximates interfacial confidence similar to DockQ but computed from AF2 outputs.
+    "pDockQ": res["scores"]["pDockQ"],
+    # pDockQ2: Updated version of pDockQ combining pLDDT and inter-residue PAE via a sigmoid model.
+    # Generally provides smoother and more reliable values across complex sizes.
+    "pDockQ2": res["scores"]["pDockQ2"],
+    # LIS: Local Interface Score — averages (12 - PAE)/12 for PAE ≤ 12Å.
+    # Measures local contact consistency between chains based purely on PAE.
+    "LIS": res["scores"]["LIS"],
+  }

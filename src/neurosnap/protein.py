@@ -33,7 +33,6 @@ from requests_toolbelt.multipart.encoder import MultipartEncoder
 from scipy.special import expit as sigmoid
 from tqdm import tqdm
 
-import neurosnap.algos.LDDT as LDDT
 from neurosnap.api import USER_AGENT
 from neurosnap.constants import (
   AA_ALIASES,
@@ -1794,22 +1793,6 @@ def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):
     molecule_count += 1
 
   logger.info(f"Extracted {molecule_count - 1} non-biopolymer molecules to {output_dir}.")
-
-
-def calc_LDDT(ref_pdb: str, sample_pdb: str) -> float:
-  """Calculates the LDDT (Local Distance Difference Test) between two proteins.
-
-  Parameters:
-    ref_pdb: Filepath for reference protein
-    sample_pdb: Filepath for sample protein
-
-  Returns:
-    The LDDT score of the two proteins which ranges between 0-1
-
-  """
-  ref_L, ref_dmap, ref_rnames = LDDT.pdb2dmap(ref_pdb)
-  mod_L, mod_dmap, mod_rnames = LDDT.pdb2dmap(sample_pdb)
-  return LDDT.get_LDDT(ref_dmap, mod_dmap)
 
 
 def fetch_accessions(accessions: Iterable[str], batch_size: int = 150) -> Dict[str, Union[str, None]]:

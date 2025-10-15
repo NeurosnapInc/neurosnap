@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from neurosnap.constants import STANDARD_NUCLEOTIDES
 from neurosnap.protein import Protein
 
 
@@ -73,7 +74,7 @@ def init_pairdict_set(chains: np.ndarray) -> Dict[str, Dict[str, set]]:
 # ------------------ derive residue-level arrays from Protein ------------------
 
 AA_SET = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"}
-NA_SET = {"DA", "DC", "DT", "DG", "A", "C", "U", "G"}  # DNA/RNA (common 3-letter)
+NA_SET = set(STANDARD_NUCLEOTIDES)  # canonical DNA/RNA residue names
 
 # choose a single coordinate per residue:
 #   - proteins: Cβ (GLY -> CA, else CA fallback if CB missing)

@@ -1,9 +1,12 @@
 # tests/test_ipsae.py
+import io
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
+from Bio.PDB import PDBIO
+from Bio.PDB.StructureBuilder import StructureBuilder
 
 from neurosnap.algos.ipsae import (
   calc_d0,
@@ -183,3 +186,47 @@ def test_calculate_ipsae_reports_pairs_and_counts():
   # valid pairs counts are non-negative
   assert res["counts"]["pairs_with_pae_lt_cutoff"][c1][c2] >= 0.0
   assert res["counts"]["pairs_with_pae_lt_cutoff_and_dist"][c1][c2] >= 0.0
+
+
+def test_calculate_ipsae_accepts_nucleic_acids():
+  builder = StructureBuilder()
+  builder.init_structure("NA")
+  builder.init_model(0)
+  chain_offsets = {"A": np.array([0.0, 0.0, 0.0]), "B": np.array([8.0, 0.0, 0.0])}
+  residues = {"A": [("DA", 1), ("A", 2)], "B": [("DG", 1), ("U", 2)]}
+
+  for chain_id, res_list in residues.items():
+    builder.init_chain(chain_id)
+    builder.init_seg("    ")
+    for resname, resseq in res_list:
+      builder.init_residue(resname, " ", resseq, " ")
+      base = chain_offsets[chain_id] + np.array([0.0, 0.0, float(resseq)])
+      builder.init_atom("C3'", base, 1.0, 10.0, " ", "C3'", element="C")
+      builder.init_atom("C1'", base + np.array([0.5, 0.5, 0.0]), 1.0, 10.0, " ", "C1'", element="C")
+
+  structure = builder.get_structure()
+  handle = io.StringIO()
+  pdbio = PDBIO()
+  pdbio.set_structure(structure)
+  pdbio.save(handle)
+  handle.seek(0)
+
+  prot = Protein(handle, format="pdb")
+
+  plddt = np.full(4, 90.0, dtype=float)
+  pae = np.full((4, 4), 5.0, dtype=float)
+  np.fill_diagonal(pae, 0.0)
+
+  res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae, pae_cutoff=10.0)
+
+  names = set(res["residue_order"]["names"].tolist())
+  assert {"DA", "A", "DG", "U"}.issubset(names)
+
+  # chain pair should be treated as nucleic acid (min d0 of 2.0)
+  assert res["counts"]["d0chn"]["A"]["B"] >= 2.0
+
+  # by-residue arrays still align with residue count
+  assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (4,)
+
+  # ensure we recorded at least one valid inter-chain pair
+  assert res["counts"]["pairs_with_pae_lt_cutoff"]["A"]["B"] > 0.0

@@ -230,3 +230,49 @@ def test_calculate_ipsae_accepts_nucleic_acids():
 
   # ensure we recorded at least one valid inter-chain pair
   assert res["counts"]["pairs_with_pae_lt_cutoff"]["A"]["B"] > 0.0
+
+
+def test_calculate_ipsae_prunes_nonstandard_residues():
+  builder = StructureBuilder()
+  builder.init_structure("PRUNE")
+  builder.init_model(0)
+
+  # Chain A with one non-standard residue (MSE) followed by a standard ALA
+  builder.init_chain("A")
+  builder.init_seg("    ")
+  builder.init_residue("MSE", " ", 1, " ")
+  builder.init_atom("CA", np.array([0.0, 0.0, 0.0]), 1.0, 10.0, " ", "CA", element="C")
+  builder.init_atom("CB", np.array([1.5, 0.0, 0.0]), 1.0, 10.0, " ", "CB", element="C")
+  builder.init_residue("ALA", " ", 2, " ")
+  builder.init_atom("CA", np.array([3.0, 0.0, 0.0]), 1.0, 10.0, " ", "CA", element="C")
+  builder.init_atom("CB", np.array([4.0, 0.0, 0.0]), 1.0, 10.0, " ", "CB", element="C")
+
+  # Chain B with a standard nucleotide
+  builder.init_chain("B")
+  builder.init_seg("    ")
+  builder.init_residue("DG", " ", 1, " ")
+  builder.init_atom("C3'", np.array([0.0, 5.0, 0.0]), 1.0, 10.0, " ", "C3'", element="C")
+  builder.init_atom("C1'", np.array([0.5, 5.5, 0.0]), 1.0, 10.0, " ", "C1'", element="C")
+
+  structure = builder.get_structure()
+  handle = io.StringIO()
+  pdbio = PDBIO()
+  pdbio.set_structure(structure)
+  pdbio.save(handle)
+  handle.seek(0)
+
+  prot = Protein(handle, format="pdb")
+
+  # pLDDT/PAE include the non-standard residue; ipSAE should prune it automatically
+  plddt = np.array([50.0, 90.0, 80.0], dtype=float)
+  pae = np.full((3, 3), 5.0, dtype=float)
+  np.fill_diagonal(pae, 0.0)
+
+  res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae, pae_cutoff=10.0)
+
+  names = res["residue_order"]["names"].tolist()
+  assert names == ["ALA", "DG"]
+  assert "MSE" not in names
+
+  # by-residue arrays should match the filtered residue count
+  assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (2,)

@@ -99,7 +99,10 @@ def _pick_atom_coord(res, is_protein: bool) -> Optional[np.ndarray]:
   return None
 
 
-def _protein_to_residue_arrays(protein, model: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _protein_to_residue_arrays(
+  protein,
+  model: Optional[int] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
   """
   Returns arrays aligned across residues:
     residue_names (N,), chains (N,), residue_numbers (N,), cb_like_coords (N,3)
@@ -113,6 +116,9 @@ def _protein_to_residue_arrays(protein, model: Optional[int] = None) -> Tuple[np
   chains: List[str] = []
   residue_numbers: List[int] = []
   coords: List[np.ndarray] = []
+  keep_indices: List[int] = []
+
+  polymer_counter = 0
 
   mdl = protein.structure[model]
   # iterate in structure order to keep stable alignment
@@ -120,8 +126,14 @@ def _protein_to_residue_arrays(protein, model: Optional[int] = None) -> Tuple[np
     ch_id = chain.id
     for res in chain:
       resname = res.get_resname()
-      is_aa = (res.id[0] == " ") and (resname in AA_SET)
-      is_na = (res.id[0] == " ") and (resname in NA_SET)
+      if res.id[0] != " ":
+        continue
+      resseq = int(res.id[1])
+      idx = polymer_counter
+      polymer_counter += 1
+
+      is_aa = resname in AA_SET
+      is_na = resname in NA_SET
       if not (is_aa or is_na):
         continue
       coord = _pick_atom_coord(res, is_protein=is_aa)
@@ -129,8 +141,9 @@ def _protein_to_residue_arrays(protein, model: Optional[int] = None) -> Tuple[np
         continue  # skip residues without a good representative atom
       residue_names.append(resname)
       chains.append(ch_id)
-      residue_numbers.append(int(res.id[1]))
+      residue_numbers.append(resseq)
       coords.append(coord.astype(float))
+      keep_indices.append(idx)
 
   if not residue_names:
     raise ValueError("No usable biopolymer residues with representative atoms were found.")
@@ -140,6 +153,8 @@ def _protein_to_residue_arrays(protein, model: Optional[int] = None) -> Tuple[np
     np.array(chains, dtype=object),
     np.array(residue_numbers, dtype=int),
     np.vstack(coords).astype(float),
+    np.array(keep_indices, dtype=int),
+    polymer_counter,
   )
 
 
@@ -234,16 +249,37 @@ def calculate_ipSAE(
     - Representative atom per residue:
       * Proteins: Cβ (GLY→Cα; fallback to Cα if Cβ missing).
       * Nucleic acids: prefer C3′/C3*, then C1′/C1*, then P.
+    - Non-standard residues encountered in the structure are removed from the
+      supplied pLDDT/PAE arrays automatically when present so the alignment
+      matches the retained biopolymer subset.
     - Chain-type classification (protein vs nucleic acid) sets a minimum d0
       (2.0 for any pair containing NA; 1.0 otherwise) and influences d0
       via the standard length-based formula.
     - pDockQ neighbors use ``pDockQ_cutoff`` on the representative-atom distances.
     - LIS averages ``(12 - PAE) / 12`` for PAE ≤ 12 Å over inter-chain pairs only.
   """
-  residue_names, chains, residue_nums, coords_cb = _protein_to_residue_arrays(protein, model=model)
+  (
+    residue_names,
+    chains,
+    residue_nums,
+    coords_cb,
+    keep_indices,
+    total_polymer_residues,
+  ) = _protein_to_residue_arrays(protein, model=model)
+
+  keep_indices = np.asarray(keep_indices, dtype=int)
   N = len(chains)
 
-  # shape checks
+  # prune non-standard residues from AF payload if necessary
+  if plddt.shape[0] == total_polymer_residues:
+    if pae_matrix.shape != (total_polymer_residues, total_polymer_residues):
+      raise ValueError(
+        f"pae_matrix shape {pae_matrix.shape} does not match expected ({total_polymer_residues},{total_polymer_residues})."
+      )
+    plddt = plddt.take(keep_indices, axis=0)
+    pae_matrix = pae_matrix[np.ix_(keep_indices, keep_indices)]
+
+  # final shape checks post-filter
   if plddt.shape != (N,):
     raise ValueError(f"plddt shape {plddt.shape} does not match derived residue count {N}.")
   if pae_matrix.shape != (N, N):

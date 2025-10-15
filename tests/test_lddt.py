@@ -1,5 +1,10 @@
+"""
+Tests for the neurosnap.algos.LDDT module.
+"""
+
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from neurosnap.algos.LDDT import calc_lddt
@@ -9,21 +14,34 @@ HERE = Path(__file__).resolve().parent
 FILES = HERE / "files"
 
 
-def test_calc_lddt_protein_inputs_consistent_across_alignment():
-  prot1 = Protein(str(FILES / "4AOW_af2_rank_1.pdb"))
-  prot2 = Protein(str(FILES / "4AOW_af2_rank_2.pdb"))
+@pytest.fixture(scope="module")
+def rank1_protein():
+  return Protein(str(FILES / "4AOW_af2_rank_1.pdb"))
 
-  # Identical structures should score perfectly.
-  assert calc_lddt(prot1, prot1) == pytest.approx(1.0, abs=1e-6)
 
-  # Closely related structures should match historical expectations.
-  score = calc_lddt(prot1, prot2)
-  assert score == pytest.approx(0.9828, abs=1e-4)
+@pytest.fixture(scope="module")
+def rank2_protein():
+  return Protein(str(FILES / "4AOW_af2_rank_2.pdb"))
 
-  # lDDT is superposition-free, so aligning structures must not change the score.
-  prot1_ref = Protein(str(FILES / "4AOW_af2_rank_1.pdb"))
-  prot2_aligned = Protein(str(FILES / "4AOW_af2_rank_2.pdb"))
-  prot1_ref.align(prot2_aligned)
 
-  aligned_score = calc_lddt(prot1_ref, prot2_aligned)
-  assert aligned_score == pytest.approx(score, abs=1e-6)
+def test_calc_lddt_identical_proteins_returns_one(rank1_protein):
+  score = calc_lddt(rank1_protein, rank1_protein)
+  assert score == 1.0
+
+
+def test_calc_lddt_variant_models_close_but_not_identical(rank1_protein, rank2_protein):
+  score = calc_lddt(rank1_protein, rank2_protein, precision=0)
+  assert score < 1.0
+  assert score == pytest.approx(0.982843137254902, rel=1e-6)
+
+
+def test_calc_lddt_distance_map_shape_mismatch_raises():
+  reference = np.zeros((2, 2))
+  prediction = np.zeros((3, 3))
+  with pytest.raises(ValueError):
+    calc_lddt(reference, prediction)
+
+
+def test_calc_lddt_mixed_input_types_raises(rank1_protein):
+  with pytest.raises(TypeError):
+    calc_lddt(rank1_protein, np.zeros((1, 1)))

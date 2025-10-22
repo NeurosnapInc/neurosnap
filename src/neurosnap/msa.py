@@ -587,7 +587,7 @@ def run_mmseqs2(
     template_paths = {seq_id: None for seq_id in sequence_ids}
     for seq_id, pdb_ids in templates.items():
       template_fpath = f"{output}/templates_{seq_id}"
-      os.mkdir(template_fpath)
+      os.makedirs(template_fpath, exist_ok=True)
       r = retry_request(requests.get, f"{host_url}/template/{','.join(pdb_ids[:20])}", json_mode=False, stream=True)
       with tarfile.open(fileobj=r.raw, mode="r|gz") as tar:
         tar.extractall(path=template_fpath, filter="data")

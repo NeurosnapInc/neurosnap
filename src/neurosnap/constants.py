@@ -9,7 +9,7 @@ from typing import Dict, Optional
 # Names of atoms that are part of a protein's backbone structure
 BACKBONE_ATOMS_AA = {"N", "CA", "C"}
 # Names of atoms that are part of a DNA backbone structure
-DNA_BACKBONE_ATOMS = {
+BACKBONE_ATOMS_DNA = {
   # Phosphorus
   "P",
   # Phosphate oxygens (sometimes labeled OP1, OP2)
@@ -31,10 +31,17 @@ DNA_BACKBONE_ATOMS = {
 }
 # Names of atoms that are part of an RNA backbone structure
 # (Same as DNA but includes the 2'-OH group)
-RNA_BACKBONE_ATOMS = DNA_BACKBONE_ATOMS.union({"O2'"})
+BACKBONE_ATOMS_RNA = BACKBONE_ATOMS_DNA.union({"O2'"})
 
+## Nucleotide Codes
+# Single-letter PDB residue codes for standard DNA residues
+NUC_DNA_CODES = {"DA", "DT", "DC", "DG"}
+# Single-letter PDB residue codes for standard RNA residues
+NUC_RNA_CODES = {"A", "U", "C", "G"}
 # Codes for standard nucleotides (both RNA and DNA)
-STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG"}
+STANDARD_NUCLEOTIDES = NUC_DNA_CODES.union(NUC_RNA_CODES)
+
+## Amino Acid Codes and Properties
 # Codes for standard amino acids
 STANDARD_AAs = set("ACDEFGHIKLMNPQRSTVWY")
 # List of hydrophobic residues

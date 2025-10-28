@@ -1,4 +1,5 @@
 # tests/test_protein.py
+import io
 from pathlib import Path
 
 import matplotlib
@@ -8,6 +9,16 @@ import pytest
 
 matplotlib.use("Agg")  # headless
 
+from Bio.PDB.Polypeptide import is_aa
+
+from neurosnap.constants import (
+  BACKBONE_ATOMS_AA,
+  BACKBONE_ATOMS_DNA,
+  BACKBONE_ATOMS_RNA,
+  NUC_DNA_CODES,
+  NUC_RNA_CODES,
+  STANDARD_NUCLEOTIDES,
+)
 from neurosnap.protein import (
   Protein,
   animate_pseudo_3D,
@@ -31,6 +42,90 @@ AF2_RANK2 = FILES / "4AOW_af2_rank_2.pdb"
 PDB_WITH_H = FILES / "1nkp_mycmax_with_hydrogens.pdb"
 PDB_NO_H = FILES / "1nkp_mycmax.pdb"
 CIF = FILES / "orf1_boltz1.cif"
+
+
+def _pdb_from_atoms(atom_defs):
+  lines = []
+  for serial, (atom_name, resname, chain_id, resid, x, y, z, element) in enumerate(atom_defs, start=1):
+    lines.append(
+      f"ATOM  {serial:5d} {atom_name:>4s} {resname:>3s} {chain_id:1s}{resid:4d}    "
+      f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 20.00           {element:>2s}"
+    )
+  lines.append("TER")
+  lines.append("END")
+  return "\n".join(lines) + "\n"
+
+
+def _transform_atoms(atom_defs, rotation, translation):
+  transformed = []
+  for atom_name, resname, chain_id, resid, x, y, z, element in atom_defs:
+    coord = np.array([x, y, z])
+    new_coord = rotation @ coord + translation
+    transformed.append((atom_name, resname, chain_id, resid, new_coord[0], new_coord[1], new_coord[2], element))
+  return transformed
+
+
+def _replace_chain(atom_defs, chain_id):
+  return [(atom_name, resname, chain_id, resid, x, y, z, element) for (atom_name, resname, _, resid, x, y, z, element) in atom_defs]
+
+
+def _make_protein(atom_defs):
+  return Protein(io.StringIO(_pdb_from_atoms(atom_defs)), format="pdb")
+
+
+def _collect_backbone_coords(prot):
+  coords = []
+  for model in prot.structure:
+    for chain in model:
+      for residue in chain:
+        if is_aa(residue, standard=False):
+          allowed = BACKBONE_ATOMS_AA
+        else:
+          resname = residue.get_resname().strip().upper()
+          if resname in NUC_DNA_CODES:
+            allowed = BACKBONE_ATOMS_DNA
+          elif resname in NUC_RNA_CODES:
+            allowed = BACKBONE_ATOMS_RNA
+          elif resname in STANDARD_NUCLEOTIDES:
+            allowed = BACKBONE_ATOMS_RNA
+          else:
+            allowed = None
+        if not allowed:
+          continue
+        for atom in residue:
+          if atom.name in allowed:
+            coords.append(((model.id, chain.id, residue.id[1], atom.name), np.array(atom.coord)))
+  coords.sort(key=lambda item: item[0])
+  return np.array([coord for _, coord in coords])
+
+
+ROT_Z_90 = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+TRANSLATION_VECTOR = np.array([10.0, -5.0, 3.0])
+
+PROTEIN_BACKBONE_ATOMS = (
+  ("N", "ALA", "A", 1, 0.000, 0.000, 0.000, "N"),
+  ("CA", "ALA", "A", 1, 1.458, 0.000, 0.000, "C"),
+  ("C", "ALA", "A", 1, 1.958, 1.410, 0.000, "C"),
+  ("N", "GLY", "A", 2, 3.300, 1.410, 0.000, "N"),
+  ("CA", "GLY", "A", 2, 3.800, 2.820, 0.000, "C"),
+  ("C", "GLY", "A", 2, 5.200, 2.820, 0.000, "C"),
+)
+
+DNA_BACKBONE_ATOMS = (
+  ("P", "DA", "A", 1, 0.000, 0.000, 0.000, "P"),
+  ("O1P", "DA", "A", 1, -0.800, 1.000, 0.000, "O"),
+  ("O2P", "DA", "A", 1, -0.800, -1.000, 0.000, "O"),
+  ("O5'", "DA", "A", 1, 1.200, 0.200, 0.000, "O"),
+  ("C5'", "DA", "A", 1, 2.200, 0.700, 0.200, "C"),
+  ("C4'", "DA", "A", 1, 2.800, 1.800, 0.300, "C"),
+  ("O4'", "DA", "A", 1, 2.300, 2.900, 0.400, "O"),
+  ("C3'", "DA", "A", 1, 3.600, 1.700, 1.500, "C"),
+  ("O3'", "DA", "A", 1, 4.600, 1.700, 1.800, "O"),
+  ("C1'", "DA", "A", 1, 1.800, 3.000, -0.500, "C"),
+  ("C2'", "DA", "A", 1, 2.300, 2.100, -1.500, "C"),
+)
+
+MIXED_BACKBONE_ATOMS = PROTEIN_BACKBONE_ATOMS + tuple(_replace_chain(DNA_BACKBONE_ATOMS, "B"))
 
 
 # -----------------------
@@ -192,6 +287,48 @@ def test_rmsd_align_and_op_sub_hydrogens():
   prot_h = Protein(str(PDB_WITH_H))
   rmsd = prot_ref.calculate_rmsd(prot_h, align=True)
   assert rmsd < 1e-2  # tight threshold
+
+
+def test_align_backbone_protein_only():
+  prot_ref = _make_protein(list(PROTEIN_BACKBONE_ATOMS))
+  prot_offset = _make_protein(_transform_atoms(PROTEIN_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))
+
+  coords_ref = _collect_backbone_coords(prot_ref)
+  coords_before = _collect_backbone_coords(prot_offset)
+  assert coords_ref.shape == coords_before.shape
+  assert not np.allclose(coords_ref, coords_before)
+
+  prot_ref.align(prot_offset)
+  coords_after = _collect_backbone_coords(prot_offset)
+  assert np.allclose(coords_ref, coords_after, atol=1e-3)
+
+
+def test_align_backbone_nucleotide_only():
+  prot_ref = _make_protein(list(DNA_BACKBONE_ATOMS))
+  prot_offset = _make_protein(_transform_atoms(DNA_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))
+
+  coords_ref = _collect_backbone_coords(prot_ref)
+  coords_before = _collect_backbone_coords(prot_offset)
+  assert coords_ref.shape == coords_before.shape
+  assert not np.allclose(coords_ref, coords_before)
+
+  prot_ref.align(prot_offset)
+  coords_after = _collect_backbone_coords(prot_offset)
+  assert np.allclose(coords_ref, coords_after, atol=1e-3)
+
+
+def test_align_backbone_mixed_protein_and_nucleotide():
+  prot_ref = _make_protein(list(MIXED_BACKBONE_ATOMS))
+  prot_offset = _make_protein(_transform_atoms(MIXED_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))
+
+  coords_ref = _collect_backbone_coords(prot_ref)
+  coords_before = _collect_backbone_coords(prot_offset)
+  assert coords_ref.shape == coords_before.shape
+  assert not np.allclose(coords_ref, coords_before)
+
+  prot_ref.align(prot_offset)
+  coords_after = _collect_backbone_coords(prot_offset)
+  assert np.allclose(coords_ref, coords_after, atol=1e-3)
 
 # -----------------------
 # File IO & conversions

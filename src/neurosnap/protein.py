@@ -39,8 +39,12 @@ from neurosnap.constants import (
   AA_RECORDS,
   AA_WEIGHTS_PROTEIN_AVG,
   BACKBONE_ATOMS_AA,
+  BACKBONE_ATOMS_DNA,
+  BACKBONE_ATOMS_RNA,
   DEFAULT_PKA,
   HYDROPHOBIC_RESIDUES,
+  NUC_DNA_CODES,
+  NUC_RNA_CODES,
   STANDARD_NUCLEOTIDES,
   AARecord,
   STANDARD_AAs,
@@ -663,7 +667,7 @@ class Protein:
   def align(self, other_protein: "Protein", chains1: List[str] = [], chains2: List[str] = [], model1: int = 0, model2: int = 0):
     """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed
-    and aligned. Only compares backbone atoms (N, CA, C).
+    and aligned. Uses protein and nucleotide backbone atoms.
 
     Parameters:
       other_protein: Another Neurosnap Protein object to compare against
@@ -691,18 +695,61 @@ class Protein:
       chains2 = avail_chains
 
     # Use the Superimposer to align the structures
-    def aux_get_atoms(sample_model, chains):
-      atoms = []
-      for sample_chain in sample_model:
-        if not chains or sample_chain.id in chains:
-          for res in sample_chain:
-            for atom in res:
-              if atom.name in BACKBONE_ATOMS_AA:
-                atoms.append(atom)
+    def _allowed_backbone_atoms(residue) -> Optional[Set[str]]:
+      """Return the backbone atom names to consider for the residue."""
+      if is_aa(residue, standard=False):
+        return BACKBONE_ATOMS_AA
+      resname = residue.get_resname().strip().upper()
+      if resname in NUC_DNA_CODES:
+        return BACKBONE_ATOMS_DNA
+      if resname in NUC_RNA_CODES:
+        return BACKBONE_ATOMS_RNA
+      if resname in STANDARD_NUCLEOTIDES:
+        # Fall back to RNA atoms; these cover the shared sugar/phosphate backbone.
+        return BACKBONE_ATOMS_RNA
+      return None
+
+    def aux_get_atom_map(sample_model, chains):
+      if chains:
+        chain_order = list(chains)
+      else:
+        chain_order = [chain.id for chain in sample_model if chain.id.strip()]
+      chain_lookup = {chain.id: chain for chain in sample_model}
+      atoms = {}
+      for chain_id in chain_order:
+        chain = chain_lookup.get(chain_id)
+        if chain is None:
+          continue
+        for residue in chain:
+          backbone_atoms = _allowed_backbone_atoms(residue)
+          if not backbone_atoms:
+            continue
+          het_flag, seq_id, icode = residue.id
+          resid_key = (chain_id, het_flag, seq_id, (icode or "").strip())
+          for atom in residue:
+            if atom.name in backbone_atoms:
+              atoms[(resid_key, atom.name)] = atom
       return atoms
 
+    ref_atom_map = aux_get_atom_map(self.structure[model1], chains1)
+    mov_atom_map = aux_get_atom_map(other_protein.structure[model2], chains2)
+    assert ref_atom_map, "Reference protein does not contain any backbone atoms to align."
+    assert mov_atom_map, "Other protein does not contain any backbone atoms to align."
+
+    common_keys = sorted(ref_atom_map.keys() & mov_atom_map.keys())
+    assert common_keys, "Proteins do not share common backbone atoms to align."
+    if len(common_keys) != len(ref_atom_map) or len(common_keys) != len(mov_atom_map):
+      missing_ref = sorted(k for k in ref_atom_map.keys() - mov_atom_map.keys())
+      missing_mov = sorted(k for k in mov_atom_map.keys() - ref_atom_map.keys())
+      raise AssertionError(
+        "Backbone atom mismatch between structures. "
+        f"Reference-only atoms: {len(missing_ref)}, other-only atoms: {len(missing_mov)}."
+      )
+
+    ref_atoms = [ref_atom_map[key] for key in common_keys]
+    mov_atoms = [mov_atom_map[key] for key in common_keys]
     sup = Superimposer()
-    sup.set_atoms(aux_get_atoms(self.structure[model1], chains1), aux_get_atoms(other_protein.structure[model2], chains2))
+    sup.set_atoms(ref_atoms, mov_atoms)
     sup.apply(other_protein.structure[model2])  # Apply the transformation to the other protein
     # update the pandas dataframe
     other_protein.generate_df()

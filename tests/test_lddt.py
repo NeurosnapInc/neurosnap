@@ -24,6 +24,16 @@ def rank2_protein():
   return Protein(str(FILES / "4AOW_af2_rank_2.pdb"))
 
 
+@pytest.fixture(scope="module")
+def rna_model_one():
+  return Protein(str(FILES / "rna_monomer_1.cif"))
+
+
+@pytest.fixture(scope="module")
+def rna_model_two():
+  return Protein(str(FILES / "rna_monomer_2.cif"))
+
+
 def test_calc_lddt_identical_proteins_returns_one(rank1_protein):
   score = calc_lddt(rank1_protein, rank1_protein)
   assert score == 1.0
@@ -45,3 +55,13 @@ def test_calc_lddt_distance_map_shape_mismatch_raises():
 def test_calc_lddt_mixed_input_types_raises(rank1_protein):
   with pytest.raises(TypeError):
     calc_lddt(rank1_protein, np.zeros((1, 1)))
+
+
+def test_calc_lddt_identical_nucleic_acids_returns_one(rna_model_one):
+  score = calc_lddt(rna_model_one, rna_model_one)
+  assert score == 1.0
+
+
+def test_calc_lddt_nucleic_acids_not_nan(rna_model_one, rna_model_two):
+  score = calc_lddt(rna_model_one, rna_model_two)
+  assert not np.isnan(score)

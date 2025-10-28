@@ -6,45 +6,33 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from neurosnap.constants import (
+  AA_RECORDS,
+  BACKBONE_ATOMS_AA,
+  BACKBONE_ATOMS_DNA,
+  BACKBONE_ATOMS_RNA,
+  STANDARD_NUCLEOTIDES,
+)
 from neurosnap.protein import Protein
 
-valid_amino_acids = {
-  "LLP": "K",
-  "TPO": "T",
-  "CSS": "C",
-  "OCS": "C",
-  "CSO": "C",
-  "PCA": "E",
-  "KCX": "K",
-  "CME": "C",
-  "MLY": "K",
-  "SEP": "S",
-  "CSX": "C",
-  "CSD": "C",
-  "MSE": "M",
-  "ALA": "A",
-  "ASN": "N",
-  "CYS": "C",
-  "GLN": "Q",
-  "HIS": "H",
-  "LEU": "L",
-  "MET": "M",
-  "MHO": "M",
-  "PRO": "P",
-  "THR": "T",
-  "TYR": "Y",
-  "ARG": "R",
-  "ASP": "D",
-  "GLU": "E",
-  "GLY": "G",
-  "ILE": "I",
-  "LYS": "K",
-  "PHE": "F",
-  "SER": "S",
-  "TRP": "W",
-  "VAL": "V",
-  "SEC": "U",
-}
+_PROTEIN_BACKBONE_FALLBACK = tuple(atom for atom in ("CA", "N", "C") if atom in BACKBONE_ATOMS_AA)
+_PROTEIN_ATOM_PRIORITY = ("CB",) + _PROTEIN_BACKBONE_FALLBACK
+
+_NUCLEOTIDE_CODE_MAP = {code: (code[1] if len(code) == 2 and code[0] == "D" else code) for code in STANDARD_NUCLEOTIDES}
+_NUCLEOTIDE_BACKBONE_ATOMS = BACKBONE_ATOMS_DNA.union(BACKBONE_ATOMS_RNA)
+_NUCLEOTIDE_PREF_BASES = ("C4'", "C3'", "C1'", "C2'", "P", "O4'", "O3'", "O5'")
+_NUCLEOTIDE_ATOM_PRIORITY: List[Tuple[str, ...]] = []
+_seen_nuc_bases = set()
+for base in _NUCLEOTIDE_PREF_BASES:
+  if base in _NUCLEOTIDE_BACKBONE_ATOMS and base not in _seen_nuc_bases:
+    names = tuple(dict.fromkeys((base, base.replace("'", "*"))))
+    _NUCLEOTIDE_ATOM_PRIORITY.append(names)
+    _seen_nuc_bases.add(base)
+for base in sorted(_NUCLEOTIDE_BACKBONE_ATOMS):
+  if base not in _seen_nuc_bases:
+    names = tuple(dict.fromkeys((base, base.replace("'", "*"))))
+    _NUCLEOTIDE_ATOM_PRIORITY.append(names)
+    _seen_nuc_bases.add(base)
 
 
 # Helpers for metrics calculated using numpy scheme
@@ -96,8 +84,36 @@ def _get_dist_thresh_b_indices(dmap, thresh, comparator):
 
 
 def _aa3_to_aa1(resname: str) -> Optional[str]:
-  """Map 3-letter aa (incl. many non-standards you listed) to 1-letter; returns None if unknown."""
-  return valid_amino_acids.get(resname)
+  """Map a 3-letter amino-acid code to a 1-letter code when possible."""
+  record = AA_RECORDS.get(resname)
+  if record is None:
+    return None
+  if record.code is not None:
+    return record.code
+  if record.standard_equiv_abr:
+    equiv = AA_RECORDS.get(record.standard_equiv_abr)
+    if equiv and equiv.code is not None:
+      return equiv.code
+  return None
+
+
+def _nucleotide_to_code(resname: str) -> Optional[str]:
+  """Return simplified single-letter nucleotide code for standard DNA/RNA residues."""
+  return _NUCLEOTIDE_CODE_MAP.get(resname)
+
+
+def _is_nucleotide(resname: str) -> bool:
+  return resname in STANDARD_NUCLEOTIDES
+
+
+def _get_atom(res, name: str):
+  """Fetch an atom by name, handling historical prime markers (* vs ')."""
+  if name in res:
+    return res[name]
+  alt = name.replace("'", "*") if "'" in name else name.replace("*", "'")
+  if alt != name and alt in res:
+    return res[alt]
+  return None
 
 
 def _extract_cb_coords_from_protein(
@@ -107,7 +123,7 @@ def _extract_cb_coords_from_protein(
   chains: Optional[List[str]] = None,
   require_standard_aa: bool = True,
 ) -> Dict[Tuple[str, int], Tuple[float, float, float]]:
-  """Collect per-residue coordinates (Cβ, fallback Cα) for amino acids.
+  """Collect per-residue representative coordinates for amino acids and nucleotides.
 
   Returns:
     dict keyed by (chain_id, res_id) -> (x,y,z)
@@ -127,19 +143,42 @@ def _extract_cb_coords_from_protein(
       continue
     chain = model_obj[cid]
     for res in chain:
-      # Only amino acids
+      if res.id[0] != " ":
+        continue
       if getattr(res, "resname", None) is None:
         continue
-      aa1 = _aa3_to_aa1(res.resname)
-      if require_standard_aa and aa1 is None:
+      resname = res.resname
+
+      is_amino = resname in AA_RECORDS
+      is_nucleotide = _is_nucleotide(resname)
+      if not (is_amino or is_nucleotide):
         continue
 
-      # Prefer CB, except GLY (no CB) -> CA
+      if require_standard_aa:
+        if is_amino:
+          if _aa3_to_aa1(resname) is None:
+            continue
+        elif _nucleotide_to_code(resname) is None:
+          continue
+
       atom = None
-      if res.resname != "GLY" and "CB" in res:
-        atom = res["CB"]
-      elif "CA" in res:
-        atom = res["CA"]
+      if is_amino:
+        if resname != "GLY":
+          atom = _get_atom(res, "CB")
+        if atom is None:
+          for atom_name in _PROTEIN_BACKBONE_FALLBACK:
+            atom = _get_atom(res, atom_name)
+            if atom is not None:
+              break
+      else:
+        for atom_names in _NUCLEOTIDE_ATOM_PRIORITY:
+          for atom_name in atom_names:
+            atom = _get_atom(res, atom_name)
+            if atom is not None:
+              break
+          if atom is not None:
+            break
+
       if atom is None:
         continue
 
@@ -240,7 +279,7 @@ def calc_lddt(
     sep_thresh: Minimum sequence separation between residue pairs.
     T_set: Error thresholds used to compute preserved distance fractions.
     precision: Decimal precision of the reported score; use 0 or negative to skip rounding.
-    require_standard_aa: Skip residues with unknown amino-acid codes when True.
+    require_standard_aa: Skip residues with unknown amino-acid or nucleotide codes when True.
 
   Returns:
     lDDT score between the reference and prediction.

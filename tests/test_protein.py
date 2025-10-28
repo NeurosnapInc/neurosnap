@@ -317,6 +317,24 @@ def test_align_backbone_nucleotide_only():
   assert np.allclose(coords_ref, coords_after, atol=1e-3)
 
 
+def test_align_backbone_rna_only_real_structures():
+  prot_ref = Protein(str(FILES / "rna_monomer_1.cif"))
+  prot_offset = Protein(str(FILES / "rna_monomer_2.cif"))
+
+  coords_ref = _collect_backbone_coords(prot_ref)
+  coords_before = _collect_backbone_coords(prot_offset)
+  assert coords_ref.shape == coords_before.shape
+
+  rmsd_before = np.sqrt(np.mean(np.sum((coords_before - coords_ref) ** 2, axis=1)))
+
+  prot_ref.align(prot_offset)
+  coords_after = _collect_backbone_coords(prot_offset)
+  rmsd_after = np.sqrt(np.mean(np.sum((coords_after - coords_ref) ** 2, axis=1)))
+
+  assert rmsd_after < rmsd_before
+  assert rmsd_after < 2.0
+
+
 def test_align_backbone_mixed_protein_and_nucleotide():
   prot_ref = _make_protein(list(MIXED_BACKBONE_ATOMS))
   prot_offset = _make_protein(_transform_atoms(MIXED_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))

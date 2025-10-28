@@ -5,8 +5,34 @@ This file contains constants.
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+## Backbone Atoms
 # Names of atoms that are part of a protein's backbone structure
 BACKBONE_ATOMS_AA = {"N", "CA", "C"}
+# Names of atoms that are part of a DNA backbone structure
+DNA_BACKBONE_ATOMS = {
+  # Phosphorus
+  "P",
+  # Phosphate oxygens (sometimes labeled OP1, OP2)
+  "O1P",
+  "O2P",
+  # Alternate naming convention
+  "OP1",
+  "OP2",
+  # Bridging oxygens between sugar and phosphate
+  "O3'",
+  "O5'",
+  # Sugar atoms
+  "C3'",
+  "C4'",
+  "C5'",
+  "O4'",
+  "C1'",
+  "C2'",
+}
+# Names of atoms that are part of an RNA backbone structure
+# (Same as DNA but includes the 2'-OH group)
+RNA_BACKBONE_ATOMS = DNA_BACKBONE_ATOMS.union({"O2'"})
+
 # Codes for standard nucleotides (both RNA and DNA)
 STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG"}
 # Codes for standard amino acids

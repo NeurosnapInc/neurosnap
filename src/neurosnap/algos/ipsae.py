@@ -74,7 +74,7 @@ def init_pairdict_set(chains: np.ndarray) -> Dict[str, Dict[str, set]]:
 # ------------------ derive residue-level arrays from Protein ------------------
 
 AA_SET = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"}
-NA_SET = set(STANDARD_NUCLEOTIDES)  # canonical DNA/RNA residue names
+NA_SET = STANDARD_NUCLEOTIDES  # canonical DNA/RNA residue names
 
 # choose a single coordinate per residue:
 #   - proteins: Cβ (GLY -> CA, else CA fallback if CB missing)

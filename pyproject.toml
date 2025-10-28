@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # changes for these values should be reflected in docs/source/conf.py as well
 name = "neurosnap"
-version = "2025.10.15"
+version = "2025.10.28"
 authors = [
   {name="Keaun Amani"},
 ]

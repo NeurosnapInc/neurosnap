@@ -306,8 +306,7 @@ def calc_lddt(
     # Intersect keys to ensure 1:1 residue correspondence
     common_keys = sorted(set(ref_cb.keys()).intersection(pred_cb.keys()), key=lambda x: (x[0], x[1]))
     if len(common_keys) < 2:
-      # Not enough residues/pairs to compute meaningful lDDT
-      return float("nan")
+      raise Exception("Not enough residues/pairs to compute meaningful lDDT")
 
     # Build distance maps on the common residue set
     true_map = _coords_to_distmat(common_keys, ref_cb)

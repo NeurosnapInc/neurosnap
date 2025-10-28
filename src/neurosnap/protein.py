@@ -38,7 +38,7 @@ from neurosnap.constants import (
   AA_ALIASES,
   AA_RECORDS,
   AA_WEIGHTS_PROTEIN_AVG,
-  BACKBONE_ATOMS,
+  BACKBONE_ATOMS_AA,
   DEFAULT_PKA,
   HYDROPHOBIC_RESIDUES,
   STANDARD_NUCLEOTIDES,
@@ -542,7 +542,7 @@ class Protein:
           if chains is None or c.id in chains:
             for res in c:
               for atom in res:
-                if atom.name in BACKBONE_ATOMS:
+                if atom.name in BACKBONE_ATOMS_AA:
                   backbone_coords.append(atom.coord)
 
     return np.array(backbone_coords)
@@ -697,7 +697,7 @@ class Protein:
         if not chains or sample_chain.id in chains:
           for res in sample_chain:
             for atom in res:
-              if atom.name in BACKBONE_ATOMS:
+              if atom.name in BACKBONE_ATOMS_AA:
                 atoms.append(atom)
       return atoms
 

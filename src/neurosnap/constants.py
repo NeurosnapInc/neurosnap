@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 # Names of atoms that are part of a protein's backbone structure
-BACKBONE_ATOMS = {"N", "CA", "C"}
+BACKBONE_ATOMS_AA = {"N", "CA", "C"}
 # Codes for standard nucleotides (both RNA and DNA)
 STANDARD_NUCLEOTIDES = {"A", "T", "C", "G", "U", "DA", "DT", "DC", "DG"}
 # Codes for standard amino acids

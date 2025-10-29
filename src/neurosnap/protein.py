@@ -522,6 +522,42 @@ class Protein:
     # update the pandas dataframe
     self.generate_df()
 
+  def center(
+    self,
+    x: float = 0.0,
+    y: float = 0.0,
+    z: float = 0.0,
+    model: Optional[int] = 0,
+    chains: Optional[List[str]] = None,
+  ):
+    """Translate the structure so its center of mass matches the target coordinates.
+
+    Parameters:
+      x: Target x-coordinate to center on, defaults to 0.0
+      y: Target y-coordinate to center on, defaults to 0.0
+      z: Target z-coordinate to center on, defaults to 0.0
+      model: Model ID to center. If ``None``, all models are centered individually.
+      chains: Optional list of chain IDs to center. If ``None``, use all chains in the model.
+
+    """
+    target = np.array([x, y, z], dtype=float)
+    if model is None:
+      models_to_center = self.models()
+    else:
+      assert model in self.models(), f"Model {model} was not found in current protein."
+      models_to_center = [model]
+
+    for model_id in models_to_center:
+      com = self.calculate_center_of_mass(model=model_id, chains=chains)
+      translation = target - com
+      for chain in self.structure[model_id]:
+        if chains is None or chain.id in chains:
+          for residue in chain:
+            for atom in residue:
+              atom.coord = atom.coord + translation
+    # regenerate dataframe to reflect updated coordinates
+    self.generate_df()
+
   def get_backbone(
     self,
     chains: Optional[Tuple[List[str], Set[str]]] = None,

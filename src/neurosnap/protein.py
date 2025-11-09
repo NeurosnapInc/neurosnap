@@ -1530,7 +1530,7 @@ def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool =
   return new_seq
 
 
-def molecular_weight(sequence: str, aa_mws: dict[str, float] = AA_WEIGHTS_PROTEIN_AVG) -> float:
+def molecular_weight(sequence: str, aa_mws: Dict[str, float] = AA_WEIGHTS_PROTEIN_AVG) -> float:
   """
   Calculate the molecular weight of a protein or peptide sequence.
 
@@ -1593,7 +1593,7 @@ def _fraction_deprotonated_acidic(pH: float, pKa: float) -> float:
   return 1.0 / (1.0 + 10.0 ** (pKa - pH))
 
 
-def net_charge(sequence: str, pH: float, pKa: dict[str, float] = DEFAULT_PKA) -> float:
+def net_charge(sequence: str, pH: float, pKa: Dict[str, float] = DEFAULT_PKA) -> float:
   """
   Calculate the net charge of a protein or peptide sequence at a given pH.
 
@@ -1664,7 +1664,7 @@ def net_charge(sequence: str, pH: float, pKa: dict[str, float] = DEFAULT_PKA) ->
 
 
 def isoelectric_point(
-  sequence: str, pKa: dict[str, float] = DEFAULT_PKA, *, pH_low: float = 0.0, pH_high: float = 14.0, tol: float = 1e-4, max_iter: int = 100
+  sequence: str, pKa: Dict[str, float] = DEFAULT_PKA, *, pH_low: float = 0.0, pH_high: float = 14.0, tol: float = 1e-4, max_iter: int = 100
 ) -> float:
   """
   Estimate the isoelectric point (pI) of a protein or peptide.

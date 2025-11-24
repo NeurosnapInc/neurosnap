@@ -1,20 +1,21 @@
 """
-ec_interface.py
-===============
-
-Quantify electrostatic complementarity (EC) for binder–target chain
-pairs in a protein complex.
+Electrostatic complementarity (EC) quantification for binder-target chain
+pairs in protein complexes. Written by Danial Gharaie Amirabadi and improved by
+Keaun Amani, based on the algorithm from:
+Airlie J. McCoy, V. Chandana Epa, and Peter M. Colman. Electrostatic
+complementarity at protein/protein interfaces (edited by B. Honig).
+Journal of Molecular Biology. 1997;268(2):570–584.
 
 Key features
 ------------
-* Biopython-based interface detection (distance-cutoff, heavy atoms).
-* PDB2PQR for protonation / charge & radius assignment.
-* APBS continuum electrostatics – works with *all* 1.x-to-3.x builds:
-  - auto builds a padding box around the molecule,
-  - supplies mandatory legacy keywords (glen/gcent/sdens),
-  - handles .dx.gz, rank-tagged PE-files, and sub-dir output.
-* Step-by-step logging for debugging and data provenance.
-* Cleans all temporary files automatically.
+* Biopython interface detection using a heavy-atom distance cutoff.
+* PDB2PQR protonation plus charge and radius assignment.
+* APBS continuum electrostatics (compatible with all 1.x–3.x builds):
+  - auto-builds a padded box,
+  - supplies required legacy keywords (glen/gcent/sdens),
+  - handles .dx.gz, rank-tagged PE files, and subdir output.
+* Stepwise logging for debugging and provenance.
+* Automatic cleanup of temporary files.
 """
 
 from __future__ import annotations

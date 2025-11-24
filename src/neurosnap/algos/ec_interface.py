@@ -39,6 +39,9 @@ from neurosnap.log import logger
 from neurosnap.protein import Protein
 
 
+_METRIC_DEFINITIONS_LOGGED = False
+
+
 # ---------------------------------------------------------------------
 #  Section 1 – Utility helpers
 # ---------------------------------------------------------------------
@@ -366,6 +369,16 @@ def compute_ec_for_pair(
     ec = -(r_b + r_t) / 2.0  # negative correlation = complementarity
 
     logger.info("Pair %s:%s | EC=%.4f, RB=%.4f, RT=%.4f", binder_id, target_id, ec, r_b, r_t)
+    global _METRIC_DEFINITIONS_LOGGED
+    if not _METRIC_DEFINITIONS_LOGGED:
+      logger.info(
+        "Definitions – EC: -(RB+RT)/2. "
+        "RB: correlation of binder potential vs target potential on binder interface atoms "
+        "(Pearson(V_b_on_b, V_t_on_b)). "
+        "RT: correlation of binder potential vs target potential on target interface atoms "
+        "(Pearson(V_b_on_t, V_t_on_t))."
+      )
+      _METRIC_DEFINITIONS_LOGGED = True
     return ec, r_b, r_t
 
 

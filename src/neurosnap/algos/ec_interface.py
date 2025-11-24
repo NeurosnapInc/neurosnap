@@ -6,6 +6,12 @@ Airlie J. McCoy, V. Chandana Epa, and Peter M. Colman. Electrostatic
 complementarity at protein/protein interfaces (edited by B. Honig).
 Journal of Molecular Biology. 1997;268(2):570–584.
 
+EC is calculated as EC = -(r_b + r_t)/2 where r_b and r_t are the Pearson
+correlations of the two partners' electrostatic potentials on the buried
+surfaces of the binder and target, respectively. Because of the leading minus
+sign, larger (more-positive) EC values correspond to stronger
+complementarity (perfect complementarity gives +1, identical surfaces -1).
+
 Key features
 ------------
 * Biopython interface detection using a heavy-atom distance cutoff.
@@ -369,7 +375,7 @@ def compute_ec_for_pair(
     global _METRIC_DEFINITIONS_LOGGED
     if not _METRIC_DEFINITIONS_LOGGED:
       logger.info("Definitions:")
-      logger.info("EC: -(RB+RT)/2 | ")
+      logger.info("EC: Electrostatic complementarity on the buried binder and target surfaces; the minus sign means more-positive EC values indicating stronger complementarity (perfect complementarity = +1, identical surfaces = -1).")
       logger.info("RB: correlation of binder potential vs target potential on binder interface atoms")
       logger.info("RT: correlation of binder potential vs target potential on target interface atoms"
         "(Pearson(V_b_on_t, V_t_on_t)).")

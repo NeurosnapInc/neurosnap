@@ -15,7 +15,7 @@ class FakeAtom:
 def test_compute_ec_returns_nan_without_contacts(monkeypatch):
   monkeypatch.setattr(ec_interface, "find_interface_atoms", lambda *args, **kwargs: ([], []))
 
-  result = ec_interface.compute_ec_for_pair(
+  result = ec_interface.compute_ec(
     SimpleNamespace(structure=None),
     "A",
     "B",
@@ -47,7 +47,7 @@ def test_compute_ec_requires_sufficient_samples(monkeypatch):
   monkeypatch.setattr(ec_interface, "_parse_dx", lambda path: (np.zeros(3), (1, 1, 1), np.zeros((2, 2, 2))))
   monkeypatch.setattr(ec_interface, "_sample_potential", lambda coords, origin, delta, grid: np.arange(len(coords), dtype=float))
 
-  result = ec_interface.compute_ec_for_pair(
+  result = ec_interface.compute_ec(
     SimpleNamespace(structure=None),
     "A",
     "B",
@@ -90,7 +90,7 @@ def test_compute_ec_uses_pearson_correlations(monkeypatch):
 
   monkeypatch.setattr(ec_interface, "_sample_potential", fake_sample_potential)
 
-  ec, r_b, r_t = ec_interface.compute_ec_for_pair(
+  ec, r_b, r_t = ec_interface.compute_ec(
     SimpleNamespace(structure=None),
     "A",
     "B",
@@ -145,7 +145,7 @@ def test_compute_ec_real_structure_with_stubbed_io(monkeypatch):
 
   monkeypatch.setattr(ec_interface, "_sample_potential", fake_sample)
 
-  data = ec_interface.compute_ec_for_pair(
+  data = ec_interface.compute_ec(
     protein,
     "A",
     "B",

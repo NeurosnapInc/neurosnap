@@ -286,7 +286,7 @@ quit
 # ---------------------------------------------------------------------
 #  Section 5 – Per-pair EC computation
 # ---------------------------------------------------------------------
-def compute_ec_for_pair(
+def compute_ec(
   protein: Protein,
   binder_id: str,
   target_id: str,

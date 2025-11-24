@@ -288,8 +288,8 @@ quit
 # ---------------------------------------------------------------------
 def compute_ec(
   protein: Protein,
-  binder_id: str,
-  target_id: str,
+  chain1: str,
+  chain2: str,
   *,
   cutoff: float = 4.5,
   forcefield: str = "AMBER",
@@ -298,16 +298,16 @@ def compute_ec(
 ) -> Tuple[float, float, float]:
   """
   Compute electrostatic complementarity (EC) and Pearson correlations (r_b, r_t)
-  for a binder–target chain pair in a Protein.
+  for an order-invariant interface chain pair in a Protein.
 
   Parameters
   ----------
   protein
-    Protein containing the binder and target chains.
-  binder_id
-    Chain identifier for the binder.
-  target_id
-    Chain identifier for the target.
+    Protein containing the interface chains.
+  chain1
+    Chain identifier for the first interface chain.
+  chain2
+    Chain identifier for the second interface chain (order does not matter).
   cutoff
     Heavy-atom distance cutoff (Å) used to define interface atoms.
   forcefield
@@ -322,39 +322,39 @@ def compute_ec(
   tuple[float, float, float]
     (ec, r_b, r_t), or (nan, nan, nan) when insufficient interface samples.
   """
-  ib_atoms, it_atoms = find_interface_atoms(protein, binder_id, target_id, cutoff)
+  ib_atoms, it_atoms = find_interface_atoms(protein, chain1, chain2, cutoff)
   if not ib_atoms or not it_atoms:
-    logger.warning(f"No inter-chain contacts for {binder_id}:{target_id}, skipping.")
+    logger.warning(f"No inter-chain contacts for {chain1}:{chain2}, skipping.")
     return np.nan, np.nan, np.nan
 
   logger.info(
-    "Pair %s:%s – %d binder + %d target interface atoms",
-    binder_id,
-    target_id,
+    "Pair %s:%s – %d atoms on chain1 + %d on chain2",
+    chain1,
+    chain2,
     len(ib_atoms),
     len(it_atoms),
   )
 
   with tempfile.TemporaryDirectory() as td:
     workdir = Path(td)
-    binder_pdb = workdir / f"binder_{binder_id}.pdb"
-    target_pdb = workdir / f"target_{target_id}.pdb"
-    write_single_chain_pdb(protein.structure, binder_id, binder_pdb)
-    write_single_chain_pdb(protein.structure, target_id, target_pdb)
+    chain1_pdb = workdir / f"chain1_{chain1}.pdb"
+    chain2_pdb = workdir / f"chain2_{chain2}.pdb"
+    write_single_chain_pdb(protein.structure, chain1, chain1_pdb)
+    write_single_chain_pdb(protein.structure, chain2, chain2_pdb)
 
-    binder_pqr = binder_pdb.with_suffix(".pqr")
-    target_pqr = target_pdb.with_suffix(".pqr")
-    _prepare_pqr(binder_pdb, binder_pqr, pdb2pqr, forcefield)
-    _prepare_pqr(target_pdb, target_pqr, pdb2pqr, forcefield)
+    chain1_pqr = chain1_pdb.with_suffix(".pqr")
+    chain2_pqr = chain2_pdb.with_suffix(".pqr")
+    _prepare_pqr(chain1_pdb, chain1_pqr, pdb2pqr, forcefield)
+    _prepare_pqr(chain2_pdb, chain2_pqr, pdb2pqr, forcefield)
 
-    binder_dx = binder_pqr.with_suffix(".dx")
-    target_dx = target_pqr.with_suffix(".dx")
-    _run_apbs(binder_pqr, binder_dx, apbs)
-    _run_apbs(target_pqr, target_dx, apbs)
+    chain1_dx = chain1_pqr.with_suffix(".dx")
+    chain2_dx = chain2_pqr.with_suffix(".dx")
+    _run_apbs(chain1_pqr, chain1_dx, apbs)
+    _run_apbs(chain2_pqr, chain2_dx, apbs)
 
     # ── load potentials
-    o_b, d_b, grid_b = _parse_dx(binder_dx)
-    o_t, d_t, grid_t = _parse_dx(target_dx)
+    o_b, d_b, grid_b = _parse_dx(chain1_dx)
+    o_t, d_t, grid_t = _parse_dx(chain2_dx)
 
     V_b_on_b = _sample_potential(np.array([a.coord for a in ib_atoms]), o_b, d_b, grid_b)
     V_t_on_b = _sample_potential(np.array([a.coord for a in ib_atoms]), o_t, d_t, grid_t)
@@ -364,20 +364,19 @@ def compute_ec(
     mask_b = ~np.isnan(V_b_on_b) & ~np.isnan(V_t_on_b)
     mask_t = ~np.isnan(V_b_on_t) & ~np.isnan(V_t_on_t)
     if mask_b.sum() < 10 or mask_t.sum() < 10:
-      logger.warning(f"Too few interface samples for {binder_id}:{target_id}, skipping.")
+      logger.warning(f"Too few interface samples for {chain1}:{chain2}, skipping.")
       return np.nan, np.nan, np.nan
 
     r_b, _ = pearsonr(V_b_on_b[mask_b], V_t_on_b[mask_b])
     r_t, _ = pearsonr(V_b_on_t[mask_t], V_t_on_t[mask_t])
     ec = -(r_b + r_t) / 2.0  # negative correlation = complementarity
 
-    logger.info("Pair %s:%s | EC=%.4f, RB=%.4f, RT=%.4f", binder_id, target_id, ec, r_b, r_t)
+    logger.info("Pair %s:%s | EC=%.4f, RB=%.4f, RT=%.4f", chain1, chain2, ec, r_b, r_t)
     global _METRIC_DEFINITIONS_LOGGED
     if not _METRIC_DEFINITIONS_LOGGED:
       logger.info("Definitions:")
-      logger.info("EC: Electrostatic complementarity on the buried binder and target surfaces; the minus sign means more-positive EC values indicating stronger complementarity (perfect complementarity = +1, identical surfaces = -1).")
-      logger.info("RB: correlation of binder potential vs target potential on binder interface atoms")
-      logger.info("RT: correlation of binder potential vs target potential on target interface atoms"
-        "(Pearson(V_b_on_t, V_t_on_t)).")
+      logger.info("EC: Electrostatic complementarity on the buried surfaces of chain1 and chain2; the minus sign means more-positive EC values indicating stronger complementarity (perfect complementarity = +1, identical surfaces = -1).")
+      logger.info("RB: correlation of chain1 potential vs chain2 potential on chain1 interface atoms")
+      logger.info("RT: correlation of chain1 potential vs chain2 potential on chain2 interface atoms (Pearson(V_b_on_t, V_t_on_t)).")
       _METRIC_DEFINITIONS_LOGGED = True
     return ec, r_b, r_t

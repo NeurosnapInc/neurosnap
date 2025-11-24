@@ -58,14 +58,14 @@ def test_compute_ec_requires_sufficient_samples(monkeypatch):
   )
 
   assert all(math.isnan(v) for v in result)
-  assert prep_calls["count"] == 2  # binder and target
+  assert prep_calls["count"] == 2  # both interface chains
   assert apbs_calls["count"] == 2
 
 
 def test_compute_ec_uses_pearson_correlations(monkeypatch):
-  binder_atoms = [FakeAtom((i, 0.0, 0.0)) for i in range(12)]
-  target_atoms = [FakeAtom((i + 100, 0.0, 0.0)) for i in range(12)]
-  monkeypatch.setattr(ec_interface, "find_interface_atoms", lambda *args, **kwargs: (binder_atoms, target_atoms))
+  chain1_atoms = [FakeAtom((i, 0.0, 0.0)) for i in range(12)]
+  chain2_atoms = [FakeAtom((i + 100, 0.0, 0.0)) for i in range(12)]
+  monkeypatch.setattr(ec_interface, "find_interface_atoms", lambda *args, **kwargs: (chain1_atoms, chain2_atoms))
 
   written_chains = []
 

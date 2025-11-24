@@ -365,7 +365,7 @@ def compute_ec_for_pair(
     r_t, _ = pearsonr(V_b_on_t[mask_t], V_t_on_t[mask_t])
     ec = -(r_b + r_t) / 2.0  # negative correlation = complementarity
 
-    logger.info("Pair %s:%s – EC = %.3f  (r_b=%.3f, r_t=%.3f)", binder_id, target_id, ec, r_b, r_t)
+    logger.info("Pair %s:%s | EC=%.4f, RB=%.4f, RT=%.4f", binder_id, target_id, ec, r_b, r_t)
     return ec, r_b, r_t
 
 

@@ -1,7 +1,6 @@
 """
 Electrostatic complementarity (EC) quantification for binder-target chain
-pairs in protein complexes. Written by Danial Gharaie Amirabadi and improved by
-Keaun Amani, based on the algorithm from:
+pairs in protein complexes. Written by Danial Gharaie Amirabadi and Keaun Amani, based on the algorithm from:
 Airlie J. McCoy, V. Chandana Epa, and Peter M. Colman. Electrostatic
 complementarity at protein/protein interfaces (edited by B. Honig).
 Journal of Molecular Biology. 1997;268(2):570–584.

@@ -20,17 +20,14 @@ Key features
 
 from __future__ import annotations
 
-import argparse
 import glob
 import gzip
-import logging
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 from Bio.PDB import NeighborSearch
@@ -38,7 +35,6 @@ from scipy.stats import pearsonr
 
 from neurosnap.log import logger
 from neurosnap.protein import Protein
-
 
 _METRIC_DEFINITIONS_LOGGED = False
 

@@ -32,10 +32,11 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
-from Bio.PDB import NeighborSearch, PDBParser
+from Bio.PDB import NeighborSearch
 from scipy.stats import pearsonr
 
 from neurosnap.log import logger
+from neurosnap.protein import Protein
 
 
 # ---------------------------------------------------------------------
@@ -65,8 +66,10 @@ def write_single_chain_pdb(structure, chain_id: str, outfile: Path) -> None:
   io.save(str(outfile), ChainSelect())  # Path → str avoids .tell() bug
 
 
-def find_interface_atoms(binder_chain, target_chain, cutoff: float = 4.5):
+def find_interface_atoms(protein: Protein, binder_id: str, target_id: str, cutoff: float = 4.5):
   """Return (binder_atoms, target_atoms) at the interface (Å cutoff)."""
+  binder_chain = protein.structure[0][binder_id]
+  target_chain = protein.structure[0][target_id]
   binder_atoms = [a for a in binder_chain.get_atoms() if a.element != "H"]
   target_atoms = [a for a in target_chain.get_atoms() if a.element != "H"]
 
@@ -278,24 +281,23 @@ quit
 #  Section 5 – Per-pair EC computation
 # ---------------------------------------------------------------------
 def compute_ec_for_pair(
-  structure,
+  protein: Protein,
   binder_id: str,
   target_id: str,
   *,
-  cutoff: float,
-  forcefield: str,
-  pdb2pqr: str,
-  apbs: str,
-  workdir: Path,
+  cutoff: float = 4.5,
+  forcefield: str = "AMBER",
+  pdb2pqr: str = "pdb2pqr",
+  apbs: str = "apbs",
 ) -> Tuple[float, float, float]:
   """
   Compute electrostatic complementarity (EC) and Pearson correlations (r_b, r_t)
-  for a binder–target chain pair in a protein structure.
+  for a binder–target chain pair in a Protein.
 
   Parameters
   ----------
-  structure : Bio.PDB.Structure.Structure
-    Parsed protein complex containing the binder and target chains.
+  protein : neurosnap.protein.Protein
+    Protein containing the binder and target chains.
   binder_id : str
     Chain identifier for the binder.
   target_id : str
@@ -308,18 +310,13 @@ def compute_ec_for_pair(
     Path to the pdb2pqr executable.
   apbs : str
     Path to the apbs executable.
-  workdir : Path
-    Directory used for temporary PDB/PQR/DX files.
 
   Returns
   -------
   tuple[float, float, float]
     (ec, r_b, r_t), or (nan, nan, nan) when insufficient interface samples.
   """
-  binder_chain = structure[0][binder_id]
-  target_chain = structure[0][target_id]
-
-  ib_atoms, it_atoms = find_interface_atoms(binder_chain, target_chain, cutoff)
+  ib_atoms, it_atoms = find_interface_atoms(protein, binder_id, target_id, cutoff)
   if not ib_atoms or not it_atoms:
     logger.warning(f"No inter-chain contacts for {binder_id}:{target_id}, skipping.")
     return np.nan, np.nan, np.nan
@@ -332,42 +329,44 @@ def compute_ec_for_pair(
     len(it_atoms),
   )
 
-  binder_pdb = workdir / f"binder_{binder_id}.pdb"
-  target_pdb = workdir / f"target_{target_id}.pdb"
-  write_single_chain_pdb(structure, binder_id, binder_pdb)
-  write_single_chain_pdb(structure, target_id, target_pdb)
+  with tempfile.TemporaryDirectory() as td:
+    workdir = Path(td)
+    binder_pdb = workdir / f"binder_{binder_id}.pdb"
+    target_pdb = workdir / f"target_{target_id}.pdb"
+    write_single_chain_pdb(protein.structure, binder_id, binder_pdb)
+    write_single_chain_pdb(protein.structure, target_id, target_pdb)
 
-  binder_pqr = binder_pdb.with_suffix(".pqr")
-  target_pqr = target_pdb.with_suffix(".pqr")
-  _prepare_pqr(binder_pdb, binder_pqr, pdb2pqr, forcefield)
-  _prepare_pqr(target_pdb, target_pqr, pdb2pqr, forcefield)
+    binder_pqr = binder_pdb.with_suffix(".pqr")
+    target_pqr = target_pdb.with_suffix(".pqr")
+    _prepare_pqr(binder_pdb, binder_pqr, pdb2pqr, forcefield)
+    _prepare_pqr(target_pdb, target_pqr, pdb2pqr, forcefield)
 
-  binder_dx = binder_pqr.with_suffix(".dx")
-  target_dx = target_pqr.with_suffix(".dx")
-  _run_apbs(binder_pqr, binder_dx, apbs)
-  _run_apbs(target_pqr, target_dx, apbs)
+    binder_dx = binder_pqr.with_suffix(".dx")
+    target_dx = target_pqr.with_suffix(".dx")
+    _run_apbs(binder_pqr, binder_dx, apbs)
+    _run_apbs(target_pqr, target_dx, apbs)
 
-  # ── load potentials
-  o_b, d_b, grid_b = _parse_dx(binder_dx)
-  o_t, d_t, grid_t = _parse_dx(target_dx)
+    # ── load potentials
+    o_b, d_b, grid_b = _parse_dx(binder_dx)
+    o_t, d_t, grid_t = _parse_dx(target_dx)
 
-  V_b_on_b = _sample_potential(np.array([a.coord for a in ib_atoms]), o_b, d_b, grid_b)
-  V_t_on_b = _sample_potential(np.array([a.coord for a in ib_atoms]), o_t, d_t, grid_t)
-  V_b_on_t = _sample_potential(np.array([a.coord for a in it_atoms]), o_b, d_b, grid_b)
-  V_t_on_t = _sample_potential(np.array([a.coord for a in it_atoms]), o_t, d_t, grid_t)
+    V_b_on_b = _sample_potential(np.array([a.coord for a in ib_atoms]), o_b, d_b, grid_b)
+    V_t_on_b = _sample_potential(np.array([a.coord for a in ib_atoms]), o_t, d_t, grid_t)
+    V_b_on_t = _sample_potential(np.array([a.coord for a in it_atoms]), o_b, d_b, grid_b)
+    V_t_on_t = _sample_potential(np.array([a.coord for a in it_atoms]), o_t, d_t, grid_t)
 
-  mask_b = ~np.isnan(V_b_on_b) & ~np.isnan(V_t_on_b)
-  mask_t = ~np.isnan(V_b_on_t) & ~np.isnan(V_t_on_t)
-  if mask_b.sum() < 10 or mask_t.sum() < 10:
-    logger.warning(f"Too few interface samples for {binder_id}:{target_id}, skipping.")
-    return np.nan, np.nan, np.nan
+    mask_b = ~np.isnan(V_b_on_b) & ~np.isnan(V_t_on_b)
+    mask_t = ~np.isnan(V_b_on_t) & ~np.isnan(V_t_on_t)
+    if mask_b.sum() < 10 or mask_t.sum() < 10:
+      logger.warning(f"Too few interface samples for {binder_id}:{target_id}, skipping.")
+      return np.nan, np.nan, np.nan
 
-  r_b, _ = pearsonr(V_b_on_b[mask_b], V_t_on_b[mask_b])
-  r_t, _ = pearsonr(V_b_on_t[mask_t], V_t_on_t[mask_t])
-  ec = -(r_b + r_t) / 2.0  # negative correlation = complementarity
+    r_b, _ = pearsonr(V_b_on_b[mask_b], V_t_on_b[mask_b])
+    r_t, _ = pearsonr(V_b_on_t[mask_t], V_t_on_t[mask_t])
+    ec = -(r_b + r_t) / 2.0  # negative correlation = complementarity
 
-  logger.info("Pair %s:%s – EC = %.3f  (r_b=%.3f, r_t=%.3f)", binder_id, target_id, ec, r_b, r_t)
-  return ec, r_b, r_t
+    logger.info("Pair %s:%s – EC = %.3f  (r_b=%.3f, r_t=%.3f)", binder_id, target_id, ec, r_b, r_t)
+    return ec, r_b, r_t
 
 
 # ---------------------------------------------------------------------
@@ -389,33 +388,29 @@ def main(argv: Sequence[str] | None = None):
   if not args.pdb.exists():
     sys.exit(f"PDB file '{args.pdb}' not found.")
 
-  parser = PDBParser(QUIET=True)
-  structure = parser.get_structure("complex", str(args.pdb))
+  protein = Protein(args.pdb)
 
-  all_chains = {c.id for c in structure.get_chains()}
+  all_chains = set(protein.chains())
   chain_pairs = parse_chain_pairs(args.pairs)
   for b, t in chain_pairs:
     if b not in all_chains or t not in all_chains:
       sys.exit(f"Chain '{b}' or '{t}' not present in PDB file.")
 
-  with tempfile.TemporaryDirectory() as td:
-    workdir = Path(td)
-    results: Dict[Tuple[str, str], Tuple[float, float, float]] = {}
-    for b, t in chain_pairs:
-      try:
-        ec, r_b, r_t = compute_ec_for_pair(
-          structure,
-          b,
-          t,
-          cutoff=args.cutoff,
-          forcefield=args.forcefield,
-          pdb2pqr=args.pdb2pqr,
-          apbs=args.apbs,
-          workdir=workdir,
-        )
-        results[(b, t)] = (ec, r_b, r_t)
-      except Exception as exc:
-        logger.error("Failed for pair %s:%s – %s", b, t, exc)
+  results: Dict[Tuple[str, str], Tuple[float, float, float]] = {}
+  for b, t in chain_pairs:
+    try:
+      ec, r_b, r_t = compute_ec_for_pair(
+        protein,
+        b,
+        t,
+        cutoff=args.cutoff,
+        forcefield=args.forcefield,
+        pdb2pqr=args.pdb2pqr,
+        apbs=args.apbs,
+      )
+      results[(b, t)] = (ec, r_b, r_t)
+    except Exception as exc:
+      logger.error("Failed for pair %s:%s – %s", b, t, exc)
 
   if not results:
     sys.exit("No EC scores computed (see errors above).")

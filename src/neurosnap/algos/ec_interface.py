@@ -296,19 +296,19 @@ def compute_ec_for_pair(
 
   Parameters
   ----------
-  protein : neurosnap.protein.Protein
+  protein
     Protein containing the binder and target chains.
-  binder_id : str
+  binder_id
     Chain identifier for the binder.
-  target_id : str
+  target_id
     Chain identifier for the target.
-  cutoff : float
+  cutoff
     Heavy-atom distance cutoff (Å) used to define interface atoms.
-  forcefield : str
+  forcefield
     PDB2PQR force field name (e.g., AMBER).
-  pdb2pqr : str
+  pdb2pqr
     Path to the pdb2pqr executable.
-  apbs : str
+  apbs
     Path to the apbs executable.
 
   Returns

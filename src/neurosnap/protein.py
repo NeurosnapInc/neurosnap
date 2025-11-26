@@ -2542,7 +2542,6 @@ def plot_pseudo_3D(
     LineCollection object of what's been drawn
 
   """
-
   def rescale(a, amin=None, amax=None):
     a = np.copy(a)
     if amin is None:
@@ -2556,9 +2555,9 @@ def plot_pseudo_3D(
   # clip color values and produce warning if necesarry
   if c is not None and cmin is not None and cmax is not None:
     if np.any(c < cmin):
-      logger.warn(f"The provided c colors array contains values that are less than cmin ({cmin}). Out of range values will be clipped into range.")
+      logger.warning(f"The provided c colors array contains values that are less than cmin ({cmin}). Out of range values will be clipped into range.")
     if np.any(c > cmax):
-      logger.warn(f"The provided c colors array contains values that are greater than cmax ({cmax}). Out of range values will be clipped into range.")
+      logger.warning(f"The provided c colors array contains values that are greater than cmax ({cmax}). Out of range values will be clipped into range.")
     c = np.clip(c, a_min=cmin, a_max=cmax)
 
   # make segments and colors for each segment

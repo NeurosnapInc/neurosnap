@@ -1002,22 +1002,22 @@ class Protein:
                   volume += (4 / 3) * np.pi * (radius**3)
     return volume
 
-  def calculate_contacts(self, binder_atoms: List[Atom], target_atoms: List[Atom], threshold: float = 4.5) -> int:
+  def calculate_contacts(self, atoms1: List[Atom], atoms2: List[Atom], threshold: float = 4.5) -> int:
     """
     Counts the number of atomic contacts between two sets of atoms within a distance threshold.
 
     Parameters:
-        binder_atoms (list): A list of Bio.PDB.Atom objects from the binder chain.
-        target_atoms (list): A list of Bio.PDB.Atom objects from the target chain.
+        atoms1 (list): A list of Bio.PDB.Atom objects from the binder chain.
+        atoms2 (list): A list of Bio.PDB.Atom objects from the target chain.
         threshold (float): Distance cutoff (in Å) to consider a contact (default is 4.5 Å).
 
     Returns:
         int: The total number of atomic contacts where atoms from the binder
             are within the threshold distance of atoms in the target.
     """
-    ns = NeighborSearch(list(target_atoms))
+    ns = NeighborSearch(list(atoms2))
     count = 0
-    for atom in binder_atoms:
+    for atom in atoms1:
       neighbors = ns.search(atom.coord, threshold)
       count += len(neighbors)
     return count

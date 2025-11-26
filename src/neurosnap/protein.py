@@ -1737,7 +1737,7 @@ def isoelectric_point(
 
 
 def calculate_bsa(
-  protein_complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], model: int = 0, level: str = "R"
+  protein_complex: Union[str, "Protein"], chain_group_1: List[str], chain_group_2: List[str], *, model: int = 0, level: str = "R"
 ) -> float:
   """Calculate the buried surface area (BSA) between two groups of chains.
 

@@ -280,6 +280,36 @@ def test_find_interface_residues_returns_pairs():
   assert _keys(pairs_no_h) == {("A", 1, "B", 1), ("A", 2, "B", 2)}
 
 
+def _patch_signature(patches):
+  return {frozenset((res.get_parent().id.strip(), res.get_resname(), res.id[1]) for res in patch) for patch in patches}
+
+
+def test_find_non_interface_hydrophobic_patches_expected_sets_chain_a():
+  prot = Protein(str(PDB_DIMER))
+  patches = prot.find_non_interface_hydrophobic_patches([("A", "B")], target_chains=["A"])
+  expected = {
+    frozenset({("A", "LEU", 8), ("A", "MET", 45), ("A", "ALA", 46)}),
+    frozenset({("A", "VAL", 38), ("A", "ALA", 33), ("A", "LEU", 35), ("A", "PRO", 34)}),
+    frozenset({("A", "VAL", 40), ("A", "ILE", 41), ("A", "ILE", 42)}),
+    frozenset({("A", "LEU", 56), ("A", "ILE", 52), ("A", "ALA", 57)}),
+  }
+  assert len(patches) == 4
+  assert _patch_signature(patches) == expected
+
+
+def test_find_non_interface_hydrophobic_patches_expected_sets_chain_b():
+  prot = Protein(str(PDB_DIMER))
+  patches = prot.find_non_interface_hydrophobic_patches([("A", "B")], target_chains=["B"])
+  expected = {
+    frozenset({("B", "LEU", 8), ("B", "MET", 45), ("B", "ALA", 46)}),
+    frozenset({("B", "VAL", 38), ("B", "ALA", 33), ("B", "LEU", 35), ("B", "PRO", 34)}),
+    frozenset({("B", "VAL", 40), ("B", "ILE", 41), ("B", "ILE", 42)}),
+    frozenset({("B", "LEU", 56), ("B", "ILE", 52), ("B", "ALA", 57)}),
+  }
+  assert len(patches) == 4
+  assert _patch_signature(patches) == expected
+
+
 @pytest.mark.slow
 def test_surface_area_positive():
   prot = Protein(str(PDB_NO_H))

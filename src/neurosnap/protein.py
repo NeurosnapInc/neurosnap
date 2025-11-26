@@ -773,6 +773,136 @@ class Protein:
 
     return residue_pairs
 
+  def find_non_interface_hydrophobic_patches(
+    self,
+    chain_pairs: Iterable[Tuple[str, str]],
+    target_chains: Optional[Iterable[str]] = None,
+    *,
+    model: Optional[int] = None,
+    cutoff_interface: float = 4.5,
+    hydrogens: bool = True,
+    patch_cutoff: float = 6.0,
+    min_patch_area: float = 40.0,
+  ) -> List[Set[ResidueType]]:
+    """
+    Identify solvent-exposed hydrophobic patches that are not part of specified interfaces.
+
+    Parameters:
+        chain_pairs: Iterable of chain ID pairs that define interface contacts (e.g. [('A', 'B')]).
+        target_chains: Optional iterable of chain IDs to restrict the patch search to. If None, all chains are considered.
+        model: Model index to use. Defaults to the first available model.
+        cutoff_interface: Atom–atom distance cutoff (Å) for defining an interface contact.
+        hydrogens: Whether to include hydrogens when identifying interface contacts.
+        patch_cutoff: CA–CA distance cutoff (Å) for linking hydrophobic residues into the same patch.
+        min_patch_area: Minimum total solvent-accessible surface area (Å²) for a patch to be counted.
+
+    Returns:
+        List of patches, where each patch is a set of residues belonging to that solvent-exposed, non-interface hydrophobic cluster.
+    """
+    if model is None:
+      model = self.models()[0]
+    assert model in self.structure, f"Model {model} was not found."
+
+    chain_pairs = [(c1.strip(), c2.strip()) for c1, c2 in chain_pairs]
+    available_chains = set(self.chains(model))
+    for chain_a, chain_b in chain_pairs:
+      assert chain_a in available_chains, f"Chain {chain_a} was not found."
+      assert chain_b in available_chains, f"Chain {chain_b} was not found."
+
+    chain_set = None
+    if target_chains is not None:
+      chain_set = {c.strip() for c in target_chains}
+      missing = chain_set - available_chains
+      assert not missing, f"Chain(s) {', '.join(sorted(missing))} were not found."
+
+    # Compute interface residues using the same logic as find_interface_contacts.
+    interface_res: Set[Tuple[str, int]] = set()
+    for chainA, chainB in chain_pairs:
+      contacts = self.find_interface_contacts(chainA, chainB, model=model, cutoff=cutoff_interface, hydrogens=hydrogens)
+      for atomA, atomB in contacts:
+        resA = atomA.get_parent()
+        resB = atomB.get_parent()
+        interface_res.add((resA.get_parent().id.strip(), resA.id[1]))
+        interface_res.add((resB.get_parent().id.strip(), resB.id[1]))
+
+    # Compute per-residue SASA and build a lookup.
+    from Bio.PDB import SASA
+
+    structure_model = self.structure[model]
+    sasa_calculator = SASA.ShrakeRupley()
+    sasa_calculator.compute(structure_model, level="R")
+    per_res_sasa = {}
+    for chain in structure_model:
+      for res in chain:
+        if not hasattr(res, "sasa"):
+          continue
+        per_res_sasa[(chain.id.strip(), res.id[1])] = float(res.sasa or 0.0)
+
+    # Collect solvent-exposed hydrophobic residues not at the interface.
+    hydrophobic_atoms: List[Atom] = []
+    hydrophobic_res_keys: List[Tuple[str, int]] = []
+    hydrophobic_res_objs: List[ResidueType] = []
+    for chain in structure_model:
+      chain_id = chain.id.strip()
+      if chain_set is not None and chain_id not in chain_set:
+        continue
+      for res in chain:
+        if res.id[0] != " ":
+          continue
+        if res.get_resname() not in HYDROPHOBIC_RESIDUES:
+          continue
+        resid_key = (chain_id, res.id[1])
+        if resid_key in interface_res:
+          continue
+        if per_res_sasa.get(resid_key, 0.0) <= 0.01:
+          continue
+        if "CA" not in res:
+          continue
+        hydrophobic_atoms.append(res["CA"])
+        hydrophobic_res_keys.append(resid_key)
+        hydrophobic_res_objs.append(res)
+
+    # Build adjacency between hydrophobic residues based on CA distance.
+    coords = np.asarray([atom.coord for atom in hydrophobic_atoms])
+    if not len(coords):
+      return []
+
+    n = len(coords)
+    neighbors = [[] for _ in range(n)]
+    for i in range(n):
+      for j in range(i + 1, n):
+        if np.linalg.norm(coords[i] - coords[j]) <= patch_cutoff:
+          neighbors[i].append(j)
+          neighbors[j].append(i)
+
+    # Find connected components and collect qualifying patches.
+    patches: List[Set[ResidueType]] = []
+    visited = [False] * n
+    for idx in range(n):
+      if visited[idx]:
+        continue
+      stack = [idx]
+      component = []
+      while stack:
+        cur = stack.pop()
+        if visited[cur]:
+          continue
+        visited[cur] = True
+        component.append(cur)
+        stack.extend(neighbors[cur])
+
+      if len(component) <= 1:
+        continue
+
+      comp_area = 0.0
+      for comp_idx in component:
+        resid_key = hydrophobic_res_keys[comp_idx]
+        comp_area += per_res_sasa.get(resid_key, 0.0)
+      if comp_area >= min_patch_area:
+        patches.append({hydrophobic_res_objs[i] for i in component})
+
+    return patches
+
   def align(self, other_protein: "Protein", chains1: List[str] = [], chains2: List[str] = [], model1: int = 0, model2: int = 0):
     """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed

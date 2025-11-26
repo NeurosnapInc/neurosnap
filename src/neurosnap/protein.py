@@ -1022,7 +1022,7 @@ class Protein:
       count += len(neighbors)
     return count
 
-  def calculate_contacts_interface(self, chain1: str, chain2: str, model: Optional[int] = None, threshold: float = 4.5) -> int:
+  def calculate_interface_contacts(self, chain1: str, chain2: str, model: Optional[int] = None, threshold: float = 4.5) -> int:
     """
     Calculates the number of atomic contacts between two chains in a protein structure.
 

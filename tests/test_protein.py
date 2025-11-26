@@ -249,7 +249,7 @@ def test_contacts_interface_nonnegative():
   chains = prot.chains(m)
   assert len(chains) >= 2
   # take first two chains
-  n_contacts = prot.calculate_contacts_interface(chains[0], chains[1], model=m, threshold=6.0)
+  n_contacts = prot.calculate_interface_contacts(chains[0], chains[1], model=m, threshold=6.0)
   assert isinstance(n_contacts, int) and n_contacts >= 0
 
 

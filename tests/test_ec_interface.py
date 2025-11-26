@@ -13,24 +13,16 @@ class FakeAtom:
 
 
 def test_compute_ec_returns_nan_without_contacts(monkeypatch):
-  monkeypatch.setattr(ec_interface, "find_interface_atoms", lambda *args, **kwargs: ([], []))
+  protein = SimpleNamespace(structure=None, find_interface_contacts=lambda *args, **kwargs: [])
 
-  result = ec_interface.compute_ec(
-    SimpleNamespace(structure=None),
-    "A",
-    "B",
-    cutoff=4.5,
-    forcefield="AMBER",
-    pdb2pqr="pdb2pqr",
-    apbs="apbs",
-  )
+  result = ec_interface.compute_ec(protein, "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
 
   assert all(math.isnan(v) for v in result)
 
 
 def test_compute_ec_requires_sufficient_samples(monkeypatch):
   atoms = [FakeAtom((i, 0.0, 0.0)) for i in range(5)]
-  monkeypatch.setattr(ec_interface, "find_interface_atoms", lambda *args, **kwargs: (atoms, atoms))
+  protein = SimpleNamespace(structure=None, find_interface_contacts=lambda *args, **kwargs: [(a, a) for a in atoms])
 
   monkeypatch.setattr(ec_interface, "write_single_chain_pdb", lambda structure, chain_id, outfile: outfile.write_text(f"{chain_id}\n"))
   prep_calls = {"count": 0}
@@ -47,15 +39,7 @@ def test_compute_ec_requires_sufficient_samples(monkeypatch):
   monkeypatch.setattr(ec_interface, "_parse_dx", lambda path: (np.zeros(3), (1, 1, 1), np.zeros((2, 2, 2))))
   monkeypatch.setattr(ec_interface, "_sample_potential", lambda coords, origin, delta, grid: np.arange(len(coords), dtype=float))
 
-  result = ec_interface.compute_ec(
-    SimpleNamespace(structure=None),
-    "A",
-    "B",
-    cutoff=4.5,
-    forcefield="AMBER",
-    pdb2pqr="pdb2pqr",
-    apbs="apbs",
-  )
+  result = ec_interface.compute_ec(protein, "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
 
   assert all(math.isnan(v) for v in result)
   assert prep_calls["count"] == 2  # both interface chains
@@ -65,7 +49,7 @@ def test_compute_ec_requires_sufficient_samples(monkeypatch):
 def test_compute_ec_uses_pearson_correlations(monkeypatch):
   chain1_atoms = [FakeAtom((i, 0.0, 0.0)) for i in range(12)]
   chain2_atoms = [FakeAtom((i + 100, 0.0, 0.0)) for i in range(12)]
-  monkeypatch.setattr(ec_interface, "find_interface_atoms", lambda *args, **kwargs: (chain1_atoms, chain2_atoms))
+  protein = SimpleNamespace(structure=None, find_interface_contacts=lambda *args, **kwargs: list(zip(chain1_atoms, chain2_atoms)))
 
   written_chains = []
 
@@ -90,15 +74,7 @@ def test_compute_ec_uses_pearson_correlations(monkeypatch):
 
   monkeypatch.setattr(ec_interface, "_sample_potential", fake_sample_potential)
 
-  ec, r_b, r_t = ec_interface.compute_ec(
-    SimpleNamespace(structure=None),
-    "A",
-    "B",
-    cutoff=4.5,
-    forcefield="AMBER",
-    pdb2pqr="pdb2pqr",
-    apbs="apbs",
-  )
+  ec, r_b, r_t = ec_interface.compute_ec(protein, "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
 
   assert ec == pytest.approx(0.0)
   assert r_b == pytest.approx(-1.0)
@@ -113,7 +89,9 @@ def test_compute_ec_real_structure_with_stubbed_io(monkeypatch):
   # real interface detection on the AF2 dimer
   protein = ec_interface.Protein("tests/files/dimer_af2.pdb")
 
-  ib_atoms, it_atoms = ec_interface.find_interface_atoms(protein, "A", "B", 4.5)
+  contacts = protein.find_interface_contacts("A", "B", cutoff=4.5, hydrogens=False)
+  ib_atoms = list({a for a, _ in contacts})
+  it_atoms = list({b for _, b in contacts})
 
   def make_correlated(length, target_r, rng):
     x = rng.normal(size=length)

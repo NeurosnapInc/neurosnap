@@ -35,7 +35,6 @@ from pathlib import Path
 from typing import List, Sequence, Tuple
 
 import numpy as np
-from Bio.PDB import NeighborSearch
 from scipy.stats import pearsonr
 
 from neurosnap.log import logger
@@ -69,23 +68,6 @@ def write_single_chain_pdb(structure, chain_id: str, outfile: Path) -> None:
   io = PDBIO()
   io.set_structure(structure)
   io.save(str(outfile), ChainSelect())  # Path → str avoids .tell() bug
-
-
-def find_interface_atoms(protein: Protein, binder_id: str, target_id: str, cutoff: float = 4.5):
-  """Return (binder_atoms, target_atoms) at the interface (Å cutoff)."""
-  binder_chain = protein.structure[0][binder_id]
-  target_chain = protein.structure[0][target_id]
-  binder_atoms = [a for a in binder_chain.get_atoms() if a.element != "H"]
-  target_atoms = [a for a in target_chain.get_atoms() if a.element != "H"]
-
-  ns = NeighborSearch(binder_atoms + target_atoms)
-  ib, it = set(), set()
-  for atom in binder_atoms:
-    for nb in ns.search(atom.coord, cutoff, level="A"):
-      if nb in target_atoms:
-        ib.add(atom)
-        it.add(nb)
-  return list(ib), list(it)
 
 
 # ---------------------------------------------------------------------
@@ -321,7 +303,9 @@ def compute_ec(
   tuple[float, float, float]
     (ec, r_b, r_t), or (nan, nan, nan) when insufficient interface samples.
   """
-  ib_atoms, it_atoms = find_interface_atoms(protein, chain1, chain2, cutoff)
+  contacts = protein.find_interface_contacts(chain1, chain2, cutoff=cutoff, hydrogens=False)
+  ib_atoms = list({a for a, _ in contacts})
+  it_atoms = list({b for _, b in contacts})
   if not ib_atoms or not it_atoms:
     logger.warning(f"No inter-chain contacts for {chain1}:{chain2}, skipping.")
     return np.nan, np.nan, np.nan

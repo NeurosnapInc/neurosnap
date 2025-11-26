@@ -236,21 +236,29 @@ def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():
   assert rg > 0.0
 
 
+def test_find_interface_contacts_hydrogen_filtering():
+  atoms = [
+    ("CA", "ALA", "A", 1, 0.0, 0.0, 0.0, "C"),
+    ("H", "ALA", "A", 1, 0.5, 0.0, 0.0, "H"),
+    ("CA", "ALA", "B", 1, 0.0, 0.0, 3.0, "C"),
+    ("O", "ALA", "B", 1, 10.0, 0.0, 0.0, "O"),  # far, should not contact
+  ]
+  prot = _make_protein(atoms)
+
+  contacts_with_h = prot.find_interface_contacts("A", "B", cutoff=4.5, hydrogens=True)
+  contacts_no_h = prot.find_interface_contacts("A", "B", cutoff=4.5, hydrogens=False)
+
+  assert len(contacts_with_h) == 2  # CA-CA plus H-CA
+  assert len(contacts_no_h) == 1  # hydrogen removed from consideration
+  assert all(a.element != "H" and b.element != "H" for a, b in contacts_no_h)
+  assert {(a.get_parent().get_parent().id, b.get_parent().get_parent().id) for a, b in contacts_with_h} == {("A", "B")}
+
+
 @pytest.mark.slow
 def test_surface_area_positive():
   prot = Protein(str(PDB_NO_H))
   sasa = prot.calculate_surface_area(model=prot.models()[0], level="R")
   assert isinstance(sasa, float) and sasa >= 0.0
-
-
-def test_contacts_interface_nonnegative():
-  prot = Protein(str(PDB_DIMER))
-  m = prot.models()[0]
-  chains = prot.chains(m)
-  assert len(chains) >= 2
-  # take first two chains
-  n_contacts = prot.calculate_interface_contacts(chains[0], chains[1], model=m, threshold=6.0)
-  assert isinstance(n_contacts, int) and n_contacts >= 0
 
 
 def test_hbond_errors():

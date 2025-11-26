@@ -700,6 +700,35 @@ class Protein:
 
     return missing_residues
 
+  def find_interface_contacts(
+    self, chain1: str, chain2: str, *, model: Optional[int] = None, cutoff: float = 4.5, hydrogens: bool = True
+  ) -> List[Tuple[Atom, Atom]]:
+    """
+    Identify interface atoms between two chains using a distance cutoff.
+
+    Parameters:
+        chain1: ID of the binder chain.
+        chain2: ID of the target chain.
+        cutoff: Distance cutoff in Ångströms for defining an interface contact (default 4.5 Å).
+        hydrogens: Whether to keep hydrogen atoms when evaluating contacts (set False to exclude them).
+
+    Returns:
+        List[Tuple[Atom, Atom]]: Paired atoms from the binder and target chains that are within the cutoff distance.
+    """
+    # Default to the first model if model is None
+    if model is None:
+      model = self.models()[0]
+
+    assert chain1 in self.chains(model), f"Chain {chain1} was not found."
+    assert chain2 in self.chains(model), f"Chain {chain2} was not found."
+
+    chain1 = self.structure[model][chain1]
+    chain2 = self.structure[model][chain2]
+    atoms1 = [a for a in chain1.get_atoms() if hydrogens or a.element != "H"]
+    atoms2 = [a for a in chain2.get_atoms() if hydrogens or a.element != "H"]
+
+    return find_contacts(atoms1, atoms2, cutoff=cutoff)
+
   def align(self, other_protein: "Protein", chains1: List[str] = [], chains2: List[str] = [], model1: int = 0, model2: int = 0):
     """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed
@@ -778,8 +807,7 @@ class Protein:
       missing_ref = sorted(k for k in ref_atom_map.keys() - mov_atom_map.keys())
       missing_mov = sorted(k for k in mov_atom_map.keys() - ref_atom_map.keys())
       raise AssertionError(
-        "Backbone atom mismatch between structures. "
-        f"Reference-only atoms: {len(missing_ref)}, other-only atoms: {len(missing_mov)}."
+        f"Backbone atom mismatch between structures. Reference-only atoms: {len(missing_ref)}, other-only atoms: {len(missing_mov)}."
       )
 
     ref_atoms = [ref_atom_map[key] for key in common_keys]
@@ -1001,54 +1029,6 @@ class Protein:
                   radius = vdw_radii[element]
                   volume += (4 / 3) * np.pi * (radius**3)
     return volume
-
-  def calculate_contacts(self, atoms1: List[Atom], atoms2: List[Atom], threshold: float = 4.5) -> int:
-    """
-    Counts the number of atomic contacts between two sets of atoms within a distance threshold.
-
-    Parameters:
-        atoms1 (list): A list of Bio.PDB.Atom objects from the binder chain.
-        atoms2 (list): A list of Bio.PDB.Atom objects from the target chain.
-        threshold (float): Distance cutoff (in Å) to consider a contact (default is 4.5 Å).
-
-    Returns:
-        int: The total number of atomic contacts where atoms from the binder
-            are within the threshold distance of atoms in the target.
-    """
-    ns = NeighborSearch(list(atoms2))
-    count = 0
-    for atom in atoms1:
-      neighbors = ns.search(atom.coord, threshold)
-      count += len(neighbors)
-    return count
-
-  def calculate_interface_contacts(self, chain1: str, chain2: str, model: Optional[int] = None, threshold: float = 4.5) -> int:
-    """
-    Calculates the number of atomic contacts between two chains in a protein structure.
-
-    Parameters:
-        chain1: ID of the first chain (e.g., the target).
-        chain2: ID of the second chain (e.g., the binder).
-        model: Index of the model to use (if structure contains multiple models).
-                               Defaults to the first model if not specified.
-        threshold: Distance threshold in Ångströms to consider atoms as being in contact.
-                           Defaults to 4.5 Å.
-
-    Returns:
-        int: Total number of atomic contacts between the two chains within the given distance threshold.
-    """
-    # Default to the first model if model is None
-    if model is None:
-      model = self.models()[0]
-
-    assert chain1 in self.chains(model), f"Chain {chain1} was not found."
-    assert chain2 in self.chains(model), f"Chain {chain2} was not found."
-
-    # Correctly get atoms from specific chains
-    chain1_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain1]  # chain A
-    chain2_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain2]  # chain B
-
-    return self.calculate_contacts(chain2_atoms, chain1_atoms, threshold)
 
   def calculate_interface_residues(self, chain1: str, chain2: str, model: Optional[int] = None, threshold: float = 4.5) -> int:
     """
@@ -1800,6 +1780,28 @@ def calculate_bsa(
     sasa_group2 = prot_group2.calculate_surface_area(model=model, level=level)
 
   return (sasa_group1 + sasa_group2) - sasa_complex
+
+
+def find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float = 4.5) -> int:
+  """
+  Counts the number of atomic contacts between two sets of atoms within a distance threshold.
+
+  Parameters:
+      atoms1: A list of Bio.PDB.Atom objects from the binder chain.
+      atoms2: A list of Bio.PDB.Atom objects from the target chain.
+      cutoff: Distance cutoff (in Å) to consider a contact (default is 4.5 Å).
+
+  Returns:
+      int: The total number of atomic contacts where atoms from the binder
+          are within the threshold distance of atoms in the target.
+  """
+  ns = NeighborSearch(atoms2)
+  contacts: List[Tuple[Atom, Atom]] = []
+  contacts_append = contacts.append
+  for atom in atoms1:
+    for neighbor in ns.search(atom.coord, cutoff, level="A"):
+      contacts_append((atom, neighbor))
+  return contacts
 
 
 def extract_non_biopolymers(pdb_file: str, output_dir: str, min_atoms: int = 0):

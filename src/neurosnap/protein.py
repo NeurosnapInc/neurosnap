@@ -1095,8 +1095,8 @@ class Protein:
     self,
     chain: Optional[str] = None,
     chain_other: Optional[str] = None,
-    model: Optional[int] = None,
     *,
+    model: Optional[int] = None,
     donor_acceptor_cutoff: float = 3.5,
     angle_cutoff: float = 120.0,
   ) -> int:

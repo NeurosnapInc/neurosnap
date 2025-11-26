@@ -254,6 +254,32 @@ def test_find_interface_contacts_hydrogen_filtering():
   assert {(a.get_parent().get_parent().id, b.get_parent().get_parent().id) for a, b in contacts_with_h} == {("A", "B")}
 
 
+def test_find_interface_residues_returns_pairs():
+  atoms = [
+    # multiple atoms in residue to ensure deduplication
+    ("CA", "ALA", "A", 1, 0.0, 0.0, 0.0, "C"),
+    ("CB", "ALA", "A", 1, 0.5, 0.0, 0.0, "C"),
+    ("CA", "ALA", "B", 1, 0.0, 0.0, 3.0, "C"),
+    ("O", "ALA", "B", 1, 0.0, 0.5, 3.0, "O"),
+    # second contacting pair
+    ("CA", "GLY", "A", 2, 0.0, 0.0, 10.0, "C"),
+    ("CA", "GLY", "B", 2, 0.0, 0.0, 12.0, "C"),
+    # hydrogen-only contact; should disappear when hydrogens are excluded
+    ("CA", "SER", "A", 3, 20.0, 0.0, 0.0, "C"),
+    ("H", "SER", "B", 3, 20.0, 0.0, 2.0, "H"),
+  ]
+  prot = _make_protein(atoms)
+
+  pairs_with_h = prot.find_interface_residues("A", "B", cutoff=4.5, hydrogens=True)
+  pairs_no_h = prot.find_interface_residues("A", "B", cutoff=4.5, hydrogens=False)
+
+  def _keys(pairs):
+    return {(ra.get_parent().id, ra.id[1], rb.get_parent().id, rb.id[1]) for ra, rb in pairs}
+
+  assert _keys(pairs_with_h) == {("A", 1, "B", 1), ("A", 2, "B", 2), ("A", 3, "B", 3)}
+  assert _keys(pairs_no_h) == {("A", 1, "B", 1), ("A", 2, "B", 2)}
+
+
 @pytest.mark.slow
 def test_surface_area_positive():
   prot = Protein(str(PDB_NO_H))

@@ -24,6 +24,7 @@ import pandas as pd
 import requests
 from Bio.PDB import PDBIO, MMCIFParser, NeighborSearch, PDBParser
 from Bio.PDB.Atom import Atom
+from Bio.PDB.Residue import Residue as ResidueType
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Polypeptide import is_aa
 from Bio.PDB.Superimposer import Superimposer
@@ -729,6 +730,49 @@ class Protein:
 
     return find_contacts(atoms1, atoms2, cutoff=cutoff)
 
+  def find_interface_residues(
+    self, chain1: str, chain2: str, *, model: Optional[int] = None, cutoff: float = 4.5, hydrogens: bool = True
+  ) -> List[Tuple[ResidueType, ResidueType]]:
+    """
+    Identify residue-residue contacts between two chains using a distance cutoff.
+
+    A residue pair is included when any atom in the binder residue is within `cutoff`
+    Å of any atom in the target residue.
+
+    Parameters:
+        chain1: ID of the binder chain.
+        chain2: ID of the target chain.
+        model: Index of the model to use (defaults to the first).
+        cutoff: Distance cutoff in Ångströms for defining an interface contact (default 4.5 Å).
+        hydrogens: Whether to keep hydrogen atoms when evaluating contacts (set False to exclude them).
+
+    Returns:
+        List[Tuple[Residue, Residue]]: Unique residue pairs (binder residue, target residue) that are in contact.
+    """
+    # Default to the first model if model is None
+    if model is None:
+      model = self.models()[0]
+
+    assert chain1 in self.chains(model), f"Chain {chain1} was not found."
+    assert chain2 in self.chains(model), f"Chain {chain2} was not found."
+
+    chain1_obj = self.structure[model][chain1]
+    chain2_obj = self.structure[model][chain2]
+    atoms1 = [a for a in chain1_obj.get_atoms() if hydrogens or a.element != "H"]
+    atoms2 = [a for a in chain2_obj.get_atoms() if hydrogens or a.element != "H"]
+
+    residue_pairs: List[Tuple[ResidueType, ResidueType]] = []
+    seen = set()
+    for atom1, atom2 in find_contacts(atoms1, atoms2, cutoff=cutoff):
+      res1, res2 = atom1.get_parent(), atom2.get_parent()
+      key = (res1.get_parent().id, res1.id, res2.get_parent().id, res2.id)
+      if key in seen:
+        continue
+      seen.add(key)
+      residue_pairs.append((res1, res2))
+
+    return residue_pairs
+
   def align(self, other_protein: "Protein", chains1: List[str] = [], chains2: List[str] = [], model1: int = 0, model2: int = 0):
     """Align another Protein object's structure to the self.structure
     of the current object. The other Protein will be transformed
@@ -1029,47 +1073,6 @@ class Protein:
                   radius = vdw_radii[element]
                   volume += (4 / 3) * np.pi * (radius**3)
     return volume
-
-  def calculate_interface_residues(self, chain1: str, chain2: str, model: Optional[int] = None, threshold: float = 4.5) -> int:
-    """
-    Calculates the number of unique residues from two chains that participate
-    in inter-chain contacts within a given distance threshold.
-
-    A residue is considered part of the interface if at least one of its atoms
-    is within `threshold` Å of any atom in the opposing chain.
-
-    Parameters:
-        chain1: ID of the first chain (e.g., the target).
-        chain2: ID of the second chain (e.g., the binder).
-        model: Index of the model to use (if structure contains multiple models).
-                              Defaults to the first model if not specified.
-        threshold: Distance threshold in Ångströms to define inter-chain contacts.
-                          Defaults to 4.5 Å.
-
-    Returns:
-        int: Total number of unique residues (from both chains) that are part of the interface.
-    """
-    # Default to the first model if model is None
-    if model is None:
-      model = self.models()[0]
-
-    assert chain1 in self.chains(model), f"Chain {chain1} was not found."
-    assert chain2 in self.chains(model), f"Chain {chain2} was not found."
-
-    # Get atoms from the specified chains
-    chain1_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain1]
-    chain2_atoms = [atom for atom in self.structure[model].get_atoms() if atom.get_parent().get_parent().id == chain2]
-
-    interface_residues = set()
-    for atom1 in chain1_atoms:
-      for atom2 in chain2_atoms:
-        distance = (atom1.coord - atom2.coord).dot(atom1.coord - atom2.coord) ** 0.5  # Euclidean distance
-        if distance <= threshold:
-          # Add the residues (not atoms) from both chains
-          interface_residues.add(atom1.get_parent())
-          interface_residues.add(atom2.get_parent())
-
-    return len(interface_residues)
 
   def calculate_hydrogen_bonds(
     self,
@@ -1782,9 +1785,9 @@ def calculate_bsa(
   return (sasa_group1 + sasa_group2) - sasa_complex
 
 
-def find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float = 4.5) -> int:
+def find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float = 4.5) -> List[Tuple[Atom, Atom]]:
   """
-  Counts the number of atomic contacts between two sets of atoms within a distance threshold.
+  Identifies atomic contacts between two sets of atoms within a distance threshold.
 
   Parameters:
       atoms1: A list of Bio.PDB.Atom objects from the binder chain.
@@ -1792,8 +1795,7 @@ def find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float = 4.5) -
       cutoff: Distance cutoff (in Å) to consider a contact (default is 4.5 Å).
 
   Returns:
-      int: The total number of atomic contacts where atoms from the binder
-          are within the threshold distance of atoms in the target.
+      List[Tuple[Atom, Atom]]: Atom pairs (binder atom, target atom) within the cutoff.
   """
   ns = NeighborSearch(atoms2)
   contacts: List[Tuple[Atom, Atom]] = []

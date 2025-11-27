@@ -47,6 +47,6 @@ def test_animate_frames_writes_gif(tmp_path):
     np.ones((20, 20, 3), dtype=np.uint8) * 255,
   ]
   output = tmp_path / "anim.gif"
-  animate_frames(frames, output, title="t", subtitles=["a", "b", "c"], interval=50, repeat=False)
+  animate_frames(frames, output, title="t", subtitles=["a", "b", "c"], interval=50, repeat=False, background_color=(240, 240, 240))
   assert output.exists()
   assert output.stat().st_size > 0

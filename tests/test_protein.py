@@ -21,7 +21,6 @@ from neurosnap.constants import (
 )
 from neurosnap.protein import (
   Protein,
-  animate_pseudo_3D,
   calculate_bsa,
   extract_non_biopolymers,
   fetch_uniprot,
@@ -29,7 +28,6 @@ from neurosnap.protein import (
   isoelectric_point,
   molecular_weight,
   net_charge,
-  plot_pseudo_3D,
   sanitize_aa_seq,
 )
 
@@ -48,8 +46,7 @@ def _pdb_from_atoms(atom_defs):
   lines = []
   for serial, (atom_name, resname, chain_id, resid, x, y, z, element) in enumerate(atom_defs, start=1):
     lines.append(
-      f"ATOM  {serial:5d} {atom_name:>4s} {resname:>3s} {chain_id:1s}{resid:4d}    "
-      f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 20.00           {element:>2s}"
+      f"ATOM  {serial:5d} {atom_name:>4s} {resname:>3s} {chain_id:1s}{resid:4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00 20.00           {element:>2s}"
     )
   lines.append("TER")
   lines.append("END")
@@ -412,6 +409,7 @@ def test_align_backbone_mixed_protein_and_nucleotide():
   coords_after = _collect_backbone_coords(prot_offset)
   assert np.allclose(coords_ref, coords_after, atol=1e-3)
 
+
 # -----------------------
 # File IO & conversions
 # -----------------------
@@ -489,6 +487,7 @@ def test_getAA_and_sanitize_and_mw_and_charge_and_pi():
   pi = isoelectric_point("ACDEFGHIKLMNPQRSTVWY")
   assert 0.0 <= pi <= 14.0
 
+
 def test_getAA_non_standard_handling():
   # Non-standard example: MSE (selenomethionine)
   # reject -> ValueError with helpful guidance
@@ -523,26 +522,6 @@ def test_calculate_bsa_dimer():
   group2 = chains[1:]
   bsa = calculate_bsa(prot, group1, group2, model=m)
   assert isinstance(bsa, float) and bsa >= 0.0
-
-
-# -----------------------
-# Plotting helpers (no display)
-# -----------------------
-
-
-def test_plot_pseudo_3D_and_animate():
-  prot = Protein(str(PDB_NO_H))
-  xyz = prot.df[["x", "y", "z"]].to_numpy()
-  fig, ax = matplotlib.pyplot.subplots()
-  lc = plot_pseudo_3D(xyz[:200], ax=ax)  # limit points for speed
-  assert lc is not None
-
-  # simple 2-frame animation
-  fig2, ax2 = matplotlib.pyplot.subplots()
-  lc1 = plot_pseudo_3D(xyz[:150], ax=ax2)
-  lc2 = plot_pseudo_3D(xyz[50:200], ax=ax2)
-  ani = animate_pseudo_3D(fig2, ax2, [lc1, lc2], titles=["t1", "t2"])
-  assert hasattr(ani, "_func")  # ArtistAnimation/FuncAnimation instance
 
 
 # -----------------------

@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy.special import expit as sigmoid
 from tqdm import tqdm
 
+from neurosnap.constants import VDW_RADII
 from neurosnap.log import logger
 from neurosnap.protein import Protein
 
@@ -365,19 +366,18 @@ def render_protein_pseudo3D(
 
   size_segments: Optional[List[np.ndarray]] = None
   if use_radii:
-    vdw_radii = {"H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8}
     atoms = df["atom_name"].astype(str).to_numpy()
     radii = []
     for name in atoms:
       stripped = name.strip()
       element = re.sub(r"[^A-Za-z]", "", stripped).upper()
-      if len(element) >= 2 and element[:2] in vdw_radii:
+      if len(element) >= 2 and element[:2] in VDW_RADII:
         elem = element[:2]
       elif element:
         elem = element[0]
       else:
         elem = ""
-      radii.append(vdw_radii.get(elem, 1.5))
+      radii.append(VDW_RADII.get(elem, 1.5))
     radii = np.asarray(radii, dtype=float)
     size_segments = [radii[chains == chain_id] for chain_id in pd.unique(chains)]
 

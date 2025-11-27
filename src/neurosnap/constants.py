@@ -33,6 +33,9 @@ BACKBONE_ATOMS_DNA = {
 # (Same as DNA but includes the 2'-OH group)
 BACKBONE_ATOMS_RNA = BACKBONE_ATOMS_DNA.union({"O2'"})
 
+## van der Waals radii (Å) for common elements
+VDW_RADII = {"H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8}
+
 ## Nucleotide Codes
 # Single-letter PDB residue codes for standard DNA residues
 NUC_DNA_CODES = {"DA", "DT", "DC", "DG"}

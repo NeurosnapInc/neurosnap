@@ -150,25 +150,17 @@ def test_animate_results_monkeypatched(tmp_path, proteins_from_paths, has_umap, 
   # small run to produce results (use PCA for faster 1D if desired)
   res = ClusterProt(proteins=proteins_from_paths, proj_1d_algo="pca")
 
-  # Patch out heavy animation bits: return a dummy object with save()
-  class DummyAnim:
-    def __init__(self, outpath: Path):
-      self.outpath = outpath
-
-    def save(self, path, writer=None, fps=None):
-      Path(path).write_bytes(b"GIF89a")  # minimal marker so file exists
-
-  def fake_plot_pseudo_3D(df, ax=None):
-    return None  # a "frame" placeholder
-
-  def fake_animate_pseudo_3D(fig, ax, frames, titles):
-    return DummyAnim(outpath=tmp_path / "dummy.gif")
-
-  # Patch the symbols inside the module under test
+  # Patch rendering + animation to avoid heavy work
   import neurosnap.algos.clusterprot as cpmod
 
-  monkeypatch.setattr(cpmod, "plot_pseudo_3D", fake_plot_pseudo_3D)
-  monkeypatch.setattr(cpmod, "animate_pseudo_3D", fake_animate_pseudo_3D)
+  def fake_render_protein_pseudo3D(prot, **kwargs):
+    return np.zeros((4, 4, 3), dtype=np.uint8)
+
+  def fake_animate_frames(frames, output_fpath, **kwargs):
+    Path(output_fpath).write_bytes(b"GIF89a")  # minimal marker so file exists
+
+  monkeypatch.setattr(cpmod, "render_protein_pseudo3D", fake_render_protein_pseudo3D)
+  monkeypatch.setattr(cpmod, "animate_frames", fake_animate_frames)
 
   out = tmp_path / "cluster_prot.gif"
   animate_results(res, animation_fpath=str(out))

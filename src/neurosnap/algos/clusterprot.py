@@ -3,13 +3,14 @@ Implementation of the ClusterProt algorithm from https://neurosnap.ai/service/Cl
 ClusterProt is an algorithm for clustering proteins by their structure similarity.
 """
 
-import matplotlib.pyplot as plt
-import numpy as np
+from typing import Any, Dict, List, Optional, Union
 
-from typing import List, Optional, Union, Dict, Any
+import numpy as np
+from tqdm import tqdm
 
 from neurosnap.log import logger
-from neurosnap.protein import Protein, animate_pseudo_3D, plot_pseudo_3D
+from neurosnap.protein import Protein
+from neurosnap.rendering import animate_frames, render_protein_pseudo3D
 
 try:
   from sklearn.cluster import DBSCAN
@@ -82,9 +83,9 @@ def ClusterProt(
   protein_length = len(prot_ref.calculate_distance_matrix(model=model, chain=chain))
   for prot in proteins:
     dm = prot.calculate_distance_matrix()  # compute protein distance matrix
-    assert (
-      len(dm) == protein_length
-    ), f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
+    assert len(dm) == protein_length, (
+      f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
+    )
     # get the upper triangle without the diagonal as a flattened vector
     triu_vect = dm[np.triu_indices(len(dm), k=1)]
     proteins_vects.append(triu_vect)
@@ -144,20 +145,16 @@ def animate_results(cp_results: Dict, animation_fpath: str = "cluster_prot.gif")
     animation_fpath: Output filepath for the animation of all the proteins
 
   """
-  logger.debug("Drawing animation frames")
-  fig, ax = plt.subplots()
+  proteins = cp_results["proteins"]
+  projection_1d = np.squeeze(np.asarray(cp_results["projection_1d"], dtype=float))
+  order = np.argsort(projection_1d)
   frames = []
-  titles = []
-  cp_results["proteins"]
-  sorted_proteins = sorted([[prot, x] for prot, x in zip(cp_results["proteins"], cp_results["projection_1d"])], key=lambda x: x[1])
-  for i, (prot, x) in enumerate(sorted_proteins, start=1):
-    print(f"Creating animation frames for {i}/{len(sorted_proteins)} proteins\r", end="", flush=True)
-    frame = plot_pseudo_3D(prot.df[["x", "y", "z"]], ax=ax)
-    frames.append(frame)
-    titles.append(f"{prot.title} ({i}/{len(sorted_proteins)})")
-  print()
-  ani = animate_pseudo_3D(fig, ax, frames, titles)
-  ani.save(animation_fpath, writer="ffmpeg", fps=7)
+  subtitles = []
+  total = len(order)
+  for i, idx in enumerate(tqdm(order, desc="Rendering frames", unit="frame"), start=1):
+    frames.append(render_protein_pseudo3D(proteins[idx]))
+    subtitles.append(f"{proteins[idx].title} ({i}/{total})")
+  animate_frames(frames, animation_fpath, title="ClusterProt Animation", subtitles=subtitles, interval=150, repeat=True)
 
 
 def create_figure_plotly(cp_results: Dict):

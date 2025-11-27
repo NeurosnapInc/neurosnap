@@ -35,8 +35,7 @@ def render_pseudo3D(
 ) -> Image.Image:
   """Plot the famous Pseudo 3D projection of a protein using Pillow.
 
-  Algorithm originally written By Dr. Sergey Ovchinnikov.
-  Adapted from :func:`plot_pseudo_3D` to render into a Pillow Image instead of Matplotlib.
+  Adapted from an algorithm originally written By Dr. Sergey Ovchinnikov.
 
   Parameters:
     segments: Iterable of XYZ coordinates, where each element is a segment/molecule to draw separately
@@ -55,7 +54,6 @@ def render_pseudo3D(
 
   Returns:
     Pillow Image containing the rendering
-
   """
 
   def rescale(a, amin=None, amax=None):

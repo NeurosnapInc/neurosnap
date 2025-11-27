@@ -22,16 +22,16 @@ def render_pseudo3D(
   *,
   c: Optional[Iterable[np.ndarray]] = None,
   sizes: Optional[Iterable[np.ndarray]] = None,
-  chainbreak: int = 5,
   cmap: str = "gist_rainbow",
-  line_w: float = 2.0,
   cmin: Optional[float] = None,
   cmax: Optional[float] = None,
-  shadow: float = 0.95,
   image_size: Tuple[int, int] = (800, 800),
   padding: int = 20,
+  line_w: float = 2.0,
+  shadow: float = 0.95,
   background_color: Tuple[int, int, int] = (255, 255, 255),
   upsample: int = 2,
+  chainbreak: int = 5,
 ) -> Image.Image:
   """Plot the famous Pseudo 3D projection of a protein using Pillow.
 
@@ -42,16 +42,16 @@ def render_pseudo3D(
     segments: Iterable of XYZ coordinates, where each element is a segment/molecule to draw separately
     c: Iterable of 1D arrays used to color the protein, aligned one-to-one with ``segments``; defaults to residue index
     sizes: Iterable of 1D arrays of radii/size values, aligned one-to-one with ``segments``; interpreted in the same units as coordinates
-    chainbreak: Minimum distance in angstroms between chains / segments before being considered a chain break (int)
     cmap: Color map name or callable used for coloring the protein
-    line_w: Line width (interpreted in data space; converted to pixels)
     cmin: Minimum value for coloring, automatically calculated if None
     cmax: Maximum value for coloring, automatically calculated if None
-    shadow: Shadow intensity between 0 and 1 inclusive, lower numbers mean darker more intense shadows
     image_size: Final image size in pixels (width, height)
     padding: Padding in pixels around the drawing region
+    line_w: Line width (interpreted in data space; converted to pixels)
+    shadow: Shadow intensity between 0 and 1 inclusive, lower numbers mean darker more intense shadows
     background_color: Background RGB color
     upsample: Factor to draw at higher resolution and downsample for antialiasing
+    chainbreak: Minimum distance in angstroms between chains / segments before being considered a chain break (int)
 
   Returns:
     Pillow Image containing the rendering
@@ -287,9 +287,9 @@ def render_protein_pseudo3D(
   use_radii: bool = False,
   image_size: Tuple[int, int] = (576, 432),
   padding: int = 20,
+  shadow: float = 0.95,
   upsample: int = 2,
   chainbreak: int = 5,
-  shadow: float = 0.95,
 ) -> Image.Image:
   """Render a protein using the pseudo-3D Pillow renderer.
 

@@ -404,6 +404,7 @@ def animate_frames(
   subtitles: Optional[Iterable[str]] = None,
   interval: int = 200,
   repeat: bool = True,
+  background_color: Tuple[int, int, int] = (255, 255, 255),
 ):
   """Animate a sequence of frames using Pillow only and write to disk.
 
@@ -414,6 +415,7 @@ def animate_frames(
     subtitles: Iterable of subtitle strings, one per frame (must match length of frames)
     interval: Delay between frames in milliseconds
     repeat: Whether the animation repeats when the sequence of frames is completed (loop=0 if True else 1 for gif/webp; ignored for mp4)
+    background_color: RGB background color to use for the title/subtitle band
   """
   frame_list = list(frames)
   if len(frame_list) == 0:
@@ -466,7 +468,7 @@ def animate_frames(
   animated_frames: List[Image.Image] = []
   for idx, (img, sub) in enumerate(tqdm(zip(pil_frames, subtitle_list), total=len(pil_frames), desc="Animating frames")):
     if top_pad > 0:
-      canvas = Image.new("RGBA", (img.width, img.height + top_pad), (255, 255, 255, 0))
+      canvas = Image.new("RGBA", (img.width, img.height + top_pad), (*background_color, 0))
       canvas.paste(img, (0, top_pad))
     else:
       canvas = img.copy()

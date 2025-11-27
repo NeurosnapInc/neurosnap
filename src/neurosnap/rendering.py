@@ -3,42 +3,21 @@ Provides functions and classes related to rendering, plotting, animating, and vi
 """
 
 import colorsys
-import io
-import json
-import os
 import pathlib
 import re
-import shutil
-import tempfile
-import time
-import xml.etree.ElementTree as ET
-from collections import Counter
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
-import matplotlib
-import matplotlib.animation as animation
-import matplotlib.patheffects
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import requests
-from Bio.PDB import PDBIO, MMCIFParser, NeighborSearch, PDBParser
-from Bio.PDB.Atom import Atom
-from Bio.PDB.mmcifio import MMCIFIO
-from Bio.PDB.Polypeptide import is_aa
-from Bio.PDB.Residue import Residue as ResidueType
-from Bio.PDB.Superimposer import Superimposer
-from matplotlib import collections as mcoll
-from PIL import Image, ImageDraw
-from rdkit import Chem
-from requests_toolbelt.multipart.encoder import MultipartEncoder
+from PIL import Image, ImageDraw, ImageFont
 from scipy.special import expit as sigmoid
 from tqdm import tqdm
 
 from neurosnap.log import logger
+from neurosnap.protein import Protein
 
 
-def draw_pseudo_3D(
+def render_pseudo3D(
   segments: Iterable[Union[np.ndarray, pd.DataFrame]],
   *,
   c: Optional[Iterable[np.ndarray]] = None,
@@ -299,3 +278,231 @@ def draw_pseudo_3D(
     border_draw.rectangle((0, 0, 0, h - 1), fill=bg)
     border_draw.rectangle((w - 1, 0, w - 1, h - 1), fill=bg)
   return img
+
+
+def render_protein_pseudo3D(
+  protein: Protein,
+  *,
+  style: str = "residue_id",
+  use_radii: bool = False,
+  image_size: Tuple[int, int] = (576, 432),
+  padding: int = 20,
+  upsample: int = 2,
+  chainbreak: int = 5,
+  shadow: float = 0.95,
+) -> Image.Image:
+  """Render a protein using the pseudo-3D Pillow renderer.
+
+  Parameters:
+    protein: Protein to render
+    style: Coloring mode (residue_id, chain_id, b-factor, pLDDT, residue_type)
+    use_radii: If True, apply van der Waals radii as per-atom sizes
+    image_size: Output image size (width, height)
+    padding: Padding in pixels around the drawing region
+    upsample: Supersampling factor for antialiasing
+    chainbreak: Distance threshold for breaking segments
+    shadow: Shadow intensity between 0 and 1
+
+  Returns:
+    Pillow Image containing the rendering
+
+  """
+  df = protein.df
+  coords = df[["x", "y", "z"]]
+  chains = df["chain"].to_numpy()
+  segments = [coords.to_numpy()[chains == chain_id] for chain_id in pd.unique(chains)]
+
+  # build colors per style
+  style = style.lower()
+  color_segments: Optional[List[np.ndarray]] = None
+  custom_cmap = None
+  cmin = None
+  cmax = None
+  if style in {"residue_id", "chain_id", "b-factor", "plddt", "residue_type"}:
+    color_segments = []
+    if style == "chain_id":
+      chain_map = {cid: idx for idx, cid in enumerate(pd.unique(chains))}
+    elif style == "residue_type":
+      res_codes = {res: idx for idx, res in enumerate(pd.unique(df["res_name"]))}
+    elif style == "plddt":
+      palette = [
+        np.array([0xFF, 0x7D, 0x45, 0xFF], dtype=float) / 255.0,  # <=50
+        np.array([0xFF, 0xDB, 0x13, 0xFF], dtype=float) / 255.0,  # <=70
+        np.array([0x65, 0xCB, 0xF3, 0xFF], dtype=float) / 255.0,  # <=90
+        np.array([0x00, 0x53, 0xD6, 0xFF], dtype=float) / 255.0,  # >90
+      ]
+
+      def cmap_plddt(vals: np.ndarray) -> np.ndarray:
+        vals = np.asarray(vals)
+        out = np.zeros((len(vals), 4))
+        out[vals <= 0.33] = palette[0]
+        out[(vals > 0.33) & (vals <= 0.5)] = palette[1]
+        out[(vals > 0.5) & (vals <= 0.75)] = palette[2]
+        out[vals > 0.75] = palette[3]
+        return out
+
+      custom_cmap = cmap_plddt
+      cmin = 0.0
+      cmax = 1.0
+    for chain_id in pd.unique(chains):
+      mask = chains == chain_id
+      if style == "residue_id":
+        color_segments.append(df.loc[mask, "res_id"].to_numpy(dtype=float))
+      elif style == "chain_id":
+        color_segments.append(np.full(mask.sum(), chain_map[chain_id], dtype=float))
+      elif style == "b-factor":
+        color_segments.append(df.loc[mask, "bfactor"].to_numpy(dtype=float))
+      elif style == "plddt":
+        bvals = df.loc[mask, "bfactor"].to_numpy(dtype=float)
+        bins = np.zeros_like(bvals, dtype=float)
+        bins[bvals <= 50.0] = 0.0
+        bins[(bvals > 50.0) & (bvals <= 70.0)] = 0.33
+        bins[(bvals > 70.0) & (bvals <= 90.0)] = 0.5
+        bins[bvals > 90.0] = 1.0
+        color_segments.append(bins)
+      elif style == "residue_type":
+        color_segments.append(df.loc[mask, "res_name"].map(res_codes).to_numpy(dtype=float))
+  else:
+    raise ValueError(f"Unsupported style '{style}'.")
+
+  size_segments: Optional[List[np.ndarray]] = None
+  if use_radii:
+    vdw_radii = {"H": 1.2, "C": 1.7, "N": 1.55, "O": 1.52, "P": 1.8, "S": 1.8}
+    atoms = df["atom_name"].astype(str).to_numpy()
+    radii = []
+    for name in atoms:
+      stripped = name.strip()
+      element = re.sub(r"[^A-Za-z]", "", stripped).upper()
+      if len(element) >= 2 and element[:2] in vdw_radii:
+        elem = element[:2]
+      elif element:
+        elem = element[0]
+      else:
+        elem = ""
+      radii.append(vdw_radii.get(elem, 1.5))
+    radii = np.asarray(radii, dtype=float)
+    size_segments = [radii[chains == chain_id] for chain_id in pd.unique(chains)]
+
+  return render_pseudo3D(
+    segments,
+    c=color_segments,
+    sizes=size_segments,
+    cmap=custom_cmap if custom_cmap is not None else "gist_rainbow",
+    cmin=cmin,
+    cmax=cmax,
+    image_size=image_size,
+    padding=padding,
+    upsample=upsample,
+    chainbreak=chainbreak,
+    shadow=shadow,
+  )
+
+
+def animate_frames(
+  frames: Iterable[Union[Image.Image, np.ndarray]],
+  output_fpath: Union[str, pathlib.Path],
+  *,
+  title: str = "",
+  subtitles: Optional[Iterable[str]] = None,
+  interval: int = 200,
+  repeat: bool = True,
+):
+  """Animate a sequence of frames using Pillow only and write to disk.
+
+  Parameters:
+    frames: Iterable of frames to animate (Pillow Images or arrays convertible to images)
+    output_fpath: Path where the animation will be written; format inferred from extension (gif, webp, mp4)
+    title: Title text to display above the animation; omit if empty
+    subtitles: Iterable of subtitle strings, one per frame (must match length of frames)
+    interval: Delay between frames in milliseconds
+    repeat: Whether the animation repeats when the sequence of frames is completed (loop=0 if True else 1 for gif/webp; ignored for mp4)
+  """
+  frame_list = list(frames)
+  if len(frame_list) == 0:
+    raise ValueError("No frames provided to animate.")
+
+  if subtitles is None:
+    subtitle_list = [""] * len(frame_list)
+  else:
+    subtitle_list = list(subtitles)
+    if len(subtitle_list) != len(frame_list):
+      raise ValueError(f"subtitles length ({len(subtitle_list)}) must match number of frames ({len(frame_list)}).")
+
+  def to_image(obj: Union[Image.Image, np.ndarray]) -> Image.Image:
+    if isinstance(obj, Image.Image):
+      return obj.convert("RGBA")
+    arr = np.asarray(obj)
+    if arr.ndim < 2:
+      raise ValueError("Frames must be images or 2D/3D arrays.")
+    if arr.dtype != np.uint8:
+      arr = np.clip(arr, 0, 255).astype(np.uint8)
+    if arr.ndim == 2:
+      arr = np.stack([arr] * 3, axis=-1)
+    mode = "RGBA" if arr.shape[-1] == 4 else "RGB"
+    return Image.fromarray(arr, mode=mode).convert("RGBA")
+
+  pil_frames = [to_image(fr) for fr in frame_list]
+  output_path = pathlib.Path(output_fpath)
+  ext = output_path.suffix.lower()
+  if ext not in {".gif", ".webp", ".mp4"}:
+    raise ValueError(f"Unsupported output format '{ext}'. Supported: .gif, .webp, .mp4")
+
+  font = ImageFont.load_default()
+
+  # Measure text heights to allocate a top padding region
+  def text_size(text: str) -> Tuple[int, int]:
+    if not text:
+      return (0, 0)
+    # use dummy draw to measure
+    dummy = Image.new("RGBA", (1, 1))
+    draw = ImageDraw.Draw(dummy)
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return (bbox[2] - bbox[0], bbox[3] - bbox[1])
+
+  title_w, title_h = text_size(title)
+  subtitle_heights = [text_size(sub)[1] for sub in subtitle_list]
+  subtitle_h = max(subtitle_heights) if subtitle_heights else 0
+  text_padding = 4 if title or subtitle_h else 0
+  top_pad = title_h + subtitle_h + text_padding
+
+  animated_frames: List[Image.Image] = []
+  for idx, (img, sub) in enumerate(tqdm(zip(pil_frames, subtitle_list), total=len(pil_frames), desc="Animating frames")):
+    if top_pad > 0:
+      canvas = Image.new("RGBA", (img.width, img.height + top_pad), (255, 255, 255, 0))
+      canvas.paste(img, (0, top_pad))
+    else:
+      canvas = img.copy()
+    draw = ImageDraw.Draw(canvas)
+    y = 2
+    if title:
+      tw, th = text_size(title)
+      tx = (canvas.width - tw) / 2
+      draw.text((tx, y), title, fill=(0, 0, 0, 255), font=font)
+      y += th + 2
+    if sub:
+      sw, sh = text_size(sub)
+      sx = (canvas.width - sw) / 2
+      draw.text((sx, y), sub, fill=(0, 0, 0, 255), font=font)
+    animated_frames.append(canvas)
+
+  if ext in {".gif", ".webp"}:
+    save_kwargs = {
+      "save_all": True,
+      "append_images": animated_frames[1:],
+      "duration": interval,
+      "loop": 0 if repeat else 1,
+      "optimize": False,
+    }
+    animated_frames[0].save(output_path, **save_kwargs)
+  elif ext == ".mp4":
+    try:
+      import imageio
+    except ImportError as e:
+      raise ImportError("imageio is required to write mp4 animations. Install via `pip install imageio imageio-ffmpeg`.") from e
+    fps = max(1e-3, 1000.0 / float(interval))  # avoid zero, allow sub-1 fps
+    writer = imageio.get_writer(output_path, fps=fps, macro_block_size=None)
+    try:
+      for frm in animated_frames:
+        writer.append_data(np.asarray(frm.convert("RGB")))
+    finally:
+      writer.close()

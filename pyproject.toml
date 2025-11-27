@@ -27,6 +27,7 @@ dependencies = [
   "tqdm",
   "scipy",
   "matplotlib",
+  "Pillow",
   "tabulate",
   "requests_toolbelt",
 ]

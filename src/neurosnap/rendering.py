@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy.special import expit as sigmoid
 from tqdm import tqdm
 
-from neurosnap.constants import VDW_RADII
+from neurosnap.constants import VDW_RADII_BONDI
 from neurosnap.log import logger
 from neurosnap.protein import Protein
 
@@ -162,11 +162,14 @@ def render_pseudo3D(
   c_seg = []
   size_seg = []
   for idx, sub_xyz in enumerate(segment_list):
+    # connect each point to the previous one within a segment
     seg.append(np.concatenate([sub_xyz[:, None], np.roll(sub_xyz, 1, 0)[:, None]], axis=1))
     if c_segments is not None:
+      # average endpoint colors to color the segment itself
       sub_c = c_segments[idx]
       c_seg.append((sub_c + np.roll(sub_c, 1, 0)) / 2)
     if size_segments is not None:
+      # average endpoint sizes to set per-segment widths
       sub_s = size_segments[idx]
       size_seg.append((sub_s + np.roll(sub_s, 1, 0)) / 2)
 
@@ -215,6 +218,7 @@ def render_pseudo3D(
   np.fill_diagonal(tint_mask, 0.0)
   tint_mask = 1 - tint_mask.max(-1, keepdims=True)
 
+  # apply a soft tint/shadow blend to simulate depth
   colors[:, :3] = colors[:, :3] + (1 - colors[:, :3]) * (0.50 * z + 0.50 * tint_mask) / 3
   colors[:, :3] = colors[:, :3] * (0.20 + 0.25 * z + 0.55 * shadow_mask)
   colors = np.clip(colors, 0.0, 1.0)
@@ -371,13 +375,13 @@ def render_protein_pseudo3D(
     for name in atoms:
       stripped = name.strip()
       element = re.sub(r"[^A-Za-z]", "", stripped).upper()
-      if len(element) >= 2 and element[:2] in VDW_RADII:
+      if len(element) >= 2 and element[:2] in VDW_RADII_BONDI:
         elem = element[:2]
       elif element:
         elem = element[0]
       else:
         elem = ""
-      radii.append(VDW_RADII.get(elem, 1.5))
+      radii.append(VDW_RADII_BONDI.get(elem, 1.5))
     radii = np.asarray(radii, dtype=float)
     size_segments = [radii[chains == chain_id] for chain_id in pd.unique(chains)]
 

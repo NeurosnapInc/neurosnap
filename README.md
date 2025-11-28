@@ -52,3 +52,15 @@ source .venv/bin/activate
 
 pip install --editable .[dev]
 ```
+
+# Citations
+If you found this tool to be helpful please feel free to cite it using the following.
+
+```BibTeX
+@misc{amani-2024,
+	author = {Amani, Keaun and Amirabadi, Danial Gharaie},
+	title = {{Neurosnap Tools Package}},
+	year = {2024},
+	url = {https://github.com/NeurosnapInc/neurosnap},
+}
+```

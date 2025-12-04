@@ -313,13 +313,14 @@ def compute_ec(
     logger.warning(f"No inter-chain contacts for {chain1}:{chain2}, skipping.")
     return np.nan, np.nan, np.nan
 
-  logger.info(
-    "Pair %s:%s – %d atoms on chain1 + %d on chain2",
-    chain1,
-    chain2,
-    len(ib_atoms),
-    len(it_atoms),
-  )
+  if verbosity > 0:
+    logger.info(
+      "Pair %s:%s – %d atoms on chain1 + %d on chain2",
+      chain1,
+      chain2,
+      len(ib_atoms),
+      len(it_atoms),
+    )
 
   with tempfile.TemporaryDirectory() as td:
     workdir = Path(td)

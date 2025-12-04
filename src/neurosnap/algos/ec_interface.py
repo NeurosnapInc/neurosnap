@@ -276,6 +276,7 @@ def compute_ec(
   forcefield: str = "AMBER",
   pdb2pqr: str = "pdb2pqr",
   apbs: str = "apbs",
+  verbosity: int = 1,
 ) -> Tuple[float, float, float]:
   """
   Compute electrostatic complementarity (EC) and Pearson correlations (r_b, r_t)
@@ -297,6 +298,8 @@ def compute_ec(
     Path to the pdb2pqr executable.
   apbs
     Path to the apbs executable.
+  verbosity
+    Set to 1 for normal verbosity, set to 0 to mute info logs.
 
   Returns
   -------
@@ -354,12 +357,15 @@ def compute_ec(
     r_t, _ = pearsonr(V_b_on_t[mask_t], V_t_on_t[mask_t])
     ec = -(r_b + r_t) / 2.0  # negative correlation = complementarity
 
-    logger.info("Pair %s:%s | EC=%.4f, RB=%.4f, RT=%.4f", chain1, chain2, ec, r_b, r_t)
-    global _METRIC_DEFINITIONS_LOGGED
-    if not _METRIC_DEFINITIONS_LOGGED:
-      logger.info("Definitions:")
-      logger.info("EC: Electrostatic complementarity on the buried surfaces of chain1 and chain2; the minus sign means more-positive EC values indicating stronger complementarity (perfect complementarity = +1, identical surfaces = -1).")
-      logger.info("RB: correlation of chain1 potential vs chain2 potential on chain1 interface atoms")
-      logger.info("RT: correlation of chain1 potential vs chain2 potential on chain2 interface atoms (Pearson(V_b_on_t, V_t_on_t)).")
-      _METRIC_DEFINITIONS_LOGGED = True
+    if verbosity > 0:
+      logger.info("Pair %s:%s | EC=%.4f, RB=%.4f, RT=%.4f", chain1, chain2, ec, r_b, r_t)
+      global _METRIC_DEFINITIONS_LOGGED
+      if not _METRIC_DEFINITIONS_LOGGED:
+        logger.info("Definitions:")
+        logger.info(
+          "EC: Electrostatic complementarity on the buried surfaces of chain1 and chain2; the minus sign means more-positive EC values indicating stronger complementarity (perfect complementarity = +1, identical surfaces = -1)."
+        )
+        logger.info("RB: correlation of chain1 potential vs chain2 potential on chain1 interface atoms")
+        logger.info("RT: correlation of chain1 potential vs chain2 potential on chain2 interface atoms (Pearson(V_b_on_t, V_t_on_t)).")
+        _METRIC_DEFINITIONS_LOGGED = True
     return ec, r_b, r_t

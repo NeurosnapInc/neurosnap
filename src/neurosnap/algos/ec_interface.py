@@ -160,8 +160,9 @@ def _sample_potential(coords, origin, delta, grid):
 # ---------------------------------------------------------------------
 #  Section 3 – External program wrappers
 # ---------------------------------------------------------------------
-def _run_subprocess(cmd: Sequence[str], cwd: Path, label: str):
-  logger.info("%s ▸ %s", label, " ".join(cmd))
+def _run_subprocess(cmd: Sequence[str], cwd: Path, label: str, verbosity=0):
+  if verbosity > 0:
+    logger.debug("%s ▸ %s", label, " ".join(cmd))
   try:
     subprocess.run(cmd, cwd=cwd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   except subprocess.CalledProcessError as e:

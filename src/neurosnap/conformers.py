@@ -210,6 +210,7 @@ def generate(
   # perform clustering
   logger.debug(f"Clustering {num_conformers:,} conformers.")
   clusters = Butina.ClusterData(rmslist, num_conformers, threshold, isDistData=True, reordering=True)
+  logger.debug(f"Produced {len(clusters):,} clusters.")
 
   # get most favorable representatives for each cluster using calculated energy
   output = {
@@ -230,7 +231,7 @@ def generate(
       best_cid = cluster[0]
       best_energy = None
 
-    logger.debug(f"Cluster ID: {i}, Best Conformer: {best_cid} ({best_energy:.2f}), Conformers {cluster}")
+    logger.debug(f"Cluster ID: {i}, Best Conformer: {best_cid} ({float('nan') if best_energy is None else best_energy:.2f}), Conformers {cluster}")
     output["conformer_id"].append(best_cid)
     output["cluster_id"].append(i)
     output["energy"].append(best_energy)

@@ -30,6 +30,7 @@ def get_reverse_complement(seq: str) -> str:
 def split_interleaved_fastq(
   fn_in: Union[str, Path],
   output_dir: Union[str, Path],
+  *,
   preserve_identifier_names: bool = False,
 ) -> Tuple[Path, Path]:
   """

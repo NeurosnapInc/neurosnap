@@ -1,7 +1,9 @@
 # tests/test_nucleotide.py
+from pathlib import Path
+
 import pytest
 
-from neurosnap.nucleotide import get_reverse_complement
+from neurosnap.nucleotide import get_reverse_complement, split_interleaved_fastq
 
 
 def test_reverse_complement_dna_basic():
@@ -25,3 +27,46 @@ def test_reverse_complement_mixed_case_and_length():
 def test_reverse_complement_invalid_char_raises():
   with pytest.raises(KeyError):
     get_reverse_complement("AXTG")  # X not valid
+
+
+def _normalize_interleaved_headers(lines):
+  normalized = []
+  for line in lines:
+    if not line:
+      normalized.append(line)
+      continue
+    if line[0] in {"@", "+"}:
+      parts = line.split(" ", 1)
+      head = parts[0]
+      if head.endswith(".1"):
+        head = head[:-2] + "/1"
+      elif head.endswith(".2"):
+        head = head[:-2] + "/2"
+      line = head if len(parts) == 1 else f"{head} {parts[1]}"
+    normalized.append(line)
+  return normalized
+
+
+def test_split_interleaved_fastq_transcript_assembly(tmp_path):
+  src_path = Path(__file__).resolve().parent / "files" / "transcript_assembly.fastq"
+  lines = src_path.read_text().splitlines()
+  assert len(lines) % 4 == 0
+
+  interleaved_path = tmp_path / "transcript_assembly_interleaved.fastq"
+  interleaved_path.write_text("\n".join(_normalize_interleaved_headers(lines)) + "\n")
+
+  left_path, right_path = split_interleaved_fastq(interleaved_path, tmp_path)
+  assert left_path.exists()
+  assert right_path.exists()
+
+  left_lines = left_path.read_text().splitlines()
+  right_lines = right_path.read_text().splitlines()
+  assert len(left_lines) % 4 == 0
+  assert len(right_lines) % 4 == 0
+
+  total_reads = len(lines) // 4
+  assert total_reads % 2 == 0
+  assert len(left_lines) // 4 == total_reads // 2
+  assert len(right_lines) // 4 == total_reads // 2
+  assert left_lines[0] == "@1/1"
+  assert right_lines[0] == "@1/2"

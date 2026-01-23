@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Tuple, Union
 
+from neurosnap.log import logger
+
 
 def get_reverse_complement(seq: str) -> str:
   """
@@ -52,41 +54,39 @@ def split_interleaved_fastq(fn_in: Union[str, Path], fn_out: Union[str, Path]) -
   right_path = prefix.parent / f"{prefix.name}_r.fq"
   left_path.parent.mkdir(parents=True, exist_ok=True)
 
+  # Status corresponds to the expected type of line to read next
+  #  - "@"  = Header for NT sequence
+  #  - "BP" = NT sequence
+  #  - "+"  = Header for quality assurance sequence
+  #  - "QA" = Assurance sequence
   status = "@"
   current_len = None
   read_direction = 1  # 1 corresponds to left read (first), 2 corresponds to right read.
-  index = 1  # true index
   with open(fn_in_path) as fin:
     with open(left_path, "w") as fout_l:
       with open(right_path, "w") as fout_r:
-        for i, line in enumerate(fin):
+        for index, line in enumerate(fin, start=1):
           line = line.strip()
-          if status == "@" and re.search(r"@.*?\/[12]", line):
+          if status == "@" and re.search(r"@.*?\s", line):
             output = f"@{index}/{read_direction}"
             status = "BP"
-
           elif status == "BP" and re.search(r"^([GUATNC]*)$", line):
             output = line
             status = "+"
             current_len = len(line)
-
-          elif status == "+" and line == "+":
+          elif status == "+" and line.startswith("+"):
             output = line
             status = "QA"
-
           elif status == "QA" and re.search(
             r"^([ !\"#$%&'()*+,-.\/0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~])*$", line
           ):
             output = line
             status = "@"
             if current_len != len(line):
-              print("[-] length does not match")
-              print(i, line)
-              break
-
+              raise ValueError(f"Sequence length does not match for line {index}:\n{line}")
           else:
-            print(i, line)
-            break
+            print(status)
+            raise ValueError(f"Unknown parsing error for line {index}:\n{line}")
 
           # write to corresponding output file
           if read_direction == 1:
@@ -103,5 +103,5 @@ def split_interleaved_fastq(fn_in: Union[str, Path], fn_out: Union[str, Path]) -
               index += 1
 
   assert read_direction == 1, "Uneven number of reads in both files"
-  print(f"[+] Found total of {index:,} syntactically valid reads")
+  logger.info(f"Found total of {index:,} syntactically valid reads")
   return left_path, right_path

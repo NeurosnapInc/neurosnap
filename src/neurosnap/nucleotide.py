@@ -69,7 +69,7 @@ def split_interleaved_fastq(
       with open(right_path, "w") as fout_r:
         for i, line in enumerate(fin, start=1):
           line = line.strip()
-          if status == "@" and re.search(r"@.*?\s", line):
+          if status == "@" and line.startswith("@"):
             if preserve_identifier_names:
               prefix, suffix = (line.split(" ", 1) + [""])[:2]
               base = re.sub(r"[/.][12]$", "", prefix)
@@ -83,7 +83,13 @@ def split_interleaved_fastq(
             status = "+"
             current_len = len(line)
           elif status == "+" and line.startswith("+"):
-            output = line
+            if preserve_identifier_names:
+              prefix, suffix = (line.split(" ", 1) + [""])[:2]
+              base = re.sub(r"[/.][12]$", "", prefix)
+              mate = "1" if read_direction == 1 else "2"
+              output = f"{base}/{mate}" + (f" {suffix}" if suffix else "")
+            else:
+              output = "+"
             status = "QA"
           elif status == "QA" and re.search(
             r"^([ !\"#$%&'()*+,-.\/0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~])*$", line

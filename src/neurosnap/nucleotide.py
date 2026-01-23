@@ -72,7 +72,7 @@ def split_interleaved_fastq(
           if status == "@" and line.startswith("@"):
             if preserve_identifier_names:
               prefix, suffix = (line.split(" ", 1) + [""])[:2]
-              base = re.sub(r"[/.][12]$", "", prefix)
+              base = re.sub(r"[/.][12]$", "", prefix)  # stripe existing mate suffixes
               output = f"{base}/{read_direction}" + (f" {suffix}" if suffix else "")
             else:
               output = f"@{index}/{read_direction}"
@@ -84,7 +84,7 @@ def split_interleaved_fastq(
           elif status == "+" and line.startswith("+"):
             if preserve_identifier_names:
               prefix, suffix = (line.split(" ", 1) + [""])[:2]
-              base = re.sub(r"[/.][12]$", "", prefix)
+              base = re.sub(r"[/.][12]$", "", prefix)  # stripe existing mate suffixes
               output = f"{base}/{read_direction}" + (f" {suffix}" if suffix else "")
             else:
               output = "+"

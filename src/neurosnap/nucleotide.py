@@ -63,10 +63,11 @@ def split_interleaved_fastq(
   status = "@"
   current_len = None
   read_direction = 1  # 1 corresponds to left read (first), 2 corresponds to right read.
+  index = 1  # Actual index
   with open(fn_in_path) as fin:
     with open(left_path, "w") as fout_l:
       with open(right_path, "w") as fout_r:
-        for index, line in enumerate(fin, start=1):
+        for i, line in enumerate(fin, start=1):
           line = line.strip()
           if status == "@" and re.search(r"@.*?\s", line):
             if preserve_identifier_names:
@@ -90,10 +91,10 @@ def split_interleaved_fastq(
             output = line
             status = "@"
             if current_len != len(line):
-              raise ValueError(f"Sequence length does not match for line {index}:\n{line}")
+              raise ValueError(f"Sequence length does not match for line {i + 1}:\n{line}")
           else:
             print(status)
-            raise ValueError(f"Unknown parsing error for line {index}:\n{line}")
+            raise ValueError(f"Unknown parsing error for line {i + 1}:\n{line}")
 
           # write to corresponding output file
           if read_direction == 1:

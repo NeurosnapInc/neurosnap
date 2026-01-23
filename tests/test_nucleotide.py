@@ -70,3 +70,29 @@ def test_split_interleaved_fastq_transcript_assembly(tmp_path):
   assert len(right_lines) // 4 == total_reads // 2
   assert left_lines[0] == "@1/1"
   assert right_lines[0] == "@1/2"
+
+
+def test_split_interleaved_fastq_uneven_reads_raises(tmp_path):
+  interleaved_path = tmp_path / "uneven.fastq"
+  interleaved_path.write_text(
+    "\n".join(
+      [
+        "@read1/1",
+        "ACGT",
+        "+",
+        "!!!!",
+        "@read1/2",
+        "TGCA",
+        "+",
+        "!!!!",
+        "@read2/1",
+        "CCCC",
+        "+",
+        "####",
+      ]
+    )
+    + "\n"
+  )
+
+  with pytest.raises(AssertionError, match="Uneven number of reads in both files"):
+    split_interleaved_fastq(interleaved_path, tmp_path)

@@ -27,7 +27,11 @@ def get_reverse_complement(seq: str) -> str:
   return "".join([complement[base] for base in seq[::-1]])
 
 
-def split_interleaved_fastq(fn_in: Union[str, Path], fn_out: Union[str, Path]) -> Tuple[Path, Path]:
+def split_interleaved_fastq(
+  fn_in: Union[str, Path],
+  output_dir: Union[str, Path],
+  preserve_identifier_names: bool = False,
+) -> Tuple[Path, Path]:
   """
   Split an interleaved FASTQ into left/right FASTQ files.
 
@@ -36,23 +40,20 @@ def split_interleaved_fastq(fn_in: Union[str, Path], fn_out: Union[str, Path]) -
 
   Parameters:
       fn_in: Path to the interleaved FASTQ file.
-      fn_out: Output prefix or directory. If a directory is provided, the input
-          stem is used as the prefix. If a filename is provided, any suffix is
-          stripped before appending "_l.fq" and "_r.fq".
+      output_dir: Directory to write outputs into.
+      preserve_identifier_names: If True, preserve the input read identifiers
+          (normalizing mate suffix to "/1" or "/2"). If False, rewrite
+          identifiers as "@<index>/1" and "@<index>/2".
 
   Returns:
       Tuple[Path, Path]: Paths to the left and right FASTQ output files.
   """
   fn_in_path = Path(fn_in)
-  fn_out_path = Path(fn_out)
-  if fn_out_path.is_dir():
-    prefix = fn_out_path / fn_in_path.stem
-  else:
-    prefix = fn_out_path.with_suffix("") if fn_out_path.suffix else fn_out_path
+  output_dir_path = Path(output_dir)
+  output_dir_path.mkdir(parents=True, exist_ok=True)
 
-  left_path = prefix.parent / f"{prefix.name}_l.fq"
-  right_path = prefix.parent / f"{prefix.name}_r.fq"
-  left_path.parent.mkdir(parents=True, exist_ok=True)
+  left_path = output_dir_path / "split_left.fq"
+  right_path = output_dir_path / "split_right.fq"
 
   # Status corresponds to the expected type of line to read next
   #  - "@"  = Header for NT sequence
@@ -68,7 +69,13 @@ def split_interleaved_fastq(fn_in: Union[str, Path], fn_out: Union[str, Path]) -
         for index, line in enumerate(fin, start=1):
           line = line.strip()
           if status == "@" and re.search(r"@.*?\s", line):
-            output = f"@{index}/{read_direction}"
+            if preserve_identifier_names:
+              prefix, suffix = (line.split(" ", 1) + [""])[:2]
+              base = re.sub(r"[/.][12]$", "", prefix)
+              mate = "1" if read_direction == 1 else "2"
+              output = f"{base}/{mate}" + (f" {suffix}" if suffix else "")
+            else:
+              output = f"@{index}/{read_direction}"
             status = "BP"
           elif status == "BP" and re.search(r"^([GUATNC]*)$", line):
             output = line

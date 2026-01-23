@@ -73,8 +73,7 @@ def split_interleaved_fastq(
             if preserve_identifier_names:
               prefix, suffix = (line.split(" ", 1) + [""])[:2]
               base = re.sub(r"[/.][12]$", "", prefix)
-              mate = "1" if read_direction == 1 else "2"
-              output = f"{base}/{mate}" + (f" {suffix}" if suffix else "")
+              output = f"{base}/{read_direction}" + (f" {suffix}" if suffix else "")
             else:
               output = f"@{index}/{read_direction}"
             status = "BP"
@@ -86,8 +85,7 @@ def split_interleaved_fastq(
             if preserve_identifier_names:
               prefix, suffix = (line.split(" ", 1) + [""])[:2]
               base = re.sub(r"[/.][12]$", "", prefix)
-              mate = "1" if read_direction == 1 else "2"
-              output = f"{base}/{mate}" + (f" {suffix}" if suffix else "")
+              output = f"{base}/{read_direction}" + (f" {suffix}" if suffix else "")
             else:
               output = "+"
             status = "QA"

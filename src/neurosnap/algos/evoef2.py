@@ -477,19 +477,21 @@ def get_fourth_atom(a: np.ndarray, b: np.ndarray, c: np.ndarray, ic_param: Seque
 
 
 def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> float:
-  b1 = b - a
-  b2 = c - b
-  b3 = d - c
-  n1 = np.cross(b1, b2)
-  n2 = np.cross(b2, b3)
-  if np.linalg.norm(n1) < 1e-12 or np.linalg.norm(n2) < 1e-12:
+  r_ab = a - b
+  r_bc = b - c
+  r_cd = c - d
+  r_ab_x_rbc = np.cross(r_ab, r_bc)
+  r_bc_x_rcd = np.cross(r_bc, r_cd)
+  r_cd_x_rab = np.cross(r_cd, r_ab)
+  norm1 = np.linalg.norm(r_ab_x_rbc)
+  norm2 = np.linalg.norm(r_bc_x_rcd)
+  if norm1 < 1e-12 or norm2 < 1e-12:
     return 0.0
-  n1 = n1 / np.linalg.norm(n1)
-  n2 = n2 / np.linalg.norm(n2)
-  m1 = np.cross(n1, b2 / np.linalg.norm(b2))
-  x = np.dot(n1, n2)
-  y = np.dot(m1, n2)
-  return float(math.atan2(y, x))
+  cos_value = float(np.dot(r_ab_x_rbc, r_bc_x_rcd) / norm1 / norm2)
+  sin_value = float(np.dot(r_bc, r_cd_x_rab))
+  if sin_value < 0:
+    return -safe_acos(cos_value)
+  return safe_acos(cos_value)
 
 
 # -----------------------------
@@ -1188,22 +1190,26 @@ def _aa_propensity_ramachandran(res: Residue, aap: AAppTable, rama: RamaTable, t
 
 def _calc_phi_psi(chain: Chain) -> None:
   for i, res in enumerate(chain.residues):
-    phi = 0.0
-    psi = 0.0
+    phi = -60.0
+    psi = 60.0
     n = res.get_atom("N")
     ca = res.get_atom("CA")
     c = res.get_atom("C")
     if n is None or ca is None or c is None:
-      res.phipsi = (0.0, 0.0)
+      res.phipsi = (phi, psi)
       continue
     if i > 0:
       prev_c = chain.residues[i - 1].get_atom("C")
       if prev_c is not None:
-        phi = rad_to_deg(get_torsion_angle(prev_c.xyz, n.xyz, ca.xyz, c.xyz))
+        dist_c0_n1 = xyz_distance(prev_c.xyz, n.xyz)
+        if 1.25 < dist_c0_n1 < 1.45:
+          phi = rad_to_deg(get_torsion_angle(prev_c.xyz, n.xyz, ca.xyz, c.xyz))
     if i < len(chain.residues) - 1:
       next_n = chain.residues[i + 1].get_atom("N")
       if next_n is not None:
-        psi = rad_to_deg(get_torsion_angle(n.xyz, ca.xyz, c.xyz, next_n.xyz))
+        dist_c1_n2 = xyz_distance(c.xyz, next_n.xyz)
+        if 1.25 < dist_c1_n2 < 1.45:
+          psi = rad_to_deg(get_torsion_angle(n.xyz, ca.xyz, c.xyz, next_n.xyz))
     res.phipsi = (phi, psi)
 
 

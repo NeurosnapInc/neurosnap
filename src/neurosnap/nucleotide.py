@@ -2,6 +2,7 @@
 Provides functions and classes related to processing nucleotide data.
 """
 
+import gzip
 import re
 from pathlib import Path
 from typing import Tuple, Union
@@ -39,6 +40,9 @@ def split_interleaved_fastq(
   Assumes pairs are adjacent (left read followed by right read) and rewrites
   headers as "@<index>/1" and "@<index>/2".
 
+  Supports gzip-compressed inputs with filenames ending in ".fastq.gz" or ".fq.gz".
+  Compression is detected by filename and streamed during read.
+
   Parameters:
       fn_in: Path to the interleaved FASTQ file.
       output_dir: Directory to write outputs into.
@@ -55,6 +59,9 @@ def split_interleaved_fastq(
 
   left_path = output_dir_path / "split_left.fq"
   right_path = output_dir_path / "split_right.fq"
+  is_gz = fn_in_path.name.endswith((".fastq.gz", ".fq.gz"))
+  open_fn = gzip.open if is_gz else open
+  open_mode = "rt" if is_gz else "r"
 
   # Status corresponds to the expected type of line to read next
   #  - "@"  = Header for NT sequence
@@ -65,7 +72,7 @@ def split_interleaved_fastq(
   current_len = None
   read_direction = 1  # 1 corresponds to left read (first), 2 corresponds to right read.
   index = 1  # Actual index
-  with open(fn_in_path) as fin:
+  with open_fn(fn_in_path, open_mode) as fin:
     with open(left_path, "w") as fout_l:
       with open(right_path, "w") as fout_r:
         for i, line in enumerate(fin, start=1):

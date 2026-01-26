@@ -1,4 +1,5 @@
 # tests/test_nucleotide.py
+import gzip
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,23 @@ def test_split_interleaved_fastq_uneven_reads_raises(tmp_path):
 
   with pytest.raises(AssertionError, match="Uneven number of reads in both files"):
     split_interleaved_fastq(interleaved_path, tmp_path)
+
+
+@pytest.mark.parametrize("suffix", [".fastq.gz", ".fq.gz"])
+def test_split_interleaved_fastq_gz_support(tmp_path, suffix):
+  src_path = Path(__file__).resolve().parent / "files" / "transcript_assembly.fastq"
+  lines = src_path.read_text().splitlines()
+  assert len(lines) % 4 == 0
+
+  interleaved_path = tmp_path / f"transcript_assembly_interleaved{suffix}"
+  with gzip.open(interleaved_path, "wt") as fout:
+    fout.write("\n".join(_normalize_interleaved_headers(lines)) + "\n")
+
+  left_path, right_path = split_interleaved_fastq(interleaved_path, tmp_path)
+  assert left_path.exists()
+  assert right_path.exists()
+
+  left_lines = left_path.read_text().splitlines()
+  right_lines = right_path.read_text().splitlines()
+  assert left_lines[0] == "@1/1"
+  assert right_lines[0] == "@1/2"

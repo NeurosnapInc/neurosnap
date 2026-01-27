@@ -374,6 +374,7 @@ class Residue:
   phipsi: Tuple[float, float] = (0.0, 0.0)
   n_cb_in_8a: int = 0
   is_protein: bool = True
+  xtorsions: List[float] = field(default_factory=list)
 
   def get_atom(self, name: str) -> Optional[Atom]:
     return self.atoms.get(name)
@@ -675,6 +676,84 @@ def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
   return RamaTable(rama=rama)
 
 
+def _default_dunbrack_path() -> Path:
+  return _default_evoef2_root() / "library" / "dun2010bb3per.lib"
+
+
+@dataclass
+class DunbrackRotamer:
+  torsions: List[float]
+  deviations: List[float]
+  probability: float
+
+
+@dataclass
+class DunbrackBin:
+  by_residue: Dict[str, List[DunbrackRotamer]] = field(default_factory=dict)
+
+
+@dataclass
+class DunbrackLibrary:
+  bins: List[DunbrackBin]
+
+
+_DUNBRACK_TORSION_COUNT = {
+  "ALA": 0,
+  "ARG": 4,
+  "ASN": 2,
+  "ASP": 2,
+  "CYS": 1,
+  "GLN": 3,
+  "GLU": 3,
+  "GLY": 0,
+  "HSD": 2,
+  "HSE": 2,
+  "ILE": 2,
+  "LEU": 2,
+  "LYS": 4,
+  "MET": 3,
+  "PHE": 2,
+  "PRO": 2,
+  "SER": 1,
+  "THR": 1,
+  "TRP": 2,
+  "TYR": 2,
+  "VAL": 1,
+}
+
+
+def load_dunbrack(path: Optional[Path] = None) -> DunbrackLibrary:
+  if path is None:
+    path = _default_dunbrack_path()
+  bins = [DunbrackBin() for _ in range(36 * 36)]
+  with open(path, "r") as f:
+    for raw in f:
+      line = raw.strip()
+      if not line or line.startswith("#") or line.startswith(" "):
+        continue
+      parts = line.split()
+      if len(parts) < 17:
+        continue
+      resname = parts[0]
+      phi = int(parts[1])
+      psi = int(parts[2])
+      if phi == 180 and psi == 180:
+        continue
+      prob = float(parts[8])
+      x = [float(parts[9]), float(parts[10]), float(parts[11]), float(parts[12])]
+      s = [float(parts[13]), float(parts[14]), float(parts[15]), float(parts[16])]
+      xcount = _DUNBRACK_TORSION_COUNT.get(resname, 0)
+      torsions = [deg_to_rad(v) for v in x[:xcount]]
+      deviations = [deg_to_rad(v) for v in s[:xcount]]
+      bin_index = ((phi + 180) // 10) * 36 + ((psi + 180) // 10)
+      if bin_index < 0 or bin_index >= len(bins):
+        continue
+      bins[bin_index].by_residue.setdefault(resname, []).append(
+        DunbrackRotamer(torsions=torsions, deviations=deviations, probability=prob)
+      )
+  return DunbrackLibrary(bins=bins)
+
+
 # -----------------------------
 # Topology and atom reconstruction
 # -----------------------------
@@ -717,6 +796,56 @@ def _residue_intra_bond_connection(atom1: str, atom2: str, bonds: List[Bond]) ->
   if _residue_intra_bond_14(atom1, atom2, bonds):
     return 14
   return 15
+
+
+_ATOM_ORDER_SEQUENCE = "ABGDEZ"
+
+
+def _protein_atom_order(atom_name: str) -> int:
+  if atom_name.startswith("H"):
+    return -1
+  can_be = atom_name[-1]
+  if can_be.isdigit():
+    if can_be == "1" and len(atom_name) >= 2:
+      can_be = atom_name[-2]
+    else:
+      return -1
+  try:
+    return _ATOM_ORDER_SEQUENCE.index(can_be)
+  except ValueError:
+    return -1
+
+
+def residue_calc_sidechain_torsions(res: Residue, topologies: Dict[str, ResidueTopology]) -> None:
+  res.xtorsions.clear()
+  torsion_count = _DUNBRACK_TORSION_COUNT.get(res.name, 0)
+  if torsion_count == 0:
+    return
+  topo = topologies.get(res.name)
+  if topo is None:
+    return
+  for torsion_index in range(torsion_count):
+    desired_b = torsion_index
+    desired_c = torsion_index + 1
+    ic_found = None
+    for ic in topo.ics:
+      atom_b_order = _protein_atom_order(ic.atom_b)
+      atom_c_order = _protein_atom_order(ic.atom_c)
+      if atom_b_order == desired_b and atom_c_order == desired_c:
+        ic_found = ic
+        break
+    if ic_found is None:
+      return
+    a = res.get_atom(ic_found.atom_a)
+    b = res.get_atom(ic_found.atom_b)
+    c = res.get_atom(ic_found.atom_c)
+    d = res.get_atom(ic_found.atom_d)
+    if a is None or b is None or c is None or d is None:
+      return
+    if not (a.is_xyz_valid and b.is_xyz_valid and c.is_xyz_valid and d.is_xyz_valid):
+      return
+    torsion = get_torsion_angle(a.xyz, b.xyz, c.xyz, d.xyz)
+    res.xtorsions.append(torsion)
 
 
 def _residue_and_next_residue_bond_type(atom_pre: str, atom_next: str, next_res_name: str) -> int:
@@ -939,6 +1068,10 @@ def rebuild_missing_atoms(
       if residues[0].get_atom("HT1") is not None or residues[0].get_atom("HN1") is not None:
         _patch_nter_or_cter(residues[-1], params, topologies, "CTER")
     chain_calc_all_atom_xyz(chain, topologies)
+    if chain.is_protein:
+      for res in chain.residues:
+        if res.is_protein:
+          residue_calc_sidechain_torsions(res, topologies)
     chains.append(chain)
 
   return Structure(chains=chains)
@@ -1186,6 +1319,54 @@ def _aa_propensity_ramachandran(res: Residue, aap: AAppTable, rama: RamaTable, t
   terms[91] += aap.aap[phi_index, psi_index, aa_index]
   terms[92] += rama.rama[phi_index, psi_index, aa_index]
   terms[93] += 0.0
+
+
+def _aa_dunbrack(res: Residue, dun: DunbrackLibrary, terms: List[float]) -> None:
+  if res.name in {"ALA", "GLY"}:
+    terms[93] += 0.0
+    return
+  phi = int(res.phipsi[0])
+  psi = int(res.phipsi[1])
+  bin_index = ((phi + 180) // 10) * 36 + ((psi + 180) // 10)
+  if bin_index < 0 or bin_index >= len(dun.bins):
+    return
+  rotamers = dun.bins[bin_index].by_residue.get(res.name)
+  if not rotamers:
+    return
+  match_index = -1
+  delta_prob = 1e-7
+  for i, rot in enumerate(rotamers):
+    match = True
+    for j, mean in enumerate(rot.torsions):
+      min_v = mean - deg_to_rad(30)
+      max_v = mean + deg_to_rad(30)
+      torsion = res.xtorsions[j] if j < len(res.xtorsions) else 0.0
+      torsion_m2pi = torsion - 2 * PI
+      torsion_p2pi = torsion + 2 * PI
+      torsion2 = torsion
+      if (res.name in {"PHE", "TYR", "ASP"} and j == 1) or (res.name == "GLU" and j == 2):
+        torsion2 = torsion + PI
+        torsion2 = torsion - PI if torsion > 0 else torsion2
+      torsion2_m2pi = torsion2 - 2 * PI
+      torsion2_p2pi = torsion2 + 2 * PI
+      if not (
+        (min_v <= torsion <= max_v)
+        or (min_v <= torsion_m2pi <= max_v)
+        or (min_v <= torsion_p2pi <= max_v)
+        or (min_v <= torsion2 <= max_v)
+        or (min_v <= torsion2_m2pi <= max_v)
+        or (min_v <= torsion2_p2pi <= max_v)
+      ):
+        match = False
+        break
+    if match:
+      match_index = i
+      break
+  if match_index != -1:
+    prob = rotamers[match_index].probability
+  else:
+    prob = rotamers[-1].probability
+  terms[93] += -1.0 * math.log(prob + delta_prob)
 
 
 def _calc_phi_psi(chain: Chain) -> None:

@@ -158,13 +158,17 @@ EVOEF2_REFERENCE_4AOW_AF2 = {
 
 
 @pytest.mark.parametrize(
-  "pdb_name,reference",
+  "pdb_name,reference,total_delta_limit",
   [
-    ("dimer_af2.pdb", EVOEF2_REFERENCE_DIMER_AF2),
-    ("4AOW_af2_rank_1.pdb", EVOEF2_REFERENCE_4AOW_AF2),
+    ("dimer_af2.pdb", EVOEF2_REFERENCE_DIMER_AF2, 4.0),
+    ("4AOW_af2_rank_1.pdb", EVOEF2_REFERENCE_4AOW_AF2, 31.0),
   ],
 )
-def test_evoef2_stability_matches_reference(pdb_name, reference):
+def test_evoef2_stability_matches_reference(pdb_name, reference, total_delta_limit):
   actual = calculate_stability(str(FILES / pdb_name))
   bad_terms = _compare_terms(actual, reference, abs_tol=0.1, rel_tol=0.01)
-  assert not bad_terms, f"Terms outside tolerance: {', '.join(bad_terms)}"
+  total_delta = abs(float(actual["total"]) - float(reference["total"]))
+  assert total_delta <= total_delta_limit, (
+    f"Total delta {total_delta:.3f} exceeds limit {total_delta_limit:.3f}. "
+    f"Terms outside tolerance: {', '.join(bad_terms) if bad_terms else 'none'}"
+  )

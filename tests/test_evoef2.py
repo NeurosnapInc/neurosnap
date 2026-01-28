@@ -1,0 +1,170 @@
+"""
+Tests for EvoEF2 scoring parity checks against reference outputs.
+"""
+
+from pathlib import Path
+
+import pytest
+
+from neurosnap.algos.evoef2 import calculate_stability
+
+HERE = Path(__file__).resolve().parent
+FILES = HERE / "files"
+
+
+def _compare_terms(actual, expected, *, abs_tol=0.1, rel_tol=0.01):
+  bad_terms = []
+  for key, exp in expected.items():
+    if key not in actual:
+      bad_terms.append(key)
+      continue
+    act = float(actual[key])
+    delta = act - exp
+    if abs(delta) > abs_tol and (abs(exp) < 1e-8 or abs(delta / exp) > rel_tol):
+      bad_terms.append(key)
+  return bad_terms
+
+
+EVOEF2_REFERENCE_DIMER_AF2 = {
+  "reference_ALA": -4.08,
+  "reference_CYS": -0.0,
+  "reference_ASP": -3.21,
+  "reference_GLU": -17.15,
+  "reference_PHE": 1.36,
+  "reference_GLY": -20.93,
+  "reference_HIS": -1.18,
+  "reference_ILE": 37.28,
+  "reference_LYS": -7.5,
+  "reference_LEU": 16.13,
+  "reference_MET": 1.52,
+  "reference_ASN": -0.0,
+  "reference_PRO": -2.59,
+  "reference_GLN": -7.74,
+  "reference_ARG": -10.58,
+  "reference_SER": -23.74,
+  "reference_THR": -2.5,
+  "reference_VAL": 10.2,
+  "reference_TRP": 0.0,
+  "reference_TYR": 0.0,
+  "intraR_vdwatt": -21.04,
+  "intraR_vdwrep": 5.0,
+  "intraR_electr": -0.26,
+  "intraR_deslvP": 0.0,
+  "intraR_deslvH": -2.8,
+  "intraR_hbscbb_dis": -1.66,
+  "intraR_hbscbb_the": -0.32,
+  "intraR_hbscbb_phi": -0.0,
+  "aapropensity": -11.36,
+  "ramachandran": 268.22,
+  "dunbrack": 46.69,
+  "interS_vdwatt": -553.25,
+  "interS_vdwrep": 84.96,
+  "interS_electr": -35.97,
+  "interS_deslvP": 368.03,
+  "interS_deslvH": -251.21,
+  "interS_ssbond": 0.0,
+  "interS_hbbbbb_dis": -66.43,
+  "interS_hbbbbb_the": -58.44,
+  "interS_hbbbbb_phi": -66.84,
+  "interS_hbscbb_dis": -3.26,
+  "interS_hbscbb_the": -3.43,
+  "interS_hbscbb_phi": -0.76,
+  "interS_hbscsc_dis": -2.98,
+  "interS_hbscsc_the": -1.07,
+  "interS_hbscsc_phi": -0.0,
+  "interD_vdwatt": -47.03,
+  "interD_vdwrep": 1.97,
+  "interD_electr": -2.8,
+  "interD_deslvP": 28.44,
+  "interD_deslvH": -43.48,
+  "interD_ssbond": 0.0,
+  "interD_hbbbbb_dis": -5.68,
+  "interD_hbbbbb_the": -4.72,
+  "interD_hbbbbb_phi": -5.77,
+  "interD_hbscbb_dis": -0.06,
+  "interD_hbscbb_the": -0.67,
+  "interD_hbscbb_phi": -0.42,
+  "interD_hbscsc_dis": 0.0,
+  "interD_hbscsc_the": 0.0,
+  "interD_hbscsc_phi": 0.0,
+  "total": -423.11,
+}
+
+
+EVOEF2_REFERENCE_4AOW_AF2 = {
+  "reference_ALA": -6.12,
+  "reference_CYS": -0.89,
+  "reference_ASP": -16.84,
+  "reference_GLU": -11.03,
+  "reference_PHE": 5.43,
+  "reference_GLY": -54.42,
+  "reference_HIS": -2.36,
+  "reference_ILE": 41.94,
+  "reference_LYS": -20.0,
+  "reference_LEU": 45.16,
+  "reference_MET": 3.04,
+  "reference_ASN": -30.17,
+  "reference_PRO": -6.47,
+  "reference_GLN": -23.23,
+  "reference_ARG": -17.19,
+  "reference_SER": -53.41,
+  "reference_THR": -11.65,
+  "reference_VAL": 35.7,
+  "reference_TRP": 26.05,
+  "reference_TYR": 4.2,
+  "intraR_vdwatt": -55.12,
+  "intraR_vdwrep": 10.39,
+  "intraR_electr": -0.51,
+  "intraR_deslvP": 0.0,
+  "intraR_deslvH": -5.7,
+  "intraR_hbscbb_dis": -9.12,
+  "intraR_hbscbb_the": -0.26,
+  "intraR_hbscbb_phi": -0.0,
+  "aapropensity": -47.4,
+  "ramachandran": 675.73,
+  "dunbrack": 124.34,
+  "interS_vdwatt": -1939.27,
+  "interS_vdwrep": 196.76,
+  "interS_electr": -87.9,
+  "interS_deslvP": 1182.12,
+  "interS_deslvH": -805.85,
+  "interS_ssbond": 0.0,
+  "interS_hbbbbb_dis": -148.31,
+  "interS_hbbbbb_the": -115.7,
+  "interS_hbbbbb_phi": -163.12,
+  "interS_hbscbb_dis": -44.66,
+  "interS_hbscbb_the": -32.2,
+  "interS_hbscbb_phi": -9.7,
+  "interS_hbscsc_dis": -40.52,
+  "interS_hbscsc_the": -13.68,
+  "interS_hbscsc_phi": -0.0,
+  "interD_vdwatt": 0.0,
+  "interD_vdwrep": 0.0,
+  "interD_electr": 0.0,
+  "interD_deslvP": 0.0,
+  "interD_deslvH": 0.0,
+  "interD_ssbond": 0.0,
+  "interD_hbbbbb_dis": 0.0,
+  "interD_hbbbbb_the": 0.0,
+  "interD_hbbbbb_phi": 0.0,
+  "interD_hbscbb_dis": 0.0,
+  "interD_hbscbb_the": 0.0,
+  "interD_hbscbb_phi": 0.0,
+  "interD_hbscsc_dis": 0.0,
+  "interD_hbscsc_the": 0.0,
+  "interD_hbscsc_phi": 0.0,
+  "total": -1421.94,
+}
+
+
+@pytest.mark.parametrize(
+  "pdb_name,reference",
+  [
+    ("dimer_af2.pdb", EVOEF2_REFERENCE_DIMER_AF2),
+    ("4AOW_af2_rank_1.pdb", EVOEF2_REFERENCE_4AOW_AF2),
+  ],
+)
+def test_evoef2_stability_matches_reference(pdb_name, reference):
+  actual = calculate_stability(str(FILES / pdb_name))
+  bad_terms = _compare_terms(actual, reference, abs_tol=0.1, rel_tol=0.01)
+  assert not bad_terms, f"Terms outside tolerance: {', '.join(bad_terms)}"

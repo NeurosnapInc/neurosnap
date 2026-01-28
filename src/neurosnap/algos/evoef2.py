@@ -2216,8 +2216,6 @@ def calculate_stability(
   Returns:
     Dict of all weighted energy terms plus the total.
   """
-  params = load_atom_params(param_path)
-  topologies = load_topology(topo_path)
   weights = load_weights(weight_path)
   aap = load_aapropensity(aapropensity_path)
   rama = load_ramachandran(ramachandran_path)
@@ -2492,7 +2490,6 @@ def debug_evoef2_structure(
   Returns:
     Dict with counts for missing atoms, torsions, and Dunbrack coverage.
   """
-  params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
   dun = load_dunbrack(dunbrack_path)
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)

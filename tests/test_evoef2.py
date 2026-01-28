@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from neurosnap.algos.evoef2 import calculate_stability
+import numpy as np
+
+from neurosnap.algos import evoef2
+from neurosnap.algos.evoef2 import calculate_binding, calculate_interface_energy, calculate_stability, rebuild_missing_atoms
 
 HERE = Path(__file__).resolve().parent
 FILES = HERE / "files"
@@ -172,3 +175,79 @@ def test_evoef2_stability_matches_reference(pdb_name, reference, total_delta_lim
     f"Total delta {total_delta:.3f} exceeds limit {total_delta_limit:.3f}. "
     f"Terms outside tolerance: {', '.join(bad_terms) if bad_terms else 'none'}"
   )
+
+
+def test_energy_term_weighting_sets_total():
+  terms = evoef2.energy_term_initialize()
+  terms[1] = 1.0
+  terms[21] = -2.0
+  weights = [1.0] * evoef2.MAX_EVOEF_ENERGY_TERM_NUM
+  weights[21] = 2.0
+  weighted = evoef2.energy_term_weighting(terms, weights)
+  expected_total = weighted[1] + weighted[21]
+  assert weighted[0] == pytest.approx(expected_total)
+
+
+def test_load_tables_shapes():
+  aap = evoef2.load_aapropensity()
+  rama = evoef2.load_ramachandran()
+  dun = evoef2.load_dunbrack()
+  assert aap.aap.shape == (36, 36, 20)
+  assert rama.rama.shape == (36, 36, 20)
+  assert len(dun.bins) == 36 * 36
+
+
+def test_rebuild_missing_atoms_produces_valid_atoms():
+  structure = rebuild_missing_atoms(str(FILES / "1nkp_mycmax.pdb"))
+  assert structure.chains
+  valid_atoms = sum(
+    1
+    for chain in structure.chains
+    for res in chain.residues
+    for atom in res.atoms.values()
+    if atom.is_xyz_valid
+  )
+  assert valid_atoms > 0
+
+
+def test_calc_phi_psi_assigns_values():
+  structure = rebuild_missing_atoms(str(FILES / "dimer_af2.pdb"))
+  for chain in structure.chains:
+    if chain.is_protein:
+      evoef2._calc_phi_psi(chain)
+      for res in chain.residues:
+        phi, psi = res.phipsi
+        assert np.isfinite(phi)
+        assert np.isfinite(psi)
+
+
+def test_interface_and_binding_have_expected_keys():
+  pdb_path = str(FILES / "dimer_af2.pdb")
+  interface = calculate_interface_energy(pdb_path, split1=["A"], split2=["B"])
+  binding = calculate_binding(pdb_path, split1=["A"], split2=["B"])
+  assert "total" in interface
+  assert "dg_bind" in binding
+  assert "stability_complex" in binding
+  assert "stability_split1" in binding
+  assert "stability_split2" in binding
+  assert np.isfinite(interface["total"])
+  assert np.isfinite(binding["dg_bind"]["total"])
+
+
+def test_dg_bind_matches_subtraction():
+  pdb_path = str(FILES / "dimer_af2.pdb")
+  binding = calculate_binding(pdb_path, split1=["A"], split2=["B"])
+  full = binding["stability_complex"]
+  s1 = binding["stability_split1"]
+  s2 = binding["stability_split2"]
+  dg_bind = binding["dg_bind"]
+  for key in full.keys():
+    expected = full.get(key, 0.0) - s1.get(key, 0.0) - s2.get(key, 0.0)
+    assert dg_bind[key] == pytest.approx(expected)
+
+
+def test_debug_structure_smoke():
+  stats = evoef2.debug_evoef2_structure(str(FILES / "dimer_af2.pdb"))
+  assert stats["total_atoms"] > 0
+  assert stats["valid_atoms"] > 0
+  assert stats["protein_residues"] > 0

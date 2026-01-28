@@ -242,6 +242,24 @@ AA_THREE_TO_ONE = {
 
 @dataclass
 class AtomParam:
+  """Per-atom parameter record loaded from the EvoEF2 parameter library.
+
+  Attributes:
+    name: Atom name as defined in topology.
+    type: Atom type in the parameter file.
+    is_bb: Whether the atom is considered backbone for scoring.
+    polarity: Polarity class used in desolvation.
+    epsilon: Lennard-Jones well depth (kcal/mol).
+    radius: Lennard-Jones radius (Angstrom).
+    charge: Partial charge (e).
+    hb_h_or_a: Hydrogen-bond role flag: H (hydrogen) or A (acceptor).
+    hb_d_or_b: Hydrogen-bond donor/base classification.
+    hb_b2: Secondary hydrogen-bond base flag.
+    hybrid: Hybridization class (e.g., sp2/sp3).
+    eef1_free_dg: EEF1 free energy parameter.
+    eef1_volume: EEF1 volume parameter.
+    eef1_lambda: EEF1 lambda parameter.
+  """
   name: str
   type: str
   is_bb: bool
@@ -268,6 +286,17 @@ class AtomParam:
 
 @dataclass
 class Atom:
+  """Atom instance with coordinates, parameters, and per-structure state.
+
+  Attributes:
+    name: Atom name (e.g., CA, CB, O).
+    param: Parameter record used for scoring.
+    chain: Chain identifier for the parent residue.
+    pos: Residue index within chain (0-based in this structure).
+    xyz: Cartesian coordinate in Angstrom.
+    is_xyz_valid: Whether the coordinate is present or reconstructed.
+    is_in_hbond: Flag used during H-bond detection to avoid double counting.
+  """
   name: str
   param: AtomParam
   chain: str
@@ -339,6 +368,7 @@ class Atom:
 
 @dataclass
 class Bond:
+  """Covalent bond between two atoms inside a residue."""
   a: str
   b: str
   bond_type: int = 1
@@ -346,6 +376,7 @@ class Bond:
 
 @dataclass
 class CharmmIC:
+  """CHARMM internal coordinate (IC) entry used to build missing atoms."""
   atom_a: str
   atom_b: str
   atom_c: str
@@ -356,6 +387,7 @@ class CharmmIC:
 
 @dataclass
 class ResidueTopology:
+  """Residue topology template with atoms, bonds, and ICs from library."""
   name: str
   atoms: List[str] = field(default_factory=list)
   deletes: List[str] = field(default_factory=list)
@@ -365,6 +397,7 @@ class ResidueTopology:
 
 @dataclass
 class Residue:
+  """Residue instance with atoms, bonds, and cached torsions/geometry."""
   name: str
   chain: str
   pos: int
@@ -377,11 +410,13 @@ class Residue:
   xtorsions: List[float] = field(default_factory=list)
 
   def get_atom(self, name: str) -> Optional[Atom]:
+    """Return an atom by name if present."""
     return self.atoms.get(name)
 
 
 @dataclass
 class Chain:
+  """Chain container for residues with an is_protein flag."""
   name: str
   residues: List[Residue] = field(default_factory=list)
   is_protein: bool = True
@@ -389,9 +424,11 @@ class Chain:
 
 @dataclass
 class Structure:
+  """Structure container holding all chains."""
   chains: List[Chain] = field(default_factory=list)
 
   def all_residues(self) -> Iterable[Residue]:
+    """Iterate over all residues across all chains."""
     for chain in self.chains:
       for res in chain.residues:
         yield res
@@ -399,11 +436,13 @@ class Structure:
 
 @dataclass
 class AAppTable:
+  """Amino-acid propensity table indexed by phi/psi bins."""
   aap: np.ndarray  # shape (36,36,20)
 
 
 @dataclass
 class RamaTable:
+  """Ramachandran probability table indexed by phi/psi bins."""
   rama: np.ndarray  # shape (36,36,20)
 
 
@@ -413,6 +452,14 @@ class RamaTable:
 
 
 def safe_acos(cos_value: float) -> float:
+  """Return acos with inputs clamped to [-1, 1] to avoid numeric blowups.
+
+  Args:
+    cos_value: Cosine value to clamp.
+
+  Returns:
+    acos(cos_value) in radians.
+  """
   if cos_value > 1.0:
     cos_value = 1.0
   elif cos_value < -1.0:
@@ -421,18 +468,52 @@ def safe_acos(cos_value: float) -> float:
 
 
 def rad_to_deg(rad: float) -> float:
+  """Convert radians to degrees.
+
+  Args:
+    rad: Angle in radians.
+
+  Returns:
+    Angle in degrees.
+  """
   return rad * 180.0 / PI
 
 
 def deg_to_rad(deg: float) -> float:
+  """Convert degrees to radians.
+
+  Args:
+    deg: Angle in degrees.
+
+  Returns:
+    Angle in radians.
+  """
   return deg * PI / 180.0
 
 
 def xyz_distance(a: np.ndarray, b: np.ndarray) -> float:
+  """Return Euclidean distance between two points.
+
+  Args:
+    a: First point.
+    b: Second point.
+
+  Returns:
+    Distance in Angstrom.
+  """
   return float(np.linalg.norm(a - b))
 
 
 def xyz_angle(v1: np.ndarray, v2: np.ndarray) -> float:
+  """Return the angle between two vectors in radians.
+
+  Args:
+    v1: First vector.
+    v2: Second vector.
+
+  Returns:
+    Angle in radians.
+  """
   norm = np.linalg.norm(v1) * np.linalg.norm(v2)
   if norm < 1e-12:
     return 1000.0
@@ -440,6 +521,17 @@ def xyz_angle(v1: np.ndarray, v2: np.ndarray) -> float:
 
 
 def xyz_rotate_around(p: np.ndarray, axis_from: np.ndarray, axis_to: np.ndarray, angle: float) -> np.ndarray:
+  """Rotate a point around an axis defined by two points.
+
+  Args:
+    p: Point to rotate.
+    axis_from: First point on rotation axis.
+    axis_to: Second point on rotation axis.
+    angle: Rotation angle in radians.
+
+  Returns:
+    Rotated point in Cartesian space.
+  """
   s = math.sin(angle)
   c = math.cos(angle)
   n = axis_from - axis_to
@@ -463,6 +555,17 @@ def xyz_rotate_around(p: np.ndarray, axis_from: np.ndarray, axis_to: np.ndarray,
 
 
 def get_fourth_atom(a: np.ndarray, b: np.ndarray, c: np.ndarray, ic_param: Sequence[float]) -> np.ndarray:
+  """Compute the fourth atom position using internal coordinates (IC).
+
+  Args:
+    a: Atom A coordinates.
+    b: Atom B coordinates.
+    c: Atom C coordinates.
+    ic_param: IC parameters (angle/torsion/length) from topology.
+
+  Returns:
+    Coordinates for atom D implied by IC parameters.
+  """
   ba = b - a
   bc = b - c
   ba_x_bc = np.cross(ba, bc)
@@ -478,6 +581,10 @@ def get_fourth_atom(a: np.ndarray, b: np.ndarray, c: np.ndarray, ic_param: Seque
 
 
 def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> float:
+  """Return signed torsion angle for four points.
+
+  The sign convention is matched to the EvoEF2 / Bio.PDB implementation.
+  """
   r_ab = a - b
   r_bc = b - c
   r_cd = c - d
@@ -502,10 +609,19 @@ def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
 
 
 def _default_evoef2_root() -> Path:
+  """Return the default path to the cloned EvoEF2 repository."""
   return Path(__file__).resolve().parents[3] / "EvoEF2"
 
 
 def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, AtomParam]]:
+  """Load atom parameters from the EvoEF2 CHARMM19+LK parameter file.
+
+  Args:
+    param_path: Optional explicit path to the parameter file.
+
+  Returns:
+    Mapping of residue name to atom name to AtomParam.
+  """
   if param_path is None:
     param_path = _default_evoef2_root() / "library" / "param_charmm19_lk.prm"
   param_map: Dict[str, Dict[str, AtomParam]] = {}
@@ -553,6 +669,14 @@ def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, A
 
 
 def load_topology(top_path: Optional[Path] = None) -> Dict[str, ResidueTopology]:
+  """Load CHARMM topology definitions for residues and patches.
+
+  Args:
+    top_path: Optional explicit path to the topology file.
+
+  Returns:
+    Mapping of residue/patch name to topology template.
+  """
   if top_path is None:
     top_path = _default_evoef2_root() / "library" / "top_polh19_prot.inp"
   topologies: Dict[str, ResidueTopology] = {}
@@ -614,6 +738,14 @@ def load_topology(top_path: Optional[Path] = None) -> Dict[str, ResidueTopology]
 
 
 def load_weights(weight_path: Optional[Path] = None) -> List[float]:
+  """Load EvoEF2 term weights from the reference weight file.
+
+  Args:
+    weight_path: Optional explicit path to the weights file.
+
+  Returns:
+    Weight list indexed by EvoEF2 term index.
+  """
   if weight_path is None:
     weight_path = _default_evoef2_root() / "wread" / "weight_EvoEF2.txt"
   weights = [1.0] * MAX_EVOEF_ENERGY_TERM_NUM
@@ -636,6 +768,14 @@ def load_weights(weight_path: Optional[Path] = None) -> List[float]:
 
 
 def load_aapropensity(path: Optional[Path] = None) -> AAppTable:
+  """Load amino-acid propensity table for phi/psi bins.
+
+  Args:
+    path: Optional explicit path to the table file.
+
+  Returns:
+    AAppTable instance with a [36, 36, 20] tensor.
+  """
   if path is None:
     path = _default_evoef2_root() / "library" / "aapropensity.txt"
   aap = np.zeros((36, 36, 20), dtype=float)
@@ -657,6 +797,14 @@ def load_aapropensity(path: Optional[Path] = None) -> AAppTable:
 
 
 def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
+  """Load Ramachandran probability table for phi/psi bins.
+
+  Args:
+    path: Optional explicit path to the table file.
+
+  Returns:
+    RamaTable instance with a [36, 36, 20] tensor.
+  """
   if path is None:
     path = _default_evoef2_root() / "library" / "ramachandran.txt"
   rama = np.zeros((36, 36, 20), dtype=float)
@@ -678,11 +826,13 @@ def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
 
 
 def _default_dunbrack_path() -> Path:
+  """Return the default Dunbrack library path."""
   return _default_evoef2_root() / "library" / "dun2010bb3per.lib"
 
 
 @dataclass
 class DunbrackRotamer:
+  """Single Dunbrack rotamer entry with chi statistics."""
   torsions: List[float]
   deviations: List[float]
   probability: float
@@ -690,11 +840,13 @@ class DunbrackRotamer:
 
 @dataclass
 class DunbrackBin:
+  """Dunbrack bin for a phi/psi region with rotamer list."""
   by_residue: Dict[str, List[DunbrackRotamer]] = field(default_factory=dict)
 
 
 @dataclass
 class DunbrackLibrary:
+  """Full Dunbrack library indexed by residue and phi/psi bins."""
   bins: List[DunbrackBin]
 
 
@@ -724,6 +876,14 @@ _DUNBRACK_TORSION_COUNT = {
 
 
 def load_dunbrack(path: Optional[Path] = None) -> DunbrackLibrary:
+  """Load Dunbrack rotamer library from the EvoEF2 distribution.
+
+  Args:
+    path: Optional explicit path to the Dunbrack library file.
+
+  Returns:
+    DunbrackLibrary with bins indexed by phi/psi.
+  """
   if path is None:
     path = _default_dunbrack_path()
   bins = [DunbrackBin() for _ in range(36 * 36)]
@@ -761,6 +921,16 @@ def load_dunbrack(path: Optional[Path] = None) -> DunbrackLibrary:
 
 
 def _residue_intra_bond_12(atom1: str, atom2: str, bonds: List[Bond]) -> bool:
+  """Return True if atom1-atom2 is a direct covalent bond.
+
+  Args:
+    atom1: Atom name.
+    atom2: Atom name.
+    bonds: Residue bond list.
+
+  Returns:
+    True if atom1 and atom2 are bonded (1-2).
+  """
   for bond in bonds:
     if (atom1 == bond.a and atom2 == bond.b) or (atom2 == bond.a and atom1 == bond.b):
       return True
@@ -768,6 +938,16 @@ def _residue_intra_bond_12(atom1: str, atom2: str, bonds: List[Bond]) -> bool:
 
 
 def _residue_intra_bond_13(atom1: str, atom2: str, bonds: List[Bond]) -> bool:
+  """Return True if atom1-atom2 is separated by two covalent bonds (1-3).
+
+  Args:
+    atom1: Atom name.
+    atom2: Atom name.
+    bonds: Residue bond list.
+
+  Returns:
+    True if atom1 and atom2 are 1-3 connected.
+  """
   for bond in bonds:
     if atom1 == bond.a:
       if _residue_intra_bond_12(bond.b, atom2, bonds):
@@ -779,6 +959,16 @@ def _residue_intra_bond_13(atom1: str, atom2: str, bonds: List[Bond]) -> bool:
 
 
 def _residue_intra_bond_14(atom1: str, atom2: str, bonds: List[Bond]) -> bool:
+  """Return True if atom1-atom2 is separated by three covalent bonds (1-4).
+
+  Args:
+    atom1: Atom name.
+    atom2: Atom name.
+    bonds: Residue bond list.
+
+  Returns:
+    True if atom1 and atom2 are 1-4 connected.
+  """
   for bond in bonds:
     if atom1 == bond.a:
       if _residue_intra_bond_13(bond.b, atom2, bonds):
@@ -790,6 +980,16 @@ def _residue_intra_bond_14(atom1: str, atom2: str, bonds: List[Bond]) -> bool:
 
 
 def _residue_intra_bond_connection(atom1: str, atom2: str, bonds: List[Bond]) -> int:
+  """Return bond connection category: 12, 13, 14, or 15 (nonbonded).
+
+  Args:
+    atom1: Atom name.
+    atom2: Atom name.
+    bonds: Residue bond list.
+
+  Returns:
+    Integer category (12/13/14/15).
+  """
   if _residue_intra_bond_12(atom1, atom2, bonds):
     return 12
   if _residue_intra_bond_13(atom1, atom2, bonds):
@@ -803,6 +1003,14 @@ _ATOM_ORDER_SEQUENCE = "ABGDEZ"
 
 
 def _protein_atom_order(atom_name: str) -> int:
+  """Return atom ordering index used to detect sidechain torsions.
+
+  Args:
+    atom_name: Atom name.
+
+  Returns:
+    Order index or -1 if not part of the sidechain torsion sequence.
+  """
   if atom_name.startswith("H"):
     return -1
   can_be = atom_name[-1]
@@ -818,6 +1026,12 @@ def _protein_atom_order(atom_name: str) -> int:
 
 
 def residue_calc_sidechain_torsions(res: Residue, topologies: Dict[str, ResidueTopology]) -> None:
+  """Compute and cache sidechain torsion angles for a residue.
+
+  Args:
+    res: Residue to annotate.
+    topologies: Residue topologies used to identify torsions.
+  """
   res.xtorsions.clear()
   torsion_count = _DUNBRACK_TORSION_COUNT.get(res.name, 0)
   if torsion_count == 0:
@@ -850,6 +1064,16 @@ def residue_calc_sidechain_torsions(res: Residue, topologies: Dict[str, ResidueT
 
 
 def _residue_and_next_residue_bond_type(atom_pre: str, atom_next: str, next_res_name: str) -> int:
+  """Return bond connection category for atoms in adjacent residues.
+
+  Args:
+    atom_pre: Atom name in previous residue.
+    atom_next: Atom name in next residue.
+    next_res_name: Next residue name for special PRO handling.
+
+  Returns:
+    Integer category (12/13/14/15).
+  """
   # charmm19 rules from EvoEF2
   if atom_pre == "C":
     if atom_next == "N":
@@ -870,6 +1094,16 @@ def _residue_and_next_residue_bond_type(atom_pre: str, atom_next: str, next_res_
 
 
 def _find_ic_for_atom(res: Residue, topologies: Dict[str, ResidueTopology], atom_name: str) -> Optional[CharmmIC]:
+  """Find the IC entry that defines how to build an atom.
+
+  Args:
+    res: Residue to search.
+    topologies: Topology templates.
+    atom_name: Target atom name.
+
+  Returns:
+    Matching IC entry or None.
+  """
   # check patches first
   for patch in res.patches:
     topo = topologies.get(patch)
@@ -888,6 +1122,15 @@ def _find_ic_for_atom(res: Residue, topologies: Dict[str, ResidueTopology], atom
 
 
 def _get_atom_xyz(res: Residue, name: str) -> Optional[np.ndarray]:
+  """Return atom coordinates if present and valid.
+
+  Args:
+    res: Residue containing the atom.
+    name: Atom name.
+
+  Returns:
+    Coordinate array if present and valid, otherwise None.
+  """
   atom = res.get_atom(name)
   if atom is None or not atom.is_xyz_valid:
     return None
@@ -895,6 +1138,18 @@ def _get_atom_xyz(res: Residue, name: str) -> Optional[np.ndarray]:
 
 
 def _calc_atom_xyz(res: Residue, topologies: Dict[str, ResidueTopology], prev_res: Optional[Residue], next_res: Optional[Residue], atom_name: str) -> Optional[np.ndarray]:
+  """Compute coordinates for a missing atom using ICs and neighbors.
+
+  Args:
+    res: Residue owning the atom.
+    topologies: Topology templates.
+    prev_res: Previous residue (if any).
+    next_res: Next residue (if any).
+    atom_name: Atom name to reconstruct.
+
+  Returns:
+    Computed coordinates or None if insufficient references.
+  """
   ic = _find_ic_for_atom(res, topologies, atom_name)
   if ic is None:
     return None
@@ -917,6 +1172,14 @@ def _calc_atom_xyz(res: Residue, topologies: Dict[str, ResidueTopology], prev_re
 
 
 def residue_calc_all_atom_xyz(res: Residue, topologies: Dict[str, ResidueTopology], prev_res: Optional[Residue], next_res: Optional[Residue]) -> None:
+  """Rebuild all missing atoms in a residue using IC parameters.
+
+  Args:
+    res: Residue to rebuild.
+    topologies: Topology templates.
+    prev_res: Previous residue (if any).
+    next_res: Next residue (if any).
+  """
   done = False
   while not done:
     done = True
@@ -932,6 +1195,12 @@ def residue_calc_all_atom_xyz(res: Residue, topologies: Dict[str, ResidueTopolog
 
 
 def chain_calc_all_atom_xyz(chain: Chain, topologies: Dict[str, ResidueTopology]) -> None:
+  """Rebuild missing atoms for every residue in a chain.
+
+  Args:
+    chain: Chain to rebuild.
+    topologies: Topology templates.
+  """
   for i, res in enumerate(chain.residues):
     prev_res = chain.residues[i - 1] if i > 0 else None
     next_res = chain.residues[i + 1] if i < len(chain.residues) - 1 else None
@@ -939,6 +1208,15 @@ def chain_calc_all_atom_xyz(chain: Chain, topologies: Dict[str, ResidueTopology]
 
 
 def _apply_patch(res: Residue, patch_name: str, params: Dict[str, Dict[str, AtomParam]], topologies: Dict[str, ResidueTopology], delete_o: bool = True) -> None:
+  """Apply a topology patch (NTER/CTER/disulfide) to a residue.
+
+  Args:
+    res: Residue to modify.
+    patch_name: Patch name in topology (e.g., NTER, CTER, GLYP).
+    params: Parameter table for atoms.
+    topologies: Topology templates.
+    delete_o: Whether to delete terminal O atom when patching.
+  """
   topo = topologies.get(patch_name)
   if topo is None:
     raise ValueError(f"Missing topology for patch {patch_name}")
@@ -976,6 +1254,14 @@ def _apply_patch(res: Residue, patch_name: str, params: Dict[str, Dict[str, Atom
 
 
 def _patch_nter_or_cter(res: Residue, params: Dict[str, Dict[str, AtomParam]], topologies: Dict[str, ResidueTopology], terminus: str) -> None:
+  """Apply N- or C-terminus patching rules to a residue.
+
+  Args:
+    res: Residue to modify.
+    params: Parameter table for atoms.
+    topologies: Topology templates.
+    terminus: Either "NTER" or "CTER".
+  """
   if terminus == "NTER":
     if res.name == "GLY":
       _apply_patch(res, "GLYP", params, topologies)
@@ -1001,6 +1287,12 @@ def _patch_nter_or_cter(res: Residue, params: Dict[str, Dict[str, AtomParam]], t
 
 
 def _add_atoms_from_params(res: Residue, params: Dict[str, Dict[str, AtomParam]]) -> None:
+  """Populate residue atoms from parameter tables.
+
+  Args:
+    res: Residue to populate.
+    params: Parameter table for atoms.
+  """
   if res.name not in params:
     return
   for atom_name, param in params[res.name].items():
@@ -1014,6 +1306,12 @@ def _add_atoms_from_params(res: Residue, params: Dict[str, Dict[str, AtomParam]]
 
 
 def _add_bonds_from_topology(res: Residue, topologies: Dict[str, ResidueTopology]) -> None:
+  """Populate residue bonds from topology templates.
+
+  Args:
+    res: Residue to populate.
+    topologies: Topology templates.
+  """
   topo = topologies.get(res.name)
   if topo is None:
     return
@@ -1026,8 +1324,19 @@ def rebuild_missing_atoms(
   param_path: Optional[Path] = None,
   topo_path: Optional[Path] = None,
 ) -> Structure:
+  """Rebuild missing heavy atoms and hydrogens using EvoEF2 topology.
+
+  Args:
+    structure: Protein object, Structure, or PDB/mmCIF path.
+    param_path: Optional parameter file override.
+    topo_path: Optional topology file override.
+
+  Returns:
+    Structure with missing atoms reconstructed where possible.
+  """
   params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
+  # Normalize input into a Protein object for consistent parsing.
   protein = structure if isinstance(structure, Protein) else Protein(structure, format="auto")
   df = protein.df
   df = df[df["model"] == protein.models()[0]]
@@ -1039,12 +1348,14 @@ def rebuild_missing_atoms(
     ligand_residues: List[Residue] = []
     current_key = None
     current_rows = []
+    # Build residues from PDB rows while preserving atom coordinates.
     for _, row in df_chain.iterrows():
       key = (row["res_id"], row["res_name"])
       if current_key is None:
         current_key = key
       if key != current_key:
         res_id, res_name = current_key
+        # Normalize histidine names to EvoEF2 protonation variants.
         if res_name == "HIS":
           res_name = "HSD"
         elif res_name == "HIE":
@@ -1053,6 +1364,7 @@ def rebuild_missing_atoms(
           res_name = "HSP"
         is_protein = res_name in AA_THREE_TO_ONE
         res = Residue(name=res_name, chain=chain_id, pos=int(res_id), is_protein=is_protein)
+        # Initialize residue with full atom set and topology bonds.
         _add_atoms_from_params(res, params)
         _add_bonds_from_topology(res, topologies)
         if res_name not in params and current_rows:
@@ -1105,10 +1417,13 @@ def rebuild_missing_atoms(
 
     if protein_residues:
       chain = Chain(name=chain_id, residues=protein_residues, is_protein=True)
+      # Apply termini patches before rebuilding missing atoms.
       _patch_nter_or_cter(protein_residues[0], params, topologies, "NTER")
       if protein_residues[0].get_atom("HT1") is not None or protein_residues[0].get_atom("HN1") is not None:
         _patch_nter_or_cter(protein_residues[-1], params, topologies, "CTER")
+      # Rebuild missing heavy atoms and hydrogens from ICs.
       chain_calc_all_atom_xyz(chain, topologies)
+      # Cache sidechain torsions for Dunbrack scoring.
       for res in chain.residues:
         residue_calc_sidechain_torsions(res, topologies)
       chains.append(chain)
@@ -1127,10 +1442,24 @@ def rebuild_missing_atoms(
 
 
 def energy_term_initialize() -> List[float]:
+  """Allocate a zeroed energy term vector.
+
+  Returns:
+    List sized to MAX_EVOEF_ENERGY_TERM_NUM.
+  """
   return [0.0] * MAX_EVOEF_ENERGY_TERM_NUM
 
 
 def energy_term_weighting(energy_terms: List[float], weights: List[float]) -> List[float]:
+  """Apply weights to energy terms and populate the total term.
+
+  Args:
+    energy_terms: Unweighted energy terms.
+    weights: Weight vector indexed by EvoEF2 term index.
+
+  Returns:
+    Weighted energy terms with total at index 0.
+  """
   weighted = energy_terms[:]
   total = 0.0
   for i in range(1, MAX_EVOEF_ENERGY_TERM_NUM):
@@ -1141,6 +1470,17 @@ def energy_term_weighting(energy_terms: List[float], weights: List[float]) -> Li
 
 
 def _vdw_att(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> float:
+  """Attractive part of the VDW potential with EvoEF2 smoothing.
+
+  Args:
+    atom1: First atom.
+    atom2: Second atom.
+    distance: Inter-atomic distance (Angstrom).
+    bond_type: Connection category (12/13/14/15).
+
+  Returns:
+    VDW attractive energy contribution.
+  """
   if distance >= ENERGY_DISTANCE_CUTOFF or bond_type in (12, 13):
     return 0.0
   if atom1.is_h or atom2.is_h:
@@ -1170,6 +1510,17 @@ def _vdw_att(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> float
 
 
 def _vdw_rep(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> float:
+  """Repulsive part of the VDW potential with EvoEF2 smoothing.
+
+  Args:
+    atom1: First atom.
+    atom2: Second atom.
+    distance: Inter-atomic distance (Angstrom).
+    bond_type: Connection category (12/13/14/15).
+
+  Returns:
+    VDW repulsive energy contribution.
+  """
   if bond_type in (12, 13):
     return 0.0
   rmin = RADIUS_SCALE_FOR_VDW * (atom1.vdw_radius + atom2.vdw_radius)
@@ -1194,6 +1545,19 @@ def _vdw_rep(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> float
 
 
 def _hbond(atom_h: Atom, atom_a: Atom, atom_d: Atom, atom_b: Atom, distance_ha: float, bond_type: int) -> Tuple[float, float, float, float]:
+  """Compute hydrogen-bond energy and its geometric components.
+
+  Args:
+    atom_h: Hydrogen atom (donor).
+    atom_a: Acceptor atom.
+    atom_d: Donor heavy atom.
+    atom_b: Acceptor base atom.
+    distance_ha: H...A distance.
+    bond_type: Connection category (12/13/14/15).
+
+  Returns:
+    Tuple of (total, distance, theta, phi) energy components.
+  """
   if bond_type in (12, 13):
     return 0.0, 0.0, 0.0, 0.0
   if distance_ha > HBOND_DISTANCE_CUTOFF_MAX:
@@ -1234,6 +1598,17 @@ def _hbond(atom_h: Atom, atom_a: Atom, atom_d: Atom, atom_b: Atom, distance_ha: 
 
 
 def _electro(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> float:
+  """Coulombic electrostatics with EvoEF2 cutoffs and scaling.
+
+  Args:
+    atom1: First atom.
+    atom2: Second atom.
+    distance: Inter-atomic distance (Angstrom).
+    bond_type: Connection category (12/13/14/15).
+
+  Returns:
+    Electrostatic energy contribution.
+  """
   if bond_type in (12, 13) or distance > ELEC_DISTANCE_CUTOFF:
     return 0.0
   if abs(atom1.charge) < 1e-2 or abs(atom2.charge) < 1e-2:
@@ -1247,6 +1622,17 @@ def _electro(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> float
 
 
 def _lk_desolv(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> Tuple[float, float]:
+  """Lazaridis-Karplus desolvation split into polar/hydrophobic parts.
+
+  Args:
+    atom1: First atom.
+    atom2: Second atom.
+    distance: Inter-atomic distance (Angstrom).
+    bond_type: Connection category (12/13/14/15).
+
+  Returns:
+    Tuple of (polar, hydrophobic) desolvation energies.
+  """
   if bond_type in (12, 13):
     return 0.0, 0.0
   if atom1.is_h or atom2.is_h:
@@ -1285,6 +1671,19 @@ def _lk_desolv(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> Tup
 
 
 def _ssbond(atom_s1: Atom, atom_s2: Atom, atom_cb1: Atom, atom_cb2: Atom, atom_ca1: Atom, atom_ca2: Atom) -> float:
+  """Compute disulfide bond energy using EvoEF2 geometry terms.
+
+  Args:
+    atom_s1: SG atom from residue 1.
+    atom_s2: SG atom from residue 2.
+    atom_cb1: CB atom from residue 1.
+    atom_cb2: CB atom from residue 2.
+    atom_ca1: CA atom from residue 1.
+    atom_ca2: CA atom from residue 2.
+
+  Returns:
+    Disulfide energy contribution (non-positive).
+  """
   dss = xyz_distance(atom_s1.xyz, atom_s2.xyz)
   a_c1s1s2 = rad_to_deg(PI - xyz_angle(atom_s1.xyz - atom_s2.xyz, atom_s2.xyz - atom_cb2.xyz))
   a_c2s2s1 = rad_to_deg(PI - xyz_angle(atom_cb1.xyz - atom_s1.xyz, atom_s1.xyz - atom_s2.xyz))
@@ -1306,6 +1705,12 @@ def _ssbond(atom_s1: Atom, atom_s2: Atom, atom_cb1: Atom, atom_cb2: Atom, atom_c
 
 
 def _aa_reference_energy(res: Residue, terms: List[float]) -> None:
+  """Accumulate amino-acid reference counts for a residue.
+
+  Args:
+    res: Residue to score.
+    terms: Energy term accumulator.
+  """
   name = res.name
   if name == "ALA":
     terms[1] += 1.0
@@ -1350,6 +1755,14 @@ def _aa_reference_energy(res: Residue, terms: List[float]) -> None:
 
 
 def _aa_propensity_ramachandran(res: Residue, aap: AAppTable, rama: RamaTable, terms: List[float]) -> None:
+  """Accumulate AA propensity and Ramachandran energies for a residue.
+
+  Args:
+    res: Residue with phi/psi assigned.
+    aap: Amino-acid propensity table.
+    rama: Ramachandran table.
+    terms: Energy term accumulator.
+  """
   aa1 = AA_THREE_TO_ONE.get(res.name)
   if aa1 is None:
     return
@@ -1366,6 +1779,13 @@ def _aa_propensity_ramachandran(res: Residue, aap: AAppTable, rama: RamaTable, t
 
 
 def _aa_dunbrack(res: Residue, dun: DunbrackLibrary, terms: List[float]) -> None:
+  """Accumulate Dunbrack rotamer energy for a residue.
+
+  Args:
+    res: Residue with sidechain torsions computed.
+    dun: Dunbrack library.
+    terms: Energy term accumulator.
+  """
   if res.name in {"ALA", "GLY"}:
     terms[93] += 0.0
     return
@@ -1414,6 +1834,11 @@ def _aa_dunbrack(res: Residue, dun: DunbrackLibrary, terms: List[float]) -> None
 
 
 def _calc_phi_psi(chain: Chain) -> None:
+  """Compute phi/psi angles for each residue in a chain.
+
+  Args:
+    chain: Chain to annotate with torsion angles.
+  """
   for i, res in enumerate(chain.residues):
     phi = -60.0
     psi = 60.0
@@ -1439,6 +1864,12 @@ def _calc_phi_psi(chain: Chain) -> None:
 
 
 def _residue_intra_energy(res: Residue, terms: List[float]) -> None:
+  """Compute intra-residue nonbonded and H-bond terms.
+
+  Args:
+    res: Residue to score.
+    terms: Energy term accumulator.
+  """
   atoms = list(res.atoms.values())
   for i, a1 in enumerate(atoms):
     if not a1.is_xyz_valid:
@@ -1492,6 +1923,13 @@ def _residue_intra_energy(res: Residue, terms: List[float]) -> None:
 
 
 def _residue_and_next_energy(res: Residue, other: Residue, terms: List[float]) -> None:
+  """Compute energy between sequential residues in a chain.
+
+  Args:
+    res: Current residue.
+    other: Next residue in the chain.
+    terms: Energy term accumulator.
+  """
   for a1 in res.atoms.values():
     if not a1.is_xyz_valid:
       continue
@@ -1576,6 +2014,13 @@ def _residue_and_next_energy(res: Residue, other: Residue, terms: List[float]) -
 
 
 def _residue_other_same_chain(res: Residue, other: Residue, terms: List[float]) -> None:
+  """Compute energy between non-adjacent residues in the same chain.
+
+  Args:
+    res: First residue.
+    other: Second residue (non-adjacent).
+    terms: Energy term accumulator.
+  """
   for a1 in res.atoms.values():
     if not a1.is_xyz_valid:
       continue
@@ -1635,6 +2080,13 @@ def _residue_other_same_chain(res: Residue, other: Residue, terms: List[float]) 
 
 
 def _residue_other_diff_chain(res: Residue, other: Residue, terms: List[float]) -> None:
+  """Compute inter-chain residue-residue energy terms.
+
+  Args:
+    res: Residue in chain A.
+    other: Residue in chain B.
+    terms: Energy term accumulator.
+  """
   for a1 in res.atoms.values():
     if not a1.is_xyz_valid:
       continue
@@ -1690,6 +2142,13 @@ def _residue_other_diff_chain(res: Residue, other: Residue, terms: List[float]) 
 
 
 def _residue_and_ligand_energy(res: Residue, ligand: Residue, terms: List[float]) -> None:
+  """Compute protein-ligand energy terms for a residue/ligand pair.
+
+  Args:
+    res: Protein residue.
+    ligand: Ligand residue.
+    terms: Energy term accumulator.
+  """
   for a1 in res.atoms.values():
     if not a1.is_xyz_valid:
       continue
@@ -1743,6 +2202,20 @@ def calculate_stability(
   ramachandran_path: Optional[Path] = None,
   dunbrack_path: Optional[Path] = None,
 ) -> Dict[str, float]:
+  """Compute EvoEF2 stability energy for a structure.
+
+  Args:
+    structure: Protein object or PDB/mmCIF path.
+    param_path: Optional parameter file override.
+    topo_path: Optional topology file override.
+    weight_path: Optional weights file override.
+    aapropensity_path: Optional AA propensity table override.
+    ramachandran_path: Optional Ramachandran table override.
+    dunbrack_path: Optional Dunbrack library override.
+
+  Returns:
+    Dict of all weighted energy terms plus the total.
+  """
   params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
   weights = load_weights(weight_path)
@@ -1753,14 +2226,16 @@ def calculate_stability(
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
   for chain in evo_struct.chains:
     if chain.is_protein:
+      # Phi/psi angles are required for Ramachandran and Dunbrack terms.
       _calc_phi_psi(chain)
 
   terms = energy_term_initialize()
-  # compute stability across the whole structure
+  # Compute stability across the whole structure.
   for chain in evo_struct.chains:
     for i, res in enumerate(chain.residues):
       if not res.is_protein:
         continue
+      # Per-residue reference and internal terms.
       _aa_reference_energy(res, terms)
       _residue_intra_energy(res, terms)
       _aa_propensity_ramachandran(res, aap, rama, terms)
@@ -1769,6 +2244,7 @@ def calculate_stability(
       for j in range(i + 1, len(chain.residues)):
         other = chain.residues[j]
         if j == i + 1:
+          # Adjacent residues use special 1-4 scaling rules.
           _residue_and_next_energy(res, other, terms)
         else:
           _residue_other_same_chain(res, other, terms)
@@ -1798,6 +2274,19 @@ def calculate_interface_energy(
   topo_path: Optional[Path] = None,
   weight_path: Optional[Path] = None,
 ) -> Dict[str, float]:
+  """Compute interface energy between two chain groups.
+
+  Args:
+    structure: Protein object or PDB/mmCIF path.
+    split1: Chain IDs for group 1.
+    split2: Chain IDs for group 2.
+    param_path: Optional parameter file override.
+    topo_path: Optional topology file override.
+    weight_path: Optional weights file override.
+
+  Returns:
+    Dict of weighted inter-chain energy terms plus the total.
+  """
   weights = load_weights(weight_path)
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
   terms = energy_term_initialize()
@@ -1832,6 +2321,22 @@ def calculate_binding(
   ramachandran_path: Optional[Path] = None,
   dunbrack_path: Optional[Path] = None,
 ) -> Dict[str, Dict[str, float]]:
+  """Compute interface energy and DG_bind for two chain groups.
+
+  Args:
+    structure: Protein object or PDB/mmCIF path.
+    split1: Chain IDs for group 1.
+    split2: Chain IDs for group 2.
+    param_path: Optional parameter file override.
+    topo_path: Optional topology file override.
+    weight_path: Optional weights file override.
+    aapropensity_path: Optional AA propensity table override.
+    ramachandran_path: Optional Ramachandran table override.
+    dunbrack_path: Optional Dunbrack library override.
+
+  Returns:
+    Dict with interface energy, complex stability, split stabilities, and DG_bind.
+  """
   # returns interface energy and DG_bind by stability difference
   interface = calculate_interface_energy(
     structure,
@@ -1887,6 +2392,18 @@ def _calculate_stability_from_structure(
   ramachandran_path: Optional[Path] = None,
   dunbrack_path: Optional[Path] = None,
 ) -> Dict[str, float]:
+  """Compute stability energy from a pre-built Structure.
+
+  Args:
+    evo_struct: Structure with atoms already reconstructed.
+    weight_path: Optional weights file override.
+    aapropensity_path: Optional AA propensity table override.
+    ramachandran_path: Optional Ramachandran table override.
+    dunbrack_path: Optional Dunbrack library override.
+
+  Returns:
+    Dict of weighted energy terms plus the total.
+  """
   weights = load_weights(weight_path)
   aap = load_aapropensity(aapropensity_path)
   rama = load_ramachandran(ramachandran_path)
@@ -1925,6 +2442,14 @@ def _calculate_stability_from_structure(
 
 
 def _energy_terms_to_dict(energy_terms: List[float]) -> Dict[str, float]:
+  """Convert the energy term vector to a stable, named dict.
+
+  Args:
+    energy_terms: Vector indexed by EvoEF2 term indices.
+
+  Returns:
+    Dict ordered by EvoEF2 term names, including total.
+  """
   result: Dict[str, float] = {}
   result[ENERGY_TERM_NAMES[0]] = energy_terms[0]
   for idx in ENERGY_TERM_ORDER:
@@ -1933,6 +2458,16 @@ def _energy_terms_to_dict(energy_terms: List[float]) -> Dict[str, float]:
 
 
 def _subtract_energy_dicts(full: Dict[str, float], a: Dict[str, float], b: Dict[str, float]) -> Dict[str, float]:
+  """Compute DG_bind-style subtraction: full - a - b.
+
+  Args:
+    full: Energy dict for the complex.
+    a: Energy dict for chain group 1.
+    b: Energy dict for chain group 2.
+
+  Returns:
+    Dict with per-term subtraction results.
+  """
   result: Dict[str, float] = {}
   for key in full.keys():
     result[key] = full.get(key, 0.0) - a.get(key, 0.0) - b.get(key, 0.0)
@@ -1946,6 +2481,17 @@ def debug_evoef2_structure(
   topo_path: Optional[Path] = None,
   dunbrack_path: Optional[Path] = None,
 ) -> Dict[str, float]:
+  """Collect reconstruction and torsion diagnostics for a structure.
+
+  Args:
+    structure: Protein object or PDB/mmCIF path.
+    param_path: Optional parameter file override.
+    topo_path: Optional topology file override.
+    dunbrack_path: Optional Dunbrack library override.
+
+  Returns:
+    Dict with counts for missing atoms, torsions, and Dunbrack coverage.
+  """
   params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
   dun = load_dunbrack(dunbrack_path)

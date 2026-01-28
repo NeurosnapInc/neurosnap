@@ -458,7 +458,7 @@ def xyz_rotate_around(p: np.ndarray, axis_from: np.ndarray, axis_to: np.ndarray,
   a21 = n[1] * n[2] * (1 - c) + n[0] * s
   a22 = n[2] * n[2] + (1 - n[2] * n[2]) * c
   m = np.array([[a00, a01, a02], [a10, a11, a12], [a20, a21, a22]], dtype=float)
-  result = result @ m.T
+  result = result @ m
   return result + axis_from
 
 
@@ -490,9 +490,10 @@ def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
     return 0.0
   cos_value = float(np.dot(r_ab_x_rbc, r_bc_x_rcd) / norm1 / norm2)
   sin_value = float(np.dot(r_bc, r_cd_x_rab))
+  angle = safe_acos(cos_value)
   if sin_value < 0:
-    return -safe_acos(cos_value)
-  return safe_acos(cos_value)
+    angle = -angle
+  return -angle
 
 
 # -----------------------------
@@ -1033,9 +1034,48 @@ def rebuild_missing_atoms(
 
   chains: List[Chain] = []
   for chain_id in sorted(df["chain"].unique()):
-    df_chain = df[df["chain"] == chain_id]
-    residues: List[Residue] = []
-    for (res_id, res_name), df_res in df_chain.groupby(["res_id", "res_name"], sort=True):
+    df_chain = df[df["chain"] == chain_id].reset_index(drop=True)
+    protein_residues: List[Residue] = []
+    ligand_residues: List[Residue] = []
+    current_key = None
+    current_rows = []
+    for _, row in df_chain.iterrows():
+      key = (row["res_id"], row["res_name"])
+      if current_key is None:
+        current_key = key
+      if key != current_key:
+        res_id, res_name = current_key
+        if res_name == "HIS":
+          res_name = "HSD"
+        elif res_name == "HIE":
+          res_name = "HSE"
+        elif res_name == "HIP":
+          res_name = "HSP"
+        is_protein = res_name in AA_THREE_TO_ONE
+        res = Residue(name=res_name, chain=chain_id, pos=int(res_id), is_protein=is_protein)
+        _add_atoms_from_params(res, params)
+        _add_bonds_from_topology(res, topologies)
+        if res_name not in params and current_rows:
+          logger.warning("No EvoEF2 parameters for residue %s; skipping parameterization for its atoms.", res_name)
+        for r in current_rows:
+          atom_name = r["atom_name"]
+          if atom_name not in res.atoms:
+            if res_name in params and atom_name in params[res_name]:
+              res.atoms[atom_name] = Atom(name=atom_name, param=params[res_name][atom_name], chain=chain_id, pos=int(res_id))
+            else:
+              continue
+          atom = res.atoms[atom_name]
+          atom.xyz = np.array([r["x"], r["y"], r["z"]], dtype=float)
+          atom.is_xyz_valid = True
+        if is_protein:
+          protein_residues.append(res)
+        else:
+          ligand_residues.append(res)
+        current_key = key
+        current_rows = []
+      current_rows.append(row)
+    if current_key is not None:
+      res_id, res_name = current_key
       if res_name == "HIS":
         res_name = "HSD"
       elif res_name == "HIE":
@@ -1046,33 +1086,37 @@ def rebuild_missing_atoms(
       res = Residue(name=res_name, chain=chain_id, pos=int(res_id), is_protein=is_protein)
       _add_atoms_from_params(res, params)
       _add_bonds_from_topology(res, topologies)
-      # set coordinates from PDB
-      if res_name not in params and not df_res.empty:
+      if res_name not in params and current_rows:
         logger.warning("No EvoEF2 parameters for residue %s; skipping parameterization for its atoms.", res_name)
-      for _, row in df_res.iterrows():
-        atom_name = row["atom_name"]
+      for r in current_rows:
+        atom_name = r["atom_name"]
         if atom_name not in res.atoms:
           if res_name in params and atom_name in params[res_name]:
             res.atoms[atom_name] = Atom(name=atom_name, param=params[res_name][atom_name], chain=chain_id, pos=int(res_id))
           else:
             continue
         atom = res.atoms[atom_name]
-        atom.xyz = np.array([row["x"], row["y"], row["z"]], dtype=float)
+        atom.xyz = np.array([r["x"], r["y"], r["z"]], dtype=float)
         atom.is_xyz_valid = True
-      residues.append(res)
-    chain_is_protein = any(r.is_protein for r in residues)
-    chain = Chain(name=chain_id, residues=residues, is_protein=chain_is_protein)
-    # patch NTER and CTER for protein chains
-    if chain.is_protein and residues:
-      _patch_nter_or_cter(residues[0], params, topologies, "NTER")
-      if residues[0].get_atom("HT1") is not None or residues[0].get_atom("HN1") is not None:
-        _patch_nter_or_cter(residues[-1], params, topologies, "CTER")
-    chain_calc_all_atom_xyz(chain, topologies)
-    if chain.is_protein:
+      if is_protein:
+        protein_residues.append(res)
+      else:
+        ligand_residues.append(res)
+
+    if protein_residues:
+      chain = Chain(name=chain_id, residues=protein_residues, is_protein=True)
+      _patch_nter_or_cter(protein_residues[0], params, topologies, "NTER")
+      if protein_residues[0].get_atom("HT1") is not None or protein_residues[0].get_atom("HN1") is not None:
+        _patch_nter_or_cter(protein_residues[-1], params, topologies, "CTER")
+      chain_calc_all_atom_xyz(chain, topologies)
       for res in chain.residues:
-        if res.is_protein:
-          residue_calc_sidechain_torsions(res, topologies)
-    chains.append(chain)
+        residue_calc_sidechain_torsions(res, topologies)
+      chains.append(chain)
+
+    if ligand_residues:
+      lig_chain = Chain(name=f"{chain_id}_L", residues=ligand_residues, is_protein=False)
+      chain_calc_all_atom_xyz(lig_chain, topologies)
+      chains.append(lig_chain)
 
   return Structure(chains=chains)
 
@@ -1697,12 +1741,14 @@ def calculate_stability(
   weight_path: Optional[Path] = None,
   aapropensity_path: Optional[Path] = None,
   ramachandran_path: Optional[Path] = None,
+  dunbrack_path: Optional[Path] = None,
 ) -> Dict[str, float]:
   params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
   weights = load_weights(weight_path)
   aap = load_aapropensity(aapropensity_path)
   rama = load_ramachandran(ramachandran_path)
+  dun = load_dunbrack(dunbrack_path)
 
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
   for chain in evo_struct.chains:
@@ -1718,6 +1764,7 @@ def calculate_stability(
       _aa_reference_energy(res, terms)
       _residue_intra_energy(res, terms)
       _aa_propensity_ramachandran(res, aap, rama, terms)
+      _aa_dunbrack(res, dun, terms)
       # same-chain pairs
       for j in range(i + 1, len(chain.residues)):
         other = chain.residues[j]
@@ -1783,6 +1830,7 @@ def calculate_binding(
   weight_path: Optional[Path] = None,
   aapropensity_path: Optional[Path] = None,
   ramachandran_path: Optional[Path] = None,
+  dunbrack_path: Optional[Path] = None,
 ) -> Dict[str, Dict[str, float]]:
   # returns interface energy and DG_bind by stability difference
   interface = calculate_interface_energy(
@@ -1801,6 +1849,7 @@ def calculate_binding(
     weight_path=weight_path,
     aapropensity_path=aapropensity_path,
     ramachandran_path=ramachandran_path,
+    dunbrack_path=dunbrack_path,
   )
   # compute stability by filtering chains in a single rebuilt structure
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
@@ -1811,12 +1860,14 @@ def calculate_binding(
     weight_path=weight_path,
     aapropensity_path=aapropensity_path,
     ramachandran_path=ramachandran_path,
+    dunbrack_path=dunbrack_path,
   )
   split2_energy = _calculate_stability_from_structure(
     split2_struct,
     weight_path=weight_path,
     aapropensity_path=aapropensity_path,
     ramachandran_path=ramachandran_path,
+    dunbrack_path=dunbrack_path,
   )
   dg_bind = _subtract_energy_dicts(full, split1_energy, split2_energy)
   return {
@@ -1834,10 +1885,12 @@ def _calculate_stability_from_structure(
   weight_path: Optional[Path] = None,
   aapropensity_path: Optional[Path] = None,
   ramachandran_path: Optional[Path] = None,
+  dunbrack_path: Optional[Path] = None,
 ) -> Dict[str, float]:
   weights = load_weights(weight_path)
   aap = load_aapropensity(aapropensity_path)
   rama = load_ramachandran(ramachandran_path)
+  dun = load_dunbrack(dunbrack_path)
   for chain in evo_struct.chains:
     if chain.is_protein:
       _calc_phi_psi(chain)
@@ -1849,6 +1902,7 @@ def _calculate_stability_from_structure(
       _aa_reference_energy(res, terms)
       _residue_intra_energy(res, terms)
       _aa_propensity_ramachandran(res, aap, rama, terms)
+      _aa_dunbrack(res, dun, terms)
       for j in range(i + 1, len(chain.residues)):
         other = chain.residues[j]
         if j == i + 1:
@@ -1883,3 +1937,81 @@ def _subtract_energy_dicts(full: Dict[str, float], a: Dict[str, float], b: Dict[
   for key in full.keys():
     result[key] = full.get(key, 0.0) - a.get(key, 0.0) - b.get(key, 0.0)
   return result
+
+
+def debug_evoef2_structure(
+  structure: Union[Protein, str, Path],
+  *,
+  param_path: Optional[Path] = None,
+  topo_path: Optional[Path] = None,
+  dunbrack_path: Optional[Path] = None,
+) -> Dict[str, float]:
+  params = load_atom_params(param_path)
+  topologies = load_topology(topo_path)
+  dun = load_dunbrack(dunbrack_path)
+  evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
+  for chain in evo_struct.chains:
+    if chain.is_protein:
+      _calc_phi_psi(chain)
+      for res in chain.residues:
+        residue_calc_sidechain_torsions(res, topologies)
+
+  total_atoms = 0
+  valid_atoms = 0
+  missing_atoms = 0
+  missing_h_atoms = 0
+  hb_h_atoms = 0
+  hb_a_atoms = 0
+  residues_with_default_phipsi = 0
+  protein_residues = 0
+  torsion_expected = 0
+  torsion_missing = 0
+  dunbrack_bins = 0
+  dunbrack_missing = 0
+
+  for chain in evo_struct.chains:
+    for res in chain.residues:
+      if res.is_protein:
+        protein_residues += 1
+        if res.phipsi == (-60.0, 60.0):
+          residues_with_default_phipsi += 1
+        expected = _DUNBRACK_TORSION_COUNT.get(res.name, 0)
+        torsion_expected += expected
+        if expected > 0 and len(res.xtorsions) == 0:
+          torsion_missing += 1
+        phi = int(res.phipsi[0])
+        psi = int(res.phipsi[1])
+        bin_index = ((phi + 180) // 10) * 36 + ((psi + 180) // 10)
+        if 0 <= bin_index < len(dun.bins):
+          if res.name in dun.bins[bin_index].by_residue:
+            dunbrack_bins += 1
+          else:
+            dunbrack_missing += 1
+
+      for atom in res.atoms.values():
+        total_atoms += 1
+        if atom.is_xyz_valid:
+          valid_atoms += 1
+        else:
+          missing_atoms += 1
+          if atom.is_h:
+            missing_h_atoms += 1
+        if atom.is_hbond_h:
+          hb_h_atoms += 1
+        if atom.is_hbond_a:
+          hb_a_atoms += 1
+
+  return {
+    "total_atoms": total_atoms,
+    "valid_atoms": valid_atoms,
+    "missing_atoms": missing_atoms,
+    "missing_h_atoms": missing_h_atoms,
+    "hb_h_atoms": hb_h_atoms,
+    "hb_a_atoms": hb_a_atoms,
+    "protein_residues": protein_residues,
+    "default_phipsi_residues": residues_with_default_phipsi,
+    "torsion_expected_total": torsion_expected,
+    "torsion_missing_residues": torsion_missing,
+    "dunbrack_bins_with_residue": dunbrack_bins,
+    "dunbrack_bins_missing_residue": dunbrack_missing,
+  }

@@ -293,6 +293,7 @@ class Atom:
     param: Parameter record used for scoring.
     chain: Chain identifier for the parent residue.
     pos: Residue index within chain (0-based in this structure).
+    res: Parent residue reference (for H-bond donor/base lookup).
     xyz: Cartesian coordinate in Angstrom.
     is_xyz_valid: Whether the coordinate is present or reconstructed.
     is_in_hbond: Flag used during H-bond detection to avoid double counting.
@@ -301,6 +302,7 @@ class Atom:
   param: AtomParam
   chain: str
   pos: int
+  res: Optional["Residue"] = None
   xyz: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
   is_xyz_valid: bool = False
   is_in_hbond: bool = False
@@ -1232,9 +1234,17 @@ def _apply_patch(res: Residue, patch_name: str, params: Dict[str, Dict[str, Atom
         atom = res.atoms[atom_name]
         xyz = atom.xyz.copy()
         valid = atom.is_xyz_valid
-        res.atoms[atom_name] = Atom(name=atom_name, param=param, chain=res.chain, pos=res.pos, xyz=xyz, is_xyz_valid=valid)
+        res.atoms[atom_name] = Atom(
+          name=atom_name,
+          param=param,
+          chain=res.chain,
+          pos=res.pos,
+          res=res,
+          xyz=xyz,
+          is_xyz_valid=valid,
+        )
       else:
-        res.atoms[atom_name] = Atom(name=atom_name, param=param, chain=res.chain, pos=res.pos)
+        res.atoms[atom_name] = Atom(name=atom_name, param=param, chain=res.chain, pos=res.pos, res=res)
   # record patch order (head)
   res.patches.insert(0, patch_name)
   # add bonds
@@ -1297,12 +1307,20 @@ def _add_atoms_from_params(res: Residue, params: Dict[str, Dict[str, AtomParam]]
     return
   for atom_name, param in params[res.name].items():
     if atom_name not in res.atoms:
-      res.atoms[atom_name] = Atom(name=atom_name, param=param, chain=res.chain, pos=res.pos)
+      res.atoms[atom_name] = Atom(name=atom_name, param=param, chain=res.chain, pos=res.pos, res=res)
     else:
       atom = res.atoms[atom_name]
       xyz = atom.xyz.copy()
       valid = atom.is_xyz_valid
-      res.atoms[atom_name] = Atom(name=atom_name, param=param, chain=res.chain, pos=res.pos, xyz=xyz, is_xyz_valid=valid)
+      res.atoms[atom_name] = Atom(
+        name=atom_name,
+        param=param,
+        chain=res.chain,
+        pos=res.pos,
+        res=res,
+        xyz=xyz,
+        is_xyz_valid=valid,
+      )
 
 
 def _add_bonds_from_topology(res: Residue, topologies: Dict[str, ResidueTopology]) -> None:
@@ -1373,7 +1391,13 @@ def rebuild_missing_atoms(
           atom_name = r["atom_name"]
           if atom_name not in res.atoms:
             if res_name in params and atom_name in params[res_name]:
-              res.atoms[atom_name] = Atom(name=atom_name, param=params[res_name][atom_name], chain=chain_id, pos=int(res_id))
+              res.atoms[atom_name] = Atom(
+                name=atom_name,
+                param=params[res_name][atom_name],
+                chain=chain_id,
+                pos=int(res_id),
+                res=res,
+              )
             else:
               continue
           atom = res.atoms[atom_name]
@@ -1404,7 +1428,13 @@ def rebuild_missing_atoms(
         atom_name = r["atom_name"]
         if atom_name not in res.atoms:
           if res_name in params and atom_name in params[res_name]:
-            res.atoms[atom_name] = Atom(name=atom_name, param=params[res_name][atom_name], chain=chain_id, pos=int(res_id))
+            res.atoms[atom_name] = Atom(
+              name=atom_name,
+              param=params[res_name][atom_name],
+              chain=chain_id,
+              pos=int(res_id),
+              res=res,
+            )
           else:
             continue
         atom = res.atoms[atom_name]
@@ -1421,6 +1451,10 @@ def rebuild_missing_atoms(
       _patch_nter_or_cter(protein_residues[0], params, topologies, "NTER")
       if protein_residues[0].get_atom("HT1") is not None or protein_residues[0].get_atom("HN1") is not None:
         _patch_nter_or_cter(protein_residues[-1], params, topologies, "CTER")
+      # Ensure atoms reference their parent residue (used in H-bond lookups).
+      for res in chain.residues:
+        for atom in res.atoms.values():
+          atom.res = res
       # Rebuild missing heavy atoms and hydrogens from ICs.
       chain_calc_all_atom_xyz(chain, topologies)
       # Cache sidechain torsions for Dunbrack scoring.
@@ -1430,6 +1464,9 @@ def rebuild_missing_atoms(
 
     if ligand_residues:
       lig_chain = Chain(name=f"{chain_id}_L", residues=ligand_residues, is_protein=False)
+      for res in lig_chain.residues:
+        for atom in res.atoms.values():
+          atom.res = res
       chain_calc_all_atom_xyz(lig_chain, topologies)
       chains.append(lig_chain)
 
@@ -1668,6 +1705,142 @@ def _lk_desolv(atom1: Atom, atom2: Atom, distance: float, bond_type: int) -> Tup
   else:
     energy_h += desolv21
   return energy_p, energy_h
+
+
+def _cell_index(xyz: np.ndarray, cell_size: float) -> Tuple[int, int, int]:
+  return (
+    int(math.floor(xyz[0] / cell_size)),
+    int(math.floor(xyz[1] / cell_size)),
+    int(math.floor(xyz[2] / cell_size)),
+  )
+
+
+def _build_cell_list(atoms: Iterable[Atom], cell_size: float) -> Dict[Tuple[int, int, int], List[Atom]]:
+  grid: Dict[Tuple[int, int, int], List[Atom]] = {}
+  for atom in atoms:
+    if not atom.is_xyz_valid:
+      continue
+    key = _cell_index(atom.xyz, cell_size)
+    grid.setdefault(key, []).append(atom)
+  return grid
+
+
+def _iter_neighbor_atoms(atom: Atom, grid: Dict[Tuple[int, int, int], List[Atom]], cell_size: float) -> Iterable[Atom]:
+  key = _cell_index(atom.xyz, cell_size)
+  for dx in (-1, 0, 1):
+    for dy in (-1, 0, 1):
+      for dz in (-1, 0, 1):
+        cell = (key[0] + dx, key[1] + dy, key[2] + dz)
+        for other in grid.get(cell, []):
+          yield other
+
+
+def _collect_atoms(chain: Chain, *, protein_only: Optional[bool] = None) -> List[Atom]:
+  atoms: List[Atom] = []
+  for res in chain.residues:
+    if protein_only is not None and res.is_protein != protein_only:
+      continue
+    for atom in res.atoms.values():
+      if atom.is_xyz_valid:
+        atoms.append(atom)
+  return atoms
+
+
+def _inter_chain_energy(chain_a: Chain, chain_b: Chain, terms: List[float]) -> None:
+  """Compute inter-chain protein-protein energies using a spatial grid."""
+  atoms_a = _collect_atoms(chain_a, protein_only=True)
+  atoms_b = _collect_atoms(chain_b, protein_only=True)
+  if not atoms_a or not atoms_b:
+    return
+  cell_size = ENERGY_DISTANCE_CUTOFF
+  grid_b = _build_cell_list(atoms_b, cell_size)
+  for a1 in atoms_a:
+    for a2 in _iter_neighbor_atoms(a1, grid_b, cell_size):
+      dist = xyz_distance(a1.xyz, a2.xyz)
+      if dist > ENERGY_DISTANCE_CUTOFF:
+        continue
+      bond_type = 15
+      terms[51] += _vdw_att(a1, a2, dist, bond_type)
+      terms[52] += _vdw_rep(a1, a2, dist, bond_type)
+      terms[53] += _electro(a1, a2, dist, bond_type)
+      des_p, des_h = _lk_desolv(a1, a2, dist, bond_type)
+      terms[54] += des_p
+      terms[55] += des_h
+      if dist < HBOND_DISTANCE_CUTOFF_MAX:
+        hbd = hbt = hbp = 0.0
+        if a1.is_hbond_h and a2.is_hbond_a and a1.res and a2.res:
+          atom_d = a1.res.get_atom(a1.hb_d_or_b)
+          atom_b = a2.res.get_atom(a2.hb_d_or_b)
+          if atom_d and atom_b:
+            _, hbd, hbt, hbp = _hbond(a1, a2, atom_d, atom_b, dist, bond_type)
+        elif a2.is_hbond_h and a1.is_hbond_a and a1.res and a2.res:
+          atom_d = a2.res.get_atom(a2.hb_d_or_b)
+          atom_b = a1.res.get_atom(a1.hb_d_or_b)
+          if atom_d and atom_b:
+            _, hbd, hbt, hbp = _hbond(a2, a1, atom_d, atom_b, dist, bond_type)
+        if a1.is_bb and a2.is_bb:
+          terms[61] += hbd
+          terms[62] += hbt
+          terms[63] += hbp
+        elif not a1.is_bb and not a2.is_bb:
+          terms[67] += hbd
+          terms[68] += hbt
+          terms[69] += hbp
+        else:
+          terms[64] += hbd
+          terms[65] += hbt
+          terms[66] += hbp
+      if a1.name == "SG" and a2.name == "SG" and a1.res and a2.res:
+        if a1.res.name == "CYS" and a2.res.name == "CYS":
+          if SSBOND_CUTOFF_MIN < dist < SSBOND_CUTOFF_MAX:
+            cb1 = a1.res.get_atom("CB")
+            cb2 = a2.res.get_atom("CB")
+            ca1 = a1.res.get_atom("CA")
+            ca2 = a2.res.get_atom("CA")
+            if cb1 and cb2 and ca1 and ca2:
+              terms[56] += _ssbond(a1, a2, cb1, cb2, ca1, ca2)
+
+
+def _protein_ligand_energy(protein_chain: Chain, ligand_chain: Chain, terms: List[float]) -> None:
+  """Compute protein-ligand energies using a spatial grid."""
+  atoms_p = _collect_atoms(protein_chain, protein_only=True)
+  atoms_l = _collect_atoms(ligand_chain, protein_only=False)
+  if not atoms_p or not atoms_l:
+    return
+  cell_size = ENERGY_DISTANCE_CUTOFF
+  grid_l = _build_cell_list(atoms_l, cell_size)
+  for a1 in atoms_p:
+    for a2 in _iter_neighbor_atoms(a1, grid_l, cell_size):
+      dist = xyz_distance(a1.xyz, a2.xyz)
+      if dist > ENERGY_DISTANCE_CUTOFF:
+        continue
+      bond_type = 15
+      terms[71] += _vdw_att(a1, a2, dist, bond_type)
+      terms[72] += _vdw_rep(a1, a2, dist, bond_type)
+      terms[73] += _electro(a1, a2, dist, bond_type)
+      des_p, des_h = _lk_desolv(a1, a2, dist, bond_type)
+      terms[74] += des_p
+      terms[75] += des_h
+      if dist < HBOND_DISTANCE_CUTOFF_MAX:
+        hbd = hbt = hbp = 0.0
+        if a1.is_hbond_h and a2.is_hbond_a and a1.res and a2.res:
+          atom_d = a1.res.get_atom(a1.hb_d_or_b)
+          atom_b = a2.res.get_atom(a2.hb_d_or_b)
+          if atom_d and atom_b:
+            _, hbd, hbt, hbp = _hbond(a1, a2, atom_d, atom_b, dist, bond_type)
+        elif a2.is_hbond_h and a1.is_hbond_a and a1.res and a2.res:
+          atom_d = a2.res.get_atom(a2.hb_d_or_b)
+          atom_b = a1.res.get_atom(a1.hb_d_or_b)
+          if atom_d and atom_b:
+            _, hbd, hbt, hbp = _hbond(a2, a1, atom_d, atom_b, dist, bond_type)
+        if not a1.is_bb and not a2.is_bb:
+          terms[84] += hbd
+          terms[85] += hbt
+          terms[86] += hbp
+        else:
+          terms[81] += hbd
+          terms[82] += hbt
+          terms[83] += hbp
 
 
 def _ssbond(atom_s1: Atom, atom_s2: Atom, atom_cb1: Atom, atom_cb2: Atom, atom_ca1: Atom, atom_ca2: Atom) -> float:
@@ -2250,14 +2423,12 @@ def calculate_stability(
   for i, chain_i in enumerate(evo_struct.chains):
     for k in range(i + 1, len(evo_struct.chains)):
       chain_k = evo_struct.chains[k]
-      for res_i in chain_i.residues:
-        for res_k in chain_k.residues:
-          if res_i.is_protein and res_k.is_protein:
-            _residue_other_diff_chain(res_i, res_k, terms)
-          elif res_i.is_protein and not res_k.is_protein:
-            _residue_and_ligand_energy(res_i, res_k, terms)
-          elif not res_i.is_protein and res_k.is_protein:
-            _residue_and_ligand_energy(res_k, res_i, terms)
+      if chain_i.is_protein and chain_k.is_protein:
+        _inter_chain_energy(chain_i, chain_k, terms)
+      elif chain_i.is_protein and not chain_k.is_protein:
+        _protein_ligand_energy(chain_i, chain_k, terms)
+      elif not chain_i.is_protein and chain_k.is_protein:
+        _protein_ligand_energy(chain_k, chain_i, terms)
 
   weighted = energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)
@@ -2295,14 +2466,12 @@ def calculate_interface_energy(
       chain_k = evo_struct.chains[k]
       if not ((chain_i.name in set1 and chain_k.name in set2) or (chain_i.name in set2 and chain_k.name in set1)):
         continue
-      for res_i in chain_i.residues:
-        for res_k in chain_k.residues:
-          if res_i.is_protein and res_k.is_protein:
-            _residue_other_diff_chain(res_i, res_k, terms)
-          elif res_i.is_protein and not res_k.is_protein:
-            _residue_and_ligand_energy(res_i, res_k, terms)
-          elif not res_i.is_protein and res_k.is_protein:
-            _residue_and_ligand_energy(res_k, res_i, terms)
+      if chain_i.is_protein and chain_k.is_protein:
+        _inter_chain_energy(chain_i, chain_k, terms)
+      elif chain_i.is_protein and not chain_k.is_protein:
+        _protein_ligand_energy(chain_i, chain_k, terms)
+      elif not chain_i.is_protein and chain_k.is_protein:
+        _protein_ligand_energy(chain_k, chain_i, terms)
   weighted = energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)
 
@@ -2427,14 +2596,12 @@ def _calculate_stability_from_structure(
   for i, chain_i in enumerate(evo_struct.chains):
     for k in range(i + 1, len(evo_struct.chains)):
       chain_k = evo_struct.chains[k]
-      for res_i in chain_i.residues:
-        for res_k in chain_k.residues:
-          if res_i.is_protein and res_k.is_protein:
-            _residue_other_diff_chain(res_i, res_k, terms)
-          elif res_i.is_protein and not res_k.is_protein:
-            _residue_and_ligand_energy(res_i, res_k, terms)
-          elif not res_i.is_protein and res_k.is_protein:
-            _residue_and_ligand_energy(res_k, res_i, terms)
+      if chain_i.is_protein and chain_k.is_protein:
+        _inter_chain_energy(chain_i, chain_k, terms)
+      elif chain_i.is_protein and not chain_k.is_protein:
+        _protein_ligand_energy(chain_i, chain_k, terms)
+      elif not chain_i.is_protein and chain_k.is_protein:
+        _protein_ligand_energy(chain_k, chain_i, terms)
   weighted = energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)
 

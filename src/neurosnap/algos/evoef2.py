@@ -7,8 +7,8 @@ Original Implementation: https://github.com/tommyhuangthu/EvoEF2
 from __future__ import annotations
 
 import math
-from functools import lru_cache
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
@@ -73,6 +73,7 @@ class AtomParam:
     eef1_volume: EEF1 volume parameter.
     eef1_lambda: EEF1 lambda parameter.
   """
+
   name: str
   type: str
   is_bb: bool
@@ -111,6 +112,7 @@ class Atom:
     is_xyz_valid: Whether the coordinate is present or reconstructed.
     is_in_hbond: Flag used during H-bond detection to avoid double counting.
   """
+
   name: str
   param: AtomParam
   chain: str
@@ -157,6 +159,7 @@ class Atom:
 @dataclass
 class Bond:
   """Covalent bond between two atoms inside a residue."""
+
   a: str
   b: str
   bond_type: int = 1
@@ -165,6 +168,7 @@ class Bond:
 @dataclass
 class CharmmIC:
   """CHARMM internal coordinate (IC) entry used to build missing atoms."""
+
   atom_a: str
   atom_b: str
   atom_c: str
@@ -176,6 +180,7 @@ class CharmmIC:
 @dataclass
 class ResidueTopology:
   """Residue topology template with atoms, bonds, and ICs from library."""
+
   name: str
   atoms: List[str] = field(default_factory=list)
   deletes: List[str] = field(default_factory=list)
@@ -186,6 +191,7 @@ class ResidueTopology:
 @dataclass
 class Residue:
   """Residue instance with atoms, bonds, and cached torsions/geometry."""
+
   name: str
   chain: str
   pos: int
@@ -205,6 +211,7 @@ class Residue:
 @dataclass
 class Chain:
   """Chain container for residues with an is_protein flag."""
+
   name: str
   residues: List[Residue] = field(default_factory=list)
   is_protein: bool = True
@@ -213,6 +220,7 @@ class Chain:
 @dataclass
 class Structure:
   """Structure container holding all chains."""
+
   chains: List[Chain] = field(default_factory=list)
 
   def all_residues(self) -> Iterable[Residue]:
@@ -225,12 +233,14 @@ class Structure:
 @dataclass
 class AAppTable:
   """Amino-acid propensity table indexed by phi/psi bins."""
+
   aap: np.ndarray  # shape (36,36,20)
 
 
 @dataclass
 class RamaTable:
   """Ramachandran probability table indexed by phi/psi bins."""
+
   rama: np.ndarray  # shape (36,36,20)
 
 
@@ -241,8 +251,6 @@ _RAMA_TABLE: Optional[RamaTable] = None
 # -----------------------------
 # Geometry utilities
 # -----------------------------
-
-
 def safe_acos(cos_value: float) -> float:
   """Return acos with inputs clamped to [-1, 1] to avoid numeric blowups.
 
@@ -586,6 +594,7 @@ def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
 @dataclass
 class DunbrackRotamer:
   """Single Dunbrack rotamer entry with chi statistics."""
+
   torsions: List[float]
   deviations: List[float]
   probability: float
@@ -594,12 +603,14 @@ class DunbrackRotamer:
 @dataclass
 class DunbrackBin:
   """Dunbrack bin for a phi/psi region with rotamer list."""
+
   by_residue: Dict[str, List[DunbrackRotamer]] = field(default_factory=dict)
 
 
 @dataclass
 class DunbrackLibrary:
   """Full Dunbrack library indexed by residue and phi/psi bins."""
+
   bins: List[DunbrackBin]
 
 
@@ -643,9 +654,7 @@ def _load_dunbrack_cached(path: Path) -> DunbrackLibrary:
       bin_index = ((phi + 180) // 10) * 36 + ((psi + 180) // 10)
       if bin_index < 0 or bin_index >= len(bins):
         continue
-      bins[bin_index].by_residue.setdefault(resname, []).append(
-        DunbrackRotamer(torsions=torsions, deviations=deviations, probability=prob)
-      )
+      bins[bin_index].by_residue.setdefault(resname, []).append(DunbrackRotamer(torsions=torsions, deviations=deviations, probability=prob))
   return DunbrackLibrary(bins=bins)
 
 
@@ -868,7 +877,9 @@ def _get_atom_xyz(res: Residue, name: str) -> Optional[np.ndarray]:
   return atom.xyz
 
 
-def _calc_atom_xyz(res: Residue, topologies: Dict[str, ResidueTopology], prev_res: Optional[Residue], next_res: Optional[Residue], atom_name: str) -> Optional[np.ndarray]:
+def _calc_atom_xyz(
+  res: Residue, topologies: Dict[str, ResidueTopology], prev_res: Optional[Residue], next_res: Optional[Residue], atom_name: str
+) -> Optional[np.ndarray]:
   """Compute coordinates for a missing atom using ICs and neighbors.
 
   Args:
@@ -938,7 +949,9 @@ def chain_calc_all_atom_xyz(chain: Chain, topologies: Dict[str, ResidueTopology]
     residue_calc_all_atom_xyz(res, topologies, prev_res, next_res)
 
 
-def _apply_patch(res: Residue, patch_name: str, params: Dict[str, Dict[str, AtomParam]], topologies: Dict[str, ResidueTopology], delete_o: bool = True) -> None:
+def _apply_patch(
+  res: Residue, patch_name: str, params: Dict[str, Dict[str, AtomParam]], topologies: Dict[str, ResidueTopology], delete_o: bool = True
+) -> None:
   """Apply a topology patch (NTER/CTER/disulfide) to a residue.
 
   Args:

@@ -611,8 +611,8 @@ def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
 
 
 def _default_evoef2_root() -> Path:
-  """Return the default path to the cloned EvoEF2 repository."""
-  return Path(__file__).resolve().parents[3] / "EvoEF2"
+  """Return the default path to the bundled EvoEF2 data directory."""
+  return Path(__file__).resolve().parent / "evoef2"
 
 
 def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, AtomParam]]:
@@ -625,7 +625,7 @@ def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, A
     Mapping of residue name to atom name to AtomParam.
   """
   if param_path is None:
-    param_path = _default_evoef2_root() / "library" / "param_charmm19_lk.prm"
+    param_path = _default_evoef2_root() / "param_charmm19_lk.prm"
   param_map: Dict[str, Dict[str, AtomParam]] = {}
   with open(param_path, "r") as f:
     for line in f:
@@ -680,7 +680,7 @@ def load_topology(top_path: Optional[Path] = None) -> Dict[str, ResidueTopology]
     Mapping of residue/patch name to topology template.
   """
   if top_path is None:
-    top_path = _default_evoef2_root() / "library" / "top_polh19_prot.inp"
+    top_path = _default_evoef2_root() / "top_polh19_prot.inp"
   topologies: Dict[str, ResidueTopology] = {}
   current: Optional[ResidueTopology] = None
   with open(top_path, "r") as f:
@@ -749,7 +749,7 @@ def load_weights(weight_path: Optional[Path] = None) -> List[float]:
     Weight list indexed by EvoEF2 term index.
   """
   if weight_path is None:
-    weight_path = _default_evoef2_root() / "wread" / "weight_EvoEF2.txt"
+    weight_path = _default_evoef2_root() / "weight_EvoEF2.txt"
   weights = [1.0] * MAX_EVOEF_ENERGY_TERM_NUM
   if not weight_path.exists():
     logger.warning("EvoEF2 weight file not found at %s; using unit weights.", weight_path)
@@ -779,7 +779,7 @@ def load_aapropensity(path: Optional[Path] = None) -> AAppTable:
     AAppTable instance with a [36, 36, 20] tensor.
   """
   if path is None:
-    path = _default_evoef2_root() / "library" / "aapropensity.txt"
+    path = _default_evoef2_root() / "aapropensity.txt"
   aap = np.zeros((36, 36, 20), dtype=float)
   with open(path, "r") as f:
     for line in f:
@@ -808,7 +808,7 @@ def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
     RamaTable instance with a [36, 36, 20] tensor.
   """
   if path is None:
-    path = _default_evoef2_root() / "library" / "ramachandran.txt"
+    path = _default_evoef2_root() / "ramachandran.txt"
   rama = np.zeros((36, 36, 20), dtype=float)
   with open(path, "r") as f:
     for line in f:
@@ -829,7 +829,7 @@ def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
 
 def _default_dunbrack_path() -> Path:
   """Return the default Dunbrack library path."""
-  return _default_evoef2_root() / "library" / "dun2010bb3per.lib"
+  return _default_evoef2_root() / "dun2010bb3per.lib"
 
 
 @dataclass

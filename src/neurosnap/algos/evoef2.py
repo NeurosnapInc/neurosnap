@@ -542,7 +542,7 @@ def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
 
 def _default_evoef2_root() -> Path:
   """Return the default path to the bundled EvoEF2 data directory."""
-  return Path(__file__).resolve().parent / "evoef2"
+  return Path(__file__).resolve().parent / "evoef2_lib"
 
 
 def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, AtomParam]]:

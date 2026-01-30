@@ -7,6 +7,7 @@ Original Implementation: https://github.com/tommyhuangthu/EvoEF2
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
@@ -442,6 +443,12 @@ def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, A
   """
   if param_path is None:
     param_path = _default_evoef2_root() / "param_charmm19_lk.prm"
+  return _load_atom_params_cached(param_path)
+
+
+@lru_cache(maxsize=1)
+def _load_atom_params_cached(param_path: Path) -> Dict[str, Dict[str, AtomParam]]:
+  """LRU-cached loader for atom parameters."""
   param_map: Dict[str, Dict[str, AtomParam]] = {}
   with open(param_path, "r") as f:
     for line in f:
@@ -497,6 +504,12 @@ def load_topology(top_path: Optional[Path] = None) -> Dict[str, ResidueTopology]
   """
   if top_path is None:
     top_path = _default_evoef2_root() / "top_polh19_prot.inp"
+  return _load_topology_cached(top_path)
+
+
+@lru_cache(maxsize=1)
+def _load_topology_cached(top_path: Path) -> Dict[str, ResidueTopology]:
+  """LRU-cached loader for residue topology."""
   topologies: Dict[str, ResidueTopology] = {}
   current: Optional[ResidueTopology] = None
   with open(top_path, "r") as f:
@@ -628,6 +641,12 @@ def load_dunbrack(path: Optional[Path] = None) -> DunbrackLibrary:
   """
   if path is None:
     path = _default_evoef2_root() / "dun2010bb3per.lib"
+  return _load_dunbrack_cached(path)
+
+
+@lru_cache(maxsize=1)
+def _load_dunbrack_cached(path: Path) -> DunbrackLibrary:
+  """LRU-cached loader for Dunbrack library."""
   bins = [DunbrackBin() for _ in range(36 * 36)]
   with open(path, "r") as f:
     for raw in f:

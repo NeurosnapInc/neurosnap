@@ -119,66 +119,39 @@ class Atom:
   xyz: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
   is_xyz_valid: bool = False
   is_in_hbond: bool = False
+  vdw_epsilon: float = 0.0
+  vdw_radius: float = 0.0
+  charge: float = 0.0
+  eef1_free_dg: float = 0.0
+  eef1_volume: float = 0.0
+  eef1_lambda: float = 0.0
+  hb_h_or_a: str = ""
+  hb_d_or_b: str = ""
+  hb_b2: str = ""
+  hybrid: str = ""
+  is_bb: bool = False
+  polarity: str = ""
+  is_h: bool = False
+  is_hbond_h: bool = False
+  is_hbond_a: bool = False
 
-  @property
-  def vdw_epsilon(self) -> float:
-    return self.param.epsilon
-
-  @property
-  def vdw_radius(self) -> float:
-    return self.param.radius
-
-  @property
-  def charge(self) -> float:
-    return self.param.charge
-
-  @property
-  def eef1_free_dg(self) -> float:
-    return self.param.eef1_free_dg
-
-  @property
-  def eef1_volume(self) -> float:
-    return self.param.eef1_volume
-
-  @property
-  def eef1_lambda(self) -> float:
-    return self.param.eef1_lambda
-
-  @property
-  def hb_h_or_a(self) -> str:
-    return self.param.hb_h_or_a
-
-  @property
-  def hb_d_or_b(self) -> str:
-    return self.param.hb_d_or_b
-
-  @property
-  def hb_b2(self) -> str:
-    return self.param.hb_b2
-
-  @property
-  def hybrid(self) -> str:
-    return self.param.hybrid
-
-  @property
-  def is_bb(self) -> bool:
-    return self.param.is_bb
-
-  @property
-  def polarity(self) -> str:
-    return self.param.polarity
-
-  @property
-  def is_h(self) -> bool:
-    return self.name.startswith("H")
-
-  @property
-  def is_hbond_h(self) -> bool:
-    return self.param.is_hbond_h
-
-  @property
-  def is_hbond_a(self) -> bool:
-    return self.param.is_hbond_a
+  def __post_init__(self) -> None:
+    """Precompute invariant properties from the atom parameters."""
+    self.vdw_epsilon = self.param.epsilon
+    self.vdw_radius = self.param.radius
+    self.charge = self.param.charge
+    self.eef1_free_dg = self.param.eef1_free_dg
+    self.eef1_volume = self.param.eef1_volume
+    self.eef1_lambda = self.param.eef1_lambda
+    self.hb_h_or_a = self.param.hb_h_or_a
+    self.hb_d_or_b = self.param.hb_d_or_b
+    self.hb_b2 = self.param.hb_b2
+    self.hybrid = self.param.hybrid
+    self.is_bb = self.param.is_bb
+    self.polarity = self.param.polarity
+    self.is_h = self.name.startswith("H")
+    self.is_hbond_h = self.param.is_hbond_h
+    self.is_hbond_a = self.param.is_hbond_a
 
 
 @dataclass

@@ -448,6 +448,10 @@ class RamaTable:
   rama: np.ndarray  # shape (36,36,20)
 
 
+_AAPP_TABLE: Optional[AAppTable] = None
+_RAMA_TABLE: Optional[RamaTable] = None
+
+
 # -----------------------------
 # Geometry utilities
 # -----------------------------
@@ -778,24 +782,16 @@ def load_aapropensity(path: Optional[Path] = None) -> AAppTable:
   Returns:
     AAppTable instance with a [36, 36, 20] tensor.
   """
+  global _AAPP_TABLE
+  if _AAPP_TABLE is not None and path is None:
+    return _AAPP_TABLE
   if path is None:
-    path = _default_evoef2_root() / "aapropensity.txt"
-  aap = np.zeros((36, 36, 20), dtype=float)
-  with open(path, "r") as f:
-    for line in f:
-      line = line.strip()
-      if not line or line.startswith("#"):
-        continue
-      parts = line.split()
-      if len(parts) != 22:
-        continue
-      phi = int(parts[0])
-      psi = int(parts[1])
-      phi_index = (phi + 180) // 10
-      psi_index = (psi + 180) // 10
-      for j in range(20):
-        aap[phi_index, psi_index, j] = float(parts[j + 2])
-  return AAppTable(aap=aap)
+    path = _default_evoef2_root() / "aapropensity.npz"
+  data = np.load(path)["data"]
+  table = AAppTable(aap=data)
+  if path == _default_evoef2_root() / "aapropensity.npz":
+    _AAPP_TABLE = table
+  return table
 
 
 def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
@@ -807,24 +803,16 @@ def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
   Returns:
     RamaTable instance with a [36, 36, 20] tensor.
   """
+  global _RAMA_TABLE
+  if _RAMA_TABLE is not None and path is None:
+    return _RAMA_TABLE
   if path is None:
-    path = _default_evoef2_root() / "ramachandran.txt"
-  rama = np.zeros((36, 36, 20), dtype=float)
-  with open(path, "r") as f:
-    for line in f:
-      line = line.strip()
-      if not line or line.startswith("#"):
-        continue
-      parts = line.split()
-      if len(parts) != 22:
-        continue
-      phi = int(parts[0])
-      psi = int(parts[1])
-      phi_index = (phi + 180) // 10
-      psi_index = (psi + 180) // 10
-      for j in range(20):
-        rama[phi_index, psi_index, j] = float(parts[j + 2])
-  return RamaTable(rama=rama)
+    path = _default_evoef2_root() / "ramachandran.npz"
+  data = np.load(path)["data"]
+  table = RamaTable(rama=data)
+  if path == _default_evoef2_root() / "ramachandran.npz":
+    _RAMA_TABLE = table
+  return table
 
 
 def _default_dunbrack_path() -> Path:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from neurosnap.algos.evoef2_lib.weights import get_weights
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
@@ -132,81 +133,6 @@ ENERGY_TERM_NAMES = {
 }
 
 ENERGY_TERM_ORDER = [k for k in sorted(ENERGY_TERM_NAMES.keys()) if k != 0]
-
-WEIGHT_KEY_TO_INDEX = {
-  "reference_ALA": 1,
-  "reference_CYS": 2,
-  "reference_ASP": 3,
-  "reference_GLU": 4,
-  "reference_PHE": 5,
-  "reference_GLY": 6,
-  "reference_HIS": 7,
-  "reference_ILE": 8,
-  "reference_LYS": 9,
-  "reference_LEU": 10,
-  "reference_MET": 11,
-  "reference_ASN": 12,
-  "reference_PRO": 13,
-  "reference_GLN": 14,
-  "reference_ARG": 15,
-  "reference_SER": 16,
-  "reference_THR": 17,
-  "reference_VAL": 18,
-  "reference_TRP": 19,
-  "reference_TYR": 20,
-  "intraR_vdwatt": 21,
-  "intraR_vdwrep": 22,
-  "intraR_electr": 23,
-  "intraR_deslvP": 24,
-  "intraR_deslvH": 25,
-  "intraR_hbscbb_dis": 26,
-  "intraR_hbscbb_the": 27,
-  "intraR_hbscbb_phi": 28,
-  "aapropensity": 91,
-  "ramachandran": 92,
-  "dunbrack": 93,
-  "interS_vdwatt": 31,
-  "interS_vdwrep": 32,
-  "interS_electr": 33,
-  "interS_deslvP": 34,
-  "interS_deslvH": 35,
-  "interS_ssbond": 36,
-  "interS_hbbbbb_dis": 41,
-  "interS_hbbbbb_the": 42,
-  "interS_hbbbbb_phi": 43,
-  "interS_hbscbb_dis": 44,
-  "interS_hbscbb_the": 45,
-  "interS_hbscbb_phi": 46,
-  "interS_hbscsc_dis": 47,
-  "interS_hbscsc_the": 48,
-  "interS_hbscsc_phi": 49,
-  "interD_vdwatt": 51,
-  "interD_vdwrep": 52,
-  "interD_electr": 53,
-  "interD_deslvP": 54,
-  "interD_deslvH": 55,
-  "interD_ssbond": 56,
-  "interD_hbbbbb_dis": 61,
-  "interD_hbbbbb_the": 62,
-  "interD_hbbbbb_phi": 63,
-  "interD_hbscbb_dis": 64,
-  "interD_hbscbb_the": 65,
-  "interD_hbscbb_phi": 66,
-  "interD_hbscsc_dis": 67,
-  "interD_hbscsc_the": 68,
-  "interD_hbscsc_phi": 69,
-  "ligand_vdwatt": 71,
-  "ligand_vdwrep": 72,
-  "ligand_electr": 73,
-  "ligand_deslvP": 74,
-  "ligand_deslvH": 75,
-  "ligand_hbscbb_dis": 84,
-  "ligand_hbscbb_the": 85,
-  "ligand_hbscbb_phi": 86,
-  "ligand_hbscsc_dis": 87,
-  "ligand_hbscsc_the": 88,
-  "ligand_hbscsc_phi": 89,
-}
 
 AA_ONE_LETTER = "ACDEFGHIKLMNPQRSTVWY"
 AA_THREE_TO_ONE = {
@@ -741,36 +667,6 @@ def load_topology(top_path: Optional[Path] = None) -> Dict[str, ResidueTopology]
             )
           )
   return topologies
-
-
-def load_weights(weight_path: Optional[Path] = None) -> List[float]:
-  """Load EvoEF2 term weights from the reference weight file.
-
-  Args:
-    weight_path: Optional explicit path to the weights file.
-
-  Returns:
-    Weight list indexed by EvoEF2 term index.
-  """
-  if weight_path is None:
-    weight_path = _default_evoef2_root() / "weight_EvoEF2.txt"
-  weights = [1.0] * MAX_EVOEF_ENERGY_TERM_NUM
-  if not weight_path.exists():
-    logger.warning("EvoEF2 weight file not found at %s; using unit weights.", weight_path)
-    return weights
-  with open(weight_path, "r") as f:
-    for line in f:
-      line = line.strip()
-      if not line or line.startswith("!"):
-        continue
-      parts = line.split()
-      if len(parts) < 2:
-        continue
-      term = parts[0]
-      val = float(parts[1])
-      if term in WEIGHT_KEY_TO_INDEX:
-        weights[WEIGHT_KEY_TO_INDEX[term]] = val
-  return weights
 
 
 def load_aapropensity(path: Optional[Path] = None) -> AAppTable:
@@ -2358,7 +2254,7 @@ def calculate_stability(
   *,
   param_path: Optional[Path] = None,
   topo_path: Optional[Path] = None,
-  weight_path: Optional[Path] = None,
+  weight_dict: Optional[Dict[str, float]] = None,
   aapropensity_path: Optional[Path] = None,
   ramachandran_path: Optional[Path] = None,
   dunbrack_path: Optional[Path] = None,
@@ -2369,7 +2265,7 @@ def calculate_stability(
     structure: Protein object or PDB/mmCIF path.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
-    weight_path: Optional weights file override.
+    weight_dict: Weights dictionary to use.
     aapropensity_path: Optional AA propensity table override.
     ramachandran_path: Optional Ramachandran table override.
     dunbrack_path: Optional Dunbrack library override.
@@ -2377,7 +2273,7 @@ def calculate_stability(
   Returns:
     Dict of all weighted energy terms plus the total.
   """
-  weights = load_weights(weight_path)
+  weights = get_weights(weight_dict)
   aap = load_aapropensity(aapropensity_path)
   rama = load_ramachandran(ramachandran_path)
   dun = load_dunbrack(dunbrack_path)
@@ -2429,7 +2325,7 @@ def calculate_interface_energy(
   *,
   param_path: Optional[Path] = None,
   topo_path: Optional[Path] = None,
-  weight_path: Optional[Path] = None,
+  weight_dict: Optional[Dict[str, float]] = None,
 ) -> Dict[str, float]:
   """Compute interface energy between two chain groups.
 
@@ -2439,12 +2335,12 @@ def calculate_interface_energy(
     split2: Chain IDs for group 2.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
-    weight_path: Optional weights file override.
+    weight_dict: Weights dictionary to use.
 
   Returns:
     Dict of weighted inter-chain energy terms plus the total.
   """
-  weights = load_weights(weight_path)
+  weights = get_weights(weight_dict)
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
   terms = energy_term_initialize()
   set1 = set(split1)
@@ -2484,7 +2380,7 @@ def calculate_binding(
     split2: Chain IDs for group 2.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
-    weight_path: Optional weights file override.
+    weight_dict: Weights dictionary to use.
     aapropensity_path: Optional AA propensity table override.
     ramachandran_path: Optional Ramachandran table override.
     dunbrack_path: Optional Dunbrack library override.
@@ -2542,7 +2438,7 @@ def calculate_binding(
 def _calculate_stability_from_structure(
   evo_struct: Structure,
   *,
-  weight_path: Optional[Path] = None,
+  weight_dict: Optional[Dict[str, float]] = None,
   aapropensity_path: Optional[Path] = None,
   ramachandran_path: Optional[Path] = None,
   dunbrack_path: Optional[Path] = None,
@@ -2551,7 +2447,7 @@ def _calculate_stability_from_structure(
 
   Args:
     evo_struct: Structure with atoms already reconstructed.
-    weight_path: Optional weights file override.
+    weight_dict: Weights dictionary to use.
     aapropensity_path: Optional AA propensity table override.
     ramachandran_path: Optional Ramachandran table override.
     dunbrack_path: Optional Dunbrack library override.
@@ -2559,7 +2455,7 @@ def _calculate_stability_from_structure(
   Returns:
     Dict of weighted energy terms plus the total.
   """
-  weights = load_weights(weight_path)
+  weights = get_weights(weight_dict)
   aap = load_aapropensity(aapropensity_path)
   rama = load_ramachandran(ramachandran_path)
   dun = load_dunbrack(dunbrack_path)

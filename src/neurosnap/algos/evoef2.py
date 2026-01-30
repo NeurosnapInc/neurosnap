@@ -2367,7 +2367,7 @@ def calculate_binding(
   *,
   param_path: Optional[Path] = None,
   topo_path: Optional[Path] = None,
-  weight_path: Optional[Path] = None,
+  weight_dict: Optional[Dict[str, float]] = None,
   aapropensity_path: Optional[Path] = None,
   ramachandran_path: Optional[Path] = None,
   dunbrack_path: Optional[Path] = None,
@@ -2395,14 +2395,14 @@ def calculate_binding(
     split2,
     param_path=param_path,
     topo_path=topo_path,
-    weight_path=weight_path,
+    weight_dict=weight_dict,
   )
   # compute stability of complex and each split independently
   full = calculate_stability(
     structure,
     param_path=param_path,
     topo_path=topo_path,
-    weight_path=weight_path,
+    weight_dict=weight_dict,
     aapropensity_path=aapropensity_path,
     ramachandran_path=ramachandran_path,
     dunbrack_path=dunbrack_path,
@@ -2413,14 +2413,14 @@ def calculate_binding(
   split2_struct = Structure(chains=[c for c in evo_struct.chains if c.name in split2])
   split1_energy = _calculate_stability_from_structure(
     split1_struct,
-    weight_path=weight_path,
+    weight_dict=weight_dict,
     aapropensity_path=aapropensity_path,
     ramachandran_path=ramachandran_path,
     dunbrack_path=dunbrack_path,
   )
   split2_energy = _calculate_stability_from_structure(
     split2_struct,
-    weight_path=weight_path,
+    weight_dict=weight_dict,
     aapropensity_path=aapropensity_path,
     ramachandran_path=ramachandran_path,
     dunbrack_path=dunbrack_path,

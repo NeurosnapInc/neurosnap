@@ -597,11 +597,6 @@ def load_ramachandran(path: Optional[Path] = None) -> RamaTable:
   return table
 
 
-def _default_dunbrack_path() -> Path:
-  """Return the default Dunbrack library path."""
-  return _default_evoef2_root() / "dun2010bb3per.lib"
-
-
 @dataclass
 class DunbrackRotamer:
   """Single Dunbrack rotamer entry with chi statistics."""
@@ -632,7 +627,7 @@ def load_dunbrack(path: Optional[Path] = None) -> DunbrackLibrary:
     DunbrackLibrary with bins indexed by phi/psi.
   """
   if path is None:
-    path = _default_dunbrack_path()
+    path = _default_evoef2_root() / "dun2010bb3per.lib"
   bins = [DunbrackBin() for _ in range(36 * 36)]
   with open(path, "r") as f:
     for raw in f:

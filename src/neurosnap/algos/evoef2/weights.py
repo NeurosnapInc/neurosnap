@@ -2,6 +2,14 @@
 Weight files from EvoEF2
 """
 
+from __future__ import annotations
+
+from typing import Dict, List, Optional
+
+MAX_EVOEF_ENERGY_TERM_NUM = 100  # TODO: REDUNDANT AND SHOULD BE MOVED TO DEDICATED CONSTANTS FILE
+
+
+# Weights generated from weight_EvoEF2.txt
 WEIGHTS_EVOEF2 = {
   "aapropensity": 0.59,
   "dunbrack": 0.35,
@@ -152,3 +160,98 @@ WEIGHTS_EVOEF = {
   "reference_TYR": 1.6,
   "reference_VAL": 0.24,
 }
+
+# Map weight keys to their indexes
+WEIGHT_KEY_TO_INDEX = {
+  "reference_ALA": 1,
+  "reference_CYS": 2,
+  "reference_ASP": 3,
+  "reference_GLU": 4,
+  "reference_PHE": 5,
+  "reference_GLY": 6,
+  "reference_HIS": 7,
+  "reference_ILE": 8,
+  "reference_LYS": 9,
+  "reference_LEU": 10,
+  "reference_MET": 11,
+  "reference_ASN": 12,
+  "reference_PRO": 13,
+  "reference_GLN": 14,
+  "reference_ARG": 15,
+  "reference_SER": 16,
+  "reference_THR": 17,
+  "reference_VAL": 18,
+  "reference_TRP": 19,
+  "reference_TYR": 20,
+  "intraR_vdwatt": 21,
+  "intraR_vdwrep": 22,
+  "intraR_electr": 23,
+  "intraR_deslvP": 24,
+  "intraR_deslvH": 25,
+  "intraR_hbscbb_dis": 26,
+  "intraR_hbscbb_the": 27,
+  "intraR_hbscbb_phi": 28,
+  "aapropensity": 91,
+  "ramachandran": 92,
+  "dunbrack": 93,
+  "interS_vdwatt": 31,
+  "interS_vdwrep": 32,
+  "interS_electr": 33,
+  "interS_deslvP": 34,
+  "interS_deslvH": 35,
+  "interS_ssbond": 36,
+  "interS_hbbbbb_dis": 41,
+  "interS_hbbbbb_the": 42,
+  "interS_hbbbbb_phi": 43,
+  "interS_hbscbb_dis": 44,
+  "interS_hbscbb_the": 45,
+  "interS_hbscbb_phi": 46,
+  "interS_hbscsc_dis": 47,
+  "interS_hbscsc_the": 48,
+  "interS_hbscsc_phi": 49,
+  "interD_vdwatt": 51,
+  "interD_vdwrep": 52,
+  "interD_electr": 53,
+  "interD_deslvP": 54,
+  "interD_deslvH": 55,
+  "interD_ssbond": 56,
+  "interD_hbbbbb_dis": 61,
+  "interD_hbbbbb_the": 62,
+  "interD_hbbbbb_phi": 63,
+  "interD_hbscbb_dis": 64,
+  "interD_hbscbb_the": 65,
+  "interD_hbscbb_phi": 66,
+  "interD_hbscsc_dis": 67,
+  "interD_hbscsc_the": 68,
+  "interD_hbscsc_phi": 69,
+  "ligand_vdwatt": 71,
+  "ligand_vdwrep": 72,
+  "ligand_electr": 73,
+  "ligand_deslvP": 74,
+  "ligand_deslvH": 75,
+  "ligand_hbscbb_dis": 84,
+  "ligand_hbscbb_the": 85,
+  "ligand_hbscbb_phi": 86,
+  "ligand_hbscsc_dis": 87,
+  "ligand_hbscsc_the": 88,
+  "ligand_hbscsc_phi": 89,
+}
+
+
+def get_weights(weight_dict: Optional[Dict[str, float]] = None) -> List[float]:
+  """Get the vectorized EvoEF2 term weights from the reference dictionary file.
+
+  Args:
+    weight_dict: Weights dictionary to use.
+
+  Returns:
+    Weight list indexed by EvoEF2 term index.
+  """
+  if weight_dict is None:
+    weight_dict = WEIGHTS_EVOEF2
+
+  weights = [1.0] * MAX_EVOEF_ENERGY_TERM_NUM
+  for term, val in weight_dict.items():
+    if term in WEIGHT_KEY_TO_INDEX:
+      weights[WEIGHT_KEY_TO_INDEX[term]] = float(val)
+  return weights

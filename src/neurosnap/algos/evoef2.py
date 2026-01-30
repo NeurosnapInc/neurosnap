@@ -8,162 +8,48 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from neurosnap.algos.evoef2_lib.weights import get_weights
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from neurosnap.algos.evoef2_lib.constants import (
+  _ATOM_ORDER_SEQUENCE,
+  _DUNBRACK_TORSION_COUNT,
+  AA_ONE_LETTER,
+  AA_THREE_TO_ONE,
+  COULOMB_CONSTANT,
+  DIELECTRIC_CONST_PROTEIN,
+  DIELECTRIC_CONST_PROTEIN_AVE,
+  DIELECTRIC_CONSTANT_WATER,
+  ELEC_DISTANCE_CUTOFF,
+  ENERGY_DISTANCE_CUTOFF,
+  ENERGY_SCALE_FACTOR_BOND_14,
+  ENERGY_SCALE_FACTOR_BOND_15,
+  ENERGY_SCALE_FACTOR_BOND_123,
+  ENERGY_TERM_NAMES,
+  ENERGY_TERM_ORDER,
+  HBOND_DISTANCE_CUTOFF_MAX,
+  HBOND_LOCAL_REDUCE,
+  HBOND_OPTIMAL_DISTANCE,
+  HBOND_WELL_DEPTH,
+  IONIC_STRENGTH,
+  LK_SOLV_DISTANCE_CUTOFF,
+  MAX_EVOEF_ENERGY_TERM_NUM,
+  PI,
+  PROTEIN_DESIGN_TEMPERATURE,
+  RADIUS_SCALE_FOR_DESOLV,
+  RADIUS_SCALE_FOR_VDW,
+  SSBOND_ANGLE,
+  SSBOND_CUTOFF_MAX,
+  SSBOND_CUTOFF_MIN,
+  SSBOND_DISTANCE,
+  SSBOND_TORSION,
+  WEIGHT_KEY_TO_INDEX,
+)
+from neurosnap.algos.evoef2_lib.weights import get_weights
 from neurosnap.log import logger
 from neurosnap.protein import Protein
-
-# -----------------------------
-# Constants (mirrors EvoEF2)
-# -----------------------------
-MAX_EVOEF_ENERGY_TERM_NUM = 100
-
-ENERGY_DISTANCE_CUTOFF = 6.0
-ENERGY_SCALE_FACTOR_BOND_123 = 0.0
-ENERGY_SCALE_FACTOR_BOND_14 = 0.2
-ENERGY_SCALE_FACTOR_BOND_15 = 1.0
-RADIUS_SCALE_FOR_VDW = 0.95
-
-HBOND_DISTANCE_CUTOFF_MAX = 3.0
-HBOND_WELL_DEPTH = 1.0
-HBOND_OPTIMAL_DISTANCE = 1.9
-HBOND_LOCAL_REDUCE = 0.5
-
-ELEC_DISTANCE_CUTOFF = 6.0
-COULOMB_CONSTANT = 332.0
-DIELECTRIC_CONST_PROTEIN = 8.0
-DIELECTRIC_CONSTANT_WATER = 80.0
-DIELECTRIC_CONST_PROTEIN_AVE = 20.0
-IONIC_STRENGTH = 0.05
-PROTEIN_DESIGN_TEMPERATURE = 298
-
-LK_SOLV_DISTANCE_CUTOFF = 6.0
-RADIUS_SCALE_FOR_DESOLV = 1.00
-
-SSBOND_DISTANCE = 2.03
-SSBOND_ANGLE = 105.0
-SSBOND_TORSION = 90.0
-SSBOND_CUTOFF_MAX = 2.15
-SSBOND_CUTOFF_MIN = 1.95
-
-PI = math.pi
-
-# Energy term indices and names
-ENERGY_TERM_NAMES = {
-  0: "total",
-  1: "reference_ALA",
-  2: "reference_CYS",
-  3: "reference_ASP",
-  4: "reference_GLU",
-  5: "reference_PHE",
-  6: "reference_GLY",
-  7: "reference_HIS",
-  8: "reference_ILE",
-  9: "reference_LYS",
-  10: "reference_LEU",
-  11: "reference_MET",
-  12: "reference_ASN",
-  13: "reference_PRO",
-  14: "reference_GLN",
-  15: "reference_ARG",
-  16: "reference_SER",
-  17: "reference_THR",
-  18: "reference_VAL",
-  19: "reference_TRP",
-  20: "reference_TYR",
-  21: "intraR_vdwatt",
-  22: "intraR_vdwrep",
-  23: "intraR_electr",
-  24: "intraR_deslvP",
-  25: "intraR_deslvH",
-  26: "intraR_hbscbb_dis",
-  27: "intraR_hbscbb_the",
-  28: "intraR_hbscbb_phi",
-  31: "interS_vdwatt",
-  32: "interS_vdwrep",
-  33: "interS_electr",
-  34: "interS_deslvP",
-  35: "interS_deslvH",
-  36: "interS_ssbond",
-  41: "interS_hbbbbb_dis",
-  42: "interS_hbbbbb_the",
-  43: "interS_hbbbbb_phi",
-  44: "interS_hbscbb_dis",
-  45: "interS_hbscbb_the",
-  46: "interS_hbscbb_phi",
-  47: "interS_hbscsc_dis",
-  48: "interS_hbscsc_the",
-  49: "interS_hbscsc_phi",
-  51: "interD_vdwatt",
-  52: "interD_vdwrep",
-  53: "interD_electr",
-  54: "interD_deslvP",
-  55: "interD_deslvH",
-  56: "interD_ssbond",
-  61: "interD_hbbbbb_dis",
-  62: "interD_hbbbbb_the",
-  63: "interD_hbbbbb_phi",
-  64: "interD_hbscbb_dis",
-  65: "interD_hbscbb_the",
-  66: "interD_hbscbb_phi",
-  67: "interD_hbscsc_dis",
-  68: "interD_hbscsc_the",
-  69: "interD_hbscsc_phi",
-  71: "ligand_vdwatt",
-  72: "ligand_vdwrep",
-  73: "ligand_electr",
-  74: "ligand_deslvP",
-  75: "ligand_deslvH",
-  81: "ligand_hbscbb_dis_raw",
-  82: "ligand_hbscbb_the_raw",
-  83: "ligand_hbscbb_phi_raw",
-  84: "ligand_hbscbb_dis",
-  85: "ligand_hbscbb_the",
-  86: "ligand_hbscbb_phi",
-  87: "ligand_hbscsc_dis",
-  88: "ligand_hbscsc_the",
-  89: "ligand_hbscsc_phi",
-  91: "aapropensity",
-  92: "ramachandran",
-  93: "dunbrack",
-}
-
-ENERGY_TERM_ORDER = [k for k in sorted(ENERGY_TERM_NAMES.keys()) if k != 0]
-
-AA_ONE_LETTER = "ACDEFGHIKLMNPQRSTVWY"
-AA_THREE_TO_ONE = {
-  "ALA": "A",
-  "CYS": "C",
-  "ASP": "D",
-  "GLU": "E",
-  "PHE": "F",
-  "GLY": "G",
-  "HIS": "H",
-  "HSE": "H",
-  "HSD": "H",
-  "HSP": "H",
-  "ILE": "I",
-  "LYS": "K",
-  "LEU": "L",
-  "MET": "M",
-  "ASN": "N",
-  "PRO": "P",
-  "GLN": "Q",
-  "ARG": "R",
-  "SER": "S",
-  "THR": "T",
-  "VAL": "V",
-  "TRP": "W",
-  "TYR": "Y",
-}
-
-# -----------------------------
-# Data structures
-# -----------------------------
 
 
 @dataclass
@@ -736,31 +622,6 @@ class DunbrackLibrary:
   bins: List[DunbrackBin]
 
 
-_DUNBRACK_TORSION_COUNT = {
-  "ALA": 0,
-  "ARG": 4,
-  "ASN": 2,
-  "ASP": 2,
-  "CYS": 1,
-  "GLN": 3,
-  "GLU": 3,
-  "GLY": 0,
-  "HSD": 2,
-  "HSE": 2,
-  "ILE": 2,
-  "LEU": 2,
-  "LYS": 4,
-  "MET": 3,
-  "PHE": 2,
-  "PRO": 2,
-  "SER": 1,
-  "THR": 1,
-  "TRP": 2,
-  "TYR": 2,
-  "VAL": 1,
-}
-
-
 def load_dunbrack(path: Optional[Path] = None) -> DunbrackLibrary:
   """Load Dunbrack rotamer library from the EvoEF2 distribution.
 
@@ -883,9 +744,6 @@ def _residue_intra_bond_connection(atom1: str, atom2: str, bonds: List[Bond]) ->
   if _residue_intra_bond_14(atom1, atom2, bonds):
     return 14
   return 15
-
-
-_ATOM_ORDER_SEQUENCE = "ABGDEZ"
 
 
 def _protein_atom_order(atom_name: str) -> int:

@@ -1581,6 +1581,76 @@ def _protein_ligand_energy(protein_chain: Chain, ligand_chain: Chain, terms: Lis
           terms[83] += hbp
 
 
+def _same_chain_nonadjacent_energy(chain: Chain, terms: List[float]) -> None:
+  """Compute non-adjacent same-chain energies using a spatial grid."""
+  atoms = _collect_atoms(chain, protein_only=True)
+  if len(atoms) < 2:
+    return
+  cell_size = ENERGY_DISTANCE_CUTOFF
+  grid = _build_cell_list(atoms, cell_size)
+  atom_index = {id(atom): idx for idx, atom in enumerate(atoms)}
+  for i, a1 in enumerate(atoms):
+    res1 = a1.res
+    if res1 is None:
+      continue
+    for a2 in _iter_neighbor_atoms(a1, grid, cell_size):
+      j = atom_index.get(id(a2))
+      if j is None or j <= i:
+        continue
+      res2 = a2.res
+      if res2 is None:
+        continue
+      if abs(res1.pos - res2.pos) <= 1:
+        continue
+      dist = _xyz_distance(a1.xyz, a2.xyz)
+      if dist > ENERGY_DISTANCE_CUTOFF:
+        continue
+      bond_type = 15
+      terms[31] += _vdw_att(a1, a2, dist, bond_type)
+      terms[32] += _vdw_rep(a1, a2, dist, bond_type)
+      terms[33] += _electro(a1, a2, dist, bond_type)
+      des_p, des_h = _lk_desolv(a1, a2, dist, bond_type)
+      terms[34] += des_p
+      terms[35] += des_h
+      if dist < HBOND_DISTANCE_CUTOFF_MAX:
+        hbd = hbt = hbp = 0.0
+        if a1.is_hbond_h and a2.is_hbond_a:
+          atom_d = res1.get_atom(a1.hb_d_or_b)
+          atom_b = res2.get_atom(a2.hb_d_or_b)
+          if atom_d and atom_b:
+            _, hbd, hbt, hbp = _hbond(a1, a2, atom_d, atom_b, dist, bond_type)
+        elif a2.is_hbond_h and a1.is_hbond_a:
+          atom_d = res2.get_atom(a2.hb_d_or_b)
+          atom_b = res1.get_atom(a1.hb_d_or_b)
+          if atom_d and atom_b:
+            _, hbd, hbt, hbp = _hbond(a2, a1, atom_d, atom_b, dist, bond_type)
+        if abs(res1.pos - res2.pos) <= 2:
+          hbd *= HBOND_LOCAL_REDUCE
+          hbt *= HBOND_LOCAL_REDUCE
+          hbp *= HBOND_LOCAL_REDUCE
+        if a1.is_bb and a2.is_bb:
+          terms[41] += hbd
+          terms[42] += hbt
+          terms[43] += hbp
+        elif not a1.is_bb and not a2.is_bb:
+          terms[47] += hbd
+          terms[48] += hbt
+          terms[49] += hbp
+        else:
+          terms[44] += hbd
+          terms[45] += hbt
+          terms[46] += hbp
+      if a1.name == "SG" and a2.name == "SG":
+        if res1.name == "CYS" and res2.name == "CYS":
+          if SSBOND_CUTOFF_MIN < dist < SSBOND_CUTOFF_MAX:
+            cb1 = res1.get_atom("CB")
+            cb2 = res2.get_atom("CB")
+            ca1 = res1.get_atom("CA")
+            ca2 = res2.get_atom("CA")
+            if cb1 and cb2 and ca1 and ca2:
+              terms[36] += _ssbond(a1, a2, cb1, cb2, ca1, ca2)
+
+
 def _ssbond(atom_s1: Atom, atom_s2: Atom, atom_cb1: Atom, atom_cb2: Atom, atom_ca1: Atom, atom_ca2: Atom) -> float:
   """Compute disulfide bond energy using EvoEF2 geometry terms.
 
@@ -2156,8 +2226,7 @@ def calculate_stability(
         if j == i + 1:
           # Adjacent residues use special 1-4 scaling rules.
           _residue_and_next_energy(res, other, terms)
-        else:
-          _residue_other_same_chain(res, other, terms)
+    _same_chain_nonadjacent_energy(chain, terms)
   # different chains (avoid double counting by index)
   for i, chain_i in enumerate(evo_struct.chains):
     for k in range(i + 1, len(evo_struct.chains)):
@@ -2330,8 +2399,7 @@ def _calculate_stability_from_structure(
         other = chain.residues[j]
         if j == i + 1:
           _residue_and_next_energy(res, other, terms)
-        else:
-          _residue_other_same_chain(res, other, terms)
+    _same_chain_nonadjacent_energy(chain, terms)
   for i, chain_i in enumerate(evo_struct.chains):
     for k in range(i + 1, len(evo_struct.chains)):
       chain_k = evo_struct.chains[k]

@@ -251,7 +251,7 @@ _RAMA_TABLE: Optional[RamaTable] = None
 # -----------------------------
 # Geometry utilities
 # -----------------------------
-def safe_acos(cos_value: float) -> float:
+def _safe_acos(cos_value: float) -> float:
   """Return acos with inputs clamped to [-1, 1] to avoid numeric blowups.
 
   Args:
@@ -267,7 +267,7 @@ def safe_acos(cos_value: float) -> float:
   return math.acos(cos_value)
 
 
-def rad_to_deg(rad: float) -> float:
+def _rad_to_deg(rad: float) -> float:
   """Convert radians to degrees.
 
   Args:
@@ -279,7 +279,7 @@ def rad_to_deg(rad: float) -> float:
   return rad * 180.0 / PI
 
 
-def deg_to_rad(deg: float) -> float:
+def _deg_to_rad(deg: float) -> float:
   """Convert degrees to radians.
 
   Args:
@@ -291,7 +291,7 @@ def deg_to_rad(deg: float) -> float:
   return deg * PI / 180.0
 
 
-def xyz_distance(a: np.ndarray, b: np.ndarray) -> float:
+def _xyz_distance(a: np.ndarray, b: np.ndarray) -> float:
   """Return Euclidean distance between two points.
 
   Args:
@@ -304,7 +304,7 @@ def xyz_distance(a: np.ndarray, b: np.ndarray) -> float:
   return float(np.linalg.norm(a - b))
 
 
-def xyz_angle(v1: np.ndarray, v2: np.ndarray) -> float:
+def _xyz_angle(v1: np.ndarray, v2: np.ndarray) -> float:
   """Return the angle between two vectors in radians.
 
   Args:
@@ -317,10 +317,10 @@ def xyz_angle(v1: np.ndarray, v2: np.ndarray) -> float:
   norm = np.linalg.norm(v1) * np.linalg.norm(v2)
   if norm < 1e-12:
     return 1000.0
-  return safe_acos(float(np.dot(v1, v2) / norm))
+  return _safe_acos(float(np.dot(v1, v2) / norm))
 
 
-def xyz_rotate_around(p: np.ndarray, axis_from: np.ndarray, axis_to: np.ndarray, angle: float) -> np.ndarray:
+def _xyz_rotate_around(p: np.ndarray, axis_from: np.ndarray, axis_to: np.ndarray, angle: float) -> np.ndarray:
   """Rotate a point around an axis defined by two points.
 
   Args:
@@ -354,7 +354,7 @@ def xyz_rotate_around(p: np.ndarray, axis_from: np.ndarray, axis_to: np.ndarray,
   return result + axis_from
 
 
-def get_fourth_atom(a: np.ndarray, b: np.ndarray, c: np.ndarray, ic_param: Sequence[float]) -> np.ndarray:
+def _get_fourth_atom(a: np.ndarray, b: np.ndarray, c: np.ndarray, ic_param: Sequence[float]) -> np.ndarray:
   """Compute the fourth atom position using internal coordinates (IC).
 
   Args:
@@ -371,16 +371,16 @@ def get_fourth_atom(a: np.ndarray, b: np.ndarray, c: np.ndarray, ic_param: Seque
   ba_x_bc = np.cross(ba, bc)
   if np.linalg.norm(ba_x_bc) < 1e-12:
     raise ValueError("Zero division in GetFourthAtom")
-  angle_abc = xyz_angle(ba, bc)
-  d = xyz_rotate_around(a, b, ba_x_bc + b, ic_param[3] - (PI - angle_abc))
-  d = xyz_rotate_around(d, b, c, ic_param[2])
+  angle_abc = _xyz_angle(ba, bc)
+  d = _xyz_rotate_around(a, b, ba_x_bc + b, ic_param[3] - (PI - angle_abc))
+  d = _xyz_rotate_around(d, b, c, ic_param[2])
   d = d - b
   d = d / np.linalg.norm(d) * ic_param[4]
   d = d + c
   return d
 
 
-def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> float:
+def _get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> float:
   """Return signed torsion angle for four points.
 
   The sign convention is matched to the EvoEF2 / Bio.PDB implementation.
@@ -397,7 +397,7 @@ def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
     return 0.0
   cos_value = float(np.dot(r_ab_x_rbc, r_bc_x_rcd) / norm1 / norm2)
   sin_value = float(np.dot(r_bc, r_cd_x_rab))
-  angle = safe_acos(cos_value)
+  angle = _safe_acos(cos_value)
   if sin_value < 0:
     angle = -angle
   return -angle
@@ -406,8 +406,6 @@ def get_torsion_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
 # -----------------------------
 # Parsing of EvoEF2 libraries
 # -----------------------------
-
-
 def _default_evoef2_root() -> Path:
   """Return the default path to the bundled EvoEF2 data directory."""
   return Path(__file__).resolve().parent / "evoef2_lib"
@@ -532,9 +530,9 @@ def _load_topology_cached(top_path: Path) -> Dict[str, ResidueTopology]:
             atom_c = atom_c[1:]
           ic_param = [0.0] * 5
           ic_param[0] = float(parts[5])
-          ic_param[1] = deg_to_rad(float(parts[6]))
-          ic_param[2] = deg_to_rad(float(parts[7]))
-          ic_param[3] = deg_to_rad(float(parts[8]))
+          ic_param[1] = _deg_to_rad(float(parts[6]))
+          ic_param[2] = _deg_to_rad(float(parts[7]))
+          ic_param[3] = _deg_to_rad(float(parts[8]))
           ic_param[4] = float(parts[9])
           current.ics.append(
             CharmmIC(
@@ -649,8 +647,8 @@ def _load_dunbrack_cached(path: Path) -> DunbrackLibrary:
       x = [float(parts[9]), float(parts[10]), float(parts[11]), float(parts[12])]
       s = [float(parts[13]), float(parts[14]), float(parts[15]), float(parts[16])]
       xcount = _DUNBRACK_TORSION_COUNT.get(resname, 0)
-      torsions = [deg_to_rad(v) for v in x[:xcount]]
-      deviations = [deg_to_rad(v) for v in s[:xcount]]
+      torsions = [_deg_to_rad(v) for v in x[:xcount]]
+      deviations = [_deg_to_rad(v) for v in s[:xcount]]
       bin_index = ((phi + 180) // 10) * 36 + ((psi + 180) // 10)
       if bin_index < 0 or bin_index >= len(bins):
         continue
@@ -661,8 +659,6 @@ def _load_dunbrack_cached(path: Path) -> DunbrackLibrary:
 # -----------------------------
 # Topology and atom reconstruction
 # -----------------------------
-
-
 def _residue_intra_bond_12(atom1: str, atom2: str, bonds: List[Bond]) -> bool:
   """Return True if atom1-atom2 is a direct covalent bond.
 
@@ -765,7 +761,7 @@ def _protein_atom_order(atom_name: str) -> int:
     return -1
 
 
-def residue_calc_sidechain_torsions(res: Residue, topologies: Dict[str, ResidueTopology]) -> None:
+def _residue_calc_sidechain_torsions(res: Residue, topologies: Dict[str, ResidueTopology]) -> None:
   """Compute and cache sidechain torsion angles for a residue.
 
   Args:
@@ -799,7 +795,7 @@ def residue_calc_sidechain_torsions(res: Residue, topologies: Dict[str, ResidueT
       return
     if not (a.is_xyz_valid and b.is_xyz_valid and c.is_xyz_valid and d.is_xyz_valid):
       return
-    torsion = get_torsion_angle(a.xyz, b.xyz, c.xyz, d.xyz)
+    torsion = _get_torsion_angle(a.xyz, b.xyz, c.xyz, d.xyz)
     res.xtorsions.append(torsion)
 
 
@@ -908,12 +904,14 @@ def _calc_atom_xyz(
       return None
     coords.append(xyz)
   try:
-    return get_fourth_atom(coords[0], coords[1], coords[2], ic.ic_param)
+    return _get_fourth_atom(coords[0], coords[1], coords[2], ic.ic_param)
   except ValueError:
     return None
 
 
-def residue_calc_all_atom_xyz(res: Residue, topologies: Dict[str, ResidueTopology], prev_res: Optional[Residue], next_res: Optional[Residue]) -> None:
+def _residue_calc_all_atom_xyz(
+  res: Residue, topologies: Dict[str, ResidueTopology], prev_res: Optional[Residue], next_res: Optional[Residue]
+) -> None:
   """Rebuild all missing atoms in a residue using IC parameters.
 
   Args:
@@ -936,7 +934,7 @@ def residue_calc_all_atom_xyz(res: Residue, topologies: Dict[str, ResidueTopolog
       done = False
 
 
-def chain_calc_all_atom_xyz(chain: Chain, topologies: Dict[str, ResidueTopology]) -> None:
+def _chain_calc_all_atom_xyz(chain: Chain, topologies: Dict[str, ResidueTopology]) -> None:
   """Rebuild missing atoms for every residue in a chain.
 
   Args:
@@ -946,7 +944,7 @@ def chain_calc_all_atom_xyz(chain: Chain, topologies: Dict[str, ResidueTopology]
   for i, res in enumerate(chain.residues):
     prev_res = chain.residues[i - 1] if i > 0 else None
     next_res = chain.residues[i + 1] if i < len(chain.residues) - 1 else None
-    residue_calc_all_atom_xyz(res, topologies, prev_res, next_res)
+    _residue_calc_all_atom_xyz(res, topologies, prev_res, next_res)
 
 
 def _apply_patch(
@@ -1198,10 +1196,10 @@ def rebuild_missing_atoms(
         for atom in res.atoms.values():
           atom.res = res
       # Rebuild missing heavy atoms and hydrogens from ICs.
-      chain_calc_all_atom_xyz(chain, topologies)
+      _chain_calc_all_atom_xyz(chain, topologies)
       # Cache sidechain torsions for Dunbrack scoring.
       for res in chain.residues:
-        residue_calc_sidechain_torsions(res, topologies)
+        _residue_calc_sidechain_torsions(res, topologies)
       chains.append(chain)
 
     if ligand_residues:
@@ -1209,7 +1207,7 @@ def rebuild_missing_atoms(
       for res in lig_chain.residues:
         for atom in res.atoms.values():
           atom.res = res
-      chain_calc_all_atom_xyz(lig_chain, topologies)
+      _chain_calc_all_atom_xyz(lig_chain, topologies)
       chains.append(lig_chain)
 
   return Structure(chains=chains)
@@ -1218,9 +1216,7 @@ def rebuild_missing_atoms(
 # -----------------------------
 # Energies
 # -----------------------------
-
-
-def energy_term_initialize() -> List[float]:
+def _energy_term_initialize() -> List[float]:
   """Allocate a zeroed energy term vector.
 
   Returns:
@@ -1229,7 +1225,7 @@ def energy_term_initialize() -> List[float]:
   return [0.0] * MAX_EVOEF_ENERGY_TERM_NUM
 
 
-def energy_term_weighting(energy_terms: List[float], weights: List[float]) -> List[float]:
+def _energy_term_weighting(energy_terms: List[float], weights: List[float]) -> List[float]:
   """Apply weights to energy terms and populate the total term.
 
   Args:
@@ -1344,11 +1340,11 @@ def _hbond(atom_h: Atom, atom_a: Atom, atom_d: Atom, atom_b: Atom, distance_ha: 
   xyz_dh = atom_d.xyz - atom_h.xyz
   xyz_ha = atom_h.xyz - atom_a.xyz
   xyz_ab = atom_a.xyz - atom_b.xyz
-  angle_theta = PI - xyz_angle(xyz_dh, xyz_ha)
-  if rad_to_deg(angle_theta) < 90:
+  angle_theta = PI - _xyz_angle(xyz_dh, xyz_ha)
+  if _rad_to_deg(angle_theta) < 90:
     return 0.0, 0.0, 0.0, 0.0
-  angle_phi = PI - xyz_angle(xyz_ha, xyz_ab)
-  if rad_to_deg(angle_phi) < 80:
+  angle_phi = PI - _xyz_angle(xyz_ha, xyz_ab)
+  if _rad_to_deg(angle_phi) < 80:
     return 0.0, 0.0, 0.0, 0.0
 
   if distance_ha < HBOND_OPTIMAL_DISTANCE:
@@ -1361,15 +1357,15 @@ def _hbond(atom_h: Atom, atom_a: Atom, atom_d: Atom, atom_b: Atom, distance_ha: 
   energy_theta = -1.0 * (math.cos(angle_theta) ** 4)
   energy_phi = 0.0
   if atom_h.is_bb and atom_a.is_bb:
-    energy_phi = -1.0 * (math.cos(angle_phi - deg_to_rad(150)) ** 4)
+    energy_phi = -1.0 * (math.cos(angle_phi - _deg_to_rad(150)) ** 4)
   else:
     if atom_a.hybrid == "SP3":
-      energy_phi = -1.0 * (math.cos(angle_phi - deg_to_rad(135)) ** 4)
+      energy_phi = -1.0 * (math.cos(angle_phi - _deg_to_rad(135)) ** 4)
     elif atom_a.hybrid == "SP2":
-      energy_phi = -1.0 * (math.cos(angle_phi - deg_to_rad(150)) ** 4)
+      energy_phi = -1.0 * (math.cos(angle_phi - _deg_to_rad(150)) ** 4)
 
   energy = 0.0
-  if rad_to_deg(angle_theta) >= 90 and rad_to_deg(angle_phi) >= 80 and distance_ha < HBOND_DISTANCE_CUTOFF_MAX:
+  if _rad_to_deg(angle_theta) >= 90 and _rad_to_deg(angle_phi) >= 80 and distance_ha < HBOND_DISTANCE_CUTOFF_MAX:
     energy = energy_r + energy_theta + energy_phi
     if energy > 0.0:
       energy = 0.0
@@ -1498,7 +1494,7 @@ def _inter_chain_energy(chain_a: Chain, chain_b: Chain, terms: List[float]) -> N
   grid_b = _build_cell_list(atoms_b, cell_size)
   for a1 in atoms_a:
     for a2 in _iter_neighbor_atoms(a1, grid_b, cell_size):
-      dist = xyz_distance(a1.xyz, a2.xyz)
+      dist = _xyz_distance(a1.xyz, a2.xyz)
       if dist > ENERGY_DISTANCE_CUTOFF:
         continue
       bond_type = 15
@@ -1553,7 +1549,7 @@ def _protein_ligand_energy(protein_chain: Chain, ligand_chain: Chain, terms: Lis
   grid_l = _build_cell_list(atoms_l, cell_size)
   for a1 in atoms_p:
     for a2 in _iter_neighbor_atoms(a1, grid_l, cell_size):
-      dist = xyz_distance(a1.xyz, a2.xyz)
+      dist = _xyz_distance(a1.xyz, a2.xyz)
       if dist > ENERGY_DISTANCE_CUTOFF:
         continue
       bond_type = 15
@@ -1599,12 +1595,12 @@ def _ssbond(atom_s1: Atom, atom_s2: Atom, atom_cb1: Atom, atom_cb2: Atom, atom_c
   Returns:
     Disulfide energy contribution (non-positive).
   """
-  dss = xyz_distance(atom_s1.xyz, atom_s2.xyz)
-  a_c1s1s2 = rad_to_deg(PI - xyz_angle(atom_s1.xyz - atom_s2.xyz, atom_s2.xyz - atom_cb2.xyz))
-  a_c2s2s1 = rad_to_deg(PI - xyz_angle(atom_cb1.xyz - atom_s1.xyz, atom_s1.xyz - atom_s2.xyz))
-  x_c1s1s2c2 = get_torsion_angle(atom_cb1.xyz, atom_s1.xyz, atom_s2.xyz, atom_cb2.xyz)
-  x_ca1cb1sg1sg2 = get_torsion_angle(atom_ca1.xyz, atom_cb1.xyz, atom_s1.xyz, atom_s2.xyz)
-  x_ca2cb2sg2sg1 = get_torsion_angle(atom_ca2.xyz, atom_cb2.xyz, atom_s2.xyz, atom_s1.xyz)
+  dss = _xyz_distance(atom_s1.xyz, atom_s2.xyz)
+  a_c1s1s2 = _rad_to_deg(PI - _xyz_angle(atom_s1.xyz - atom_s2.xyz, atom_s2.xyz - atom_cb2.xyz))
+  a_c2s2s1 = _rad_to_deg(PI - _xyz_angle(atom_cb1.xyz - atom_s1.xyz, atom_s1.xyz - atom_s2.xyz))
+  x_c1s1s2c2 = _get_torsion_angle(atom_cb1.xyz, atom_s1.xyz, atom_s2.xyz, atom_cb2.xyz)
+  x_ca1cb1sg1sg2 = _get_torsion_angle(atom_ca1.xyz, atom_cb1.xyz, atom_s1.xyz, atom_s2.xyz)
+  x_ca2cb2sg2sg1 = _get_torsion_angle(atom_ca2.xyz, atom_cb2.xyz, atom_s2.xyz, atom_s1.xyz)
   sse = (
     0.8 * (1 - math.exp(-10.0 * (dss - SSBOND_DISTANCE))) ** 2
     + 0.005 * (a_c1s1s2 - SSBOND_ANGLE) ** 2
@@ -1717,8 +1713,8 @@ def _aa_dunbrack(res: Residue, dun: DunbrackLibrary, terms: List[float]) -> None
   for i, rot in enumerate(rotamers):
     match = True
     for j, mean in enumerate(rot.torsions):
-      min_v = mean - deg_to_rad(30)
-      max_v = mean + deg_to_rad(30)
+      min_v = mean - _deg_to_rad(30)
+      max_v = mean + _deg_to_rad(30)
       torsion = res.xtorsions[j] if j < len(res.xtorsions) else 0.0
       torsion_m2pi = torsion - 2 * PI
       torsion_p2pi = torsion + 2 * PI
@@ -1766,15 +1762,15 @@ def _calc_phi_psi(chain: Chain) -> None:
     if i > 0:
       prev_c = chain.residues[i - 1].get_atom("C")
       if prev_c is not None:
-        dist_c0_n1 = xyz_distance(prev_c.xyz, n.xyz)
+        dist_c0_n1 = _xyz_distance(prev_c.xyz, n.xyz)
         if 1.25 < dist_c0_n1 < 1.45:
-          phi = rad_to_deg(get_torsion_angle(prev_c.xyz, n.xyz, ca.xyz, c.xyz))
+          phi = _rad_to_deg(_get_torsion_angle(prev_c.xyz, n.xyz, ca.xyz, c.xyz))
     if i < len(chain.residues) - 1:
       next_n = chain.residues[i + 1].get_atom("N")
       if next_n is not None:
-        dist_c1_n2 = xyz_distance(c.xyz, next_n.xyz)
+        dist_c1_n2 = _xyz_distance(c.xyz, next_n.xyz)
         if 1.25 < dist_c1_n2 < 1.45:
-          psi = rad_to_deg(get_torsion_angle(n.xyz, ca.xyz, c.xyz, next_n.xyz))
+          psi = _rad_to_deg(_get_torsion_angle(n.xyz, ca.xyz, c.xyz, next_n.xyz))
     res.phipsi = (phi, psi)
 
 
@@ -1793,7 +1789,7 @@ def _residue_intra_energy(res: Residue, terms: List[float]) -> None:
       a2 = atoms[j]
       if not a2.is_xyz_valid:
         continue
-      dist = xyz_distance(a1.xyz, a2.xyz)
+      dist = _xyz_distance(a1.xyz, a2.xyz)
       if dist > ENERGY_DISTANCE_CUTOFF:
         continue
       if a1.is_bb and a2.is_bb:
@@ -1851,7 +1847,7 @@ def _residue_and_next_energy(res: Residue, other: Residue, terms: List[float]) -
     for a2 in other.atoms.values():
       if not a2.is_xyz_valid:
         continue
-      dist = xyz_distance(a1.xyz, a2.xyz)
+      dist = _xyz_distance(a1.xyz, a2.xyz)
       if dist > ENERGY_DISTANCE_CUTOFF:
         continue
       if a1.is_bb and a2.is_bb:
@@ -1942,7 +1938,7 @@ def _residue_other_same_chain(res: Residue, other: Residue, terms: List[float]) 
     for a2 in other.atoms.values():
       if not a2.is_xyz_valid:
         continue
-      dist = xyz_distance(a1.xyz, a2.xyz)
+      dist = _xyz_distance(a1.xyz, a2.xyz)
       if dist > ENERGY_DISTANCE_CUTOFF:
         continue
       bond_type = 15
@@ -1989,7 +1985,7 @@ def _residue_other_same_chain(res: Residue, other: Residue, terms: List[float]) 
     ca1 = res.get_atom("CA")
     ca2 = other.get_atom("CA")
     if sg1 and sg2 and cb1 and cb2 and ca1 and ca2:
-      dist = xyz_distance(sg1.xyz, sg2.xyz)
+      dist = _xyz_distance(sg1.xyz, sg2.xyz)
       if SSBOND_CUTOFF_MIN < dist < SSBOND_CUTOFF_MAX:
         terms[36] += _ssbond(sg1, sg2, cb1, cb2, ca1, ca2)
 
@@ -2008,7 +2004,7 @@ def _residue_other_diff_chain(res: Residue, other: Residue, terms: List[float]) 
     for a2 in other.atoms.values():
       if not a2.is_xyz_valid:
         continue
-      dist = xyz_distance(a1.xyz, a2.xyz)
+      dist = _xyz_distance(a1.xyz, a2.xyz)
       if dist > ENERGY_DISTANCE_CUTOFF:
         continue
       bond_type = 15
@@ -2051,7 +2047,7 @@ def _residue_other_diff_chain(res: Residue, other: Residue, terms: List[float]) 
     ca1 = res.get_atom("CA")
     ca2 = other.get_atom("CA")
     if sg1 and sg2 and cb1 and cb2 and ca1 and ca2:
-      dist = xyz_distance(sg1.xyz, sg2.xyz)
+      dist = _xyz_distance(sg1.xyz, sg2.xyz)
       if SSBOND_CUTOFF_MIN < dist < SSBOND_CUTOFF_MAX:
         terms[56] += _ssbond(sg1, sg2, cb1, cb2, ca1, ca2)
 
@@ -2070,7 +2066,7 @@ def _residue_and_ligand_energy(res: Residue, ligand: Residue, terms: List[float]
     for a2 in ligand.atoms.values():
       if not a2.is_xyz_valid:
         continue
-      dist = xyz_distance(a1.xyz, a2.xyz)
+      dist = _xyz_distance(a1.xyz, a2.xyz)
       if dist > ENERGY_DISTANCE_CUTOFF:
         continue
       bond_type = 15
@@ -2105,8 +2101,6 @@ def _residue_and_ligand_energy(res: Residue, ligand: Residue, terms: List[float]
 # -----------------------------
 # Public API
 # -----------------------------
-
-
 def calculate_stability(
   structure: Union[Protein, str, Path],
   *,
@@ -2142,7 +2136,7 @@ def calculate_stability(
       # Phi/psi angles are required for Ramachandran and Dunbrack terms.
       _calc_phi_psi(chain)
 
-  terms = energy_term_initialize()
+  terms = _energy_term_initialize()
   # Compute stability across the whole structure.
   for chain in evo_struct.chains:
     for i, res in enumerate(chain.residues):
@@ -2172,7 +2166,7 @@ def calculate_stability(
       elif not chain_i.is_protein and chain_k.is_protein:
         _protein_ligand_energy(chain_k, chain_i, terms)
 
-  weighted = energy_term_weighting(terms, weights)
+  weighted = _energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)
 
 
@@ -2200,7 +2194,7 @@ def calculate_interface_energy(
   """
   weights = get_weights(weight_dict)
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
-  terms = energy_term_initialize()
+  terms = _energy_term_initialize()
   set1 = set(split1)
   set2 = set(split2)
   for i, chain_i in enumerate(evo_struct.chains):
@@ -2214,7 +2208,7 @@ def calculate_interface_energy(
         _protein_ligand_energy(chain_i, chain_k, terms)
       elif not chain_i.is_protein and chain_k.is_protein:
         _protein_ligand_energy(chain_k, chain_i, terms)
-  weighted = energy_term_weighting(terms, weights)
+  weighted = _energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)
 
 
@@ -2320,7 +2314,7 @@ def _calculate_stability_from_structure(
   for chain in evo_struct.chains:
     if chain.is_protein:
       _calc_phi_psi(chain)
-  terms = energy_term_initialize()
+  terms = _energy_term_initialize()
   for chain in evo_struct.chains:
     for i, res in enumerate(chain.residues):
       if not res.is_protein:
@@ -2344,7 +2338,7 @@ def _calculate_stability_from_structure(
         _protein_ligand_energy(chain_i, chain_k, terms)
       elif not chain_i.is_protein and chain_k.is_protein:
         _protein_ligand_energy(chain_k, chain_i, terms)
-  weighted = energy_term_weighting(terms, weights)
+  weighted = _energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)
 
 
@@ -2406,7 +2400,7 @@ def debug_evoef2_structure(
     if chain.is_protein:
       _calc_phi_psi(chain)
       for res in chain.residues:
-        residue_calc_sidechain_torsions(res, topologies)
+        _residue_calc_sidechain_torsions(res, topologies)
 
   total_atoms = 0
   valid_atoms = 0

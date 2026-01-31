@@ -178,12 +178,12 @@ def test_evoef2_stability_matches_reference(pdb_name, reference, total_delta_lim
 
 
 def test_energy_term_weighting_sets_total():
-  terms = evoef2.energy_term_initialize()
+  terms = evoef2._energy_term_initialize()
   terms[1] = 1.0
   terms[21] = -2.0
   weights = [1.0] * evoef2.MAX_EVOEF_ENERGY_TERM_NUM
   weights[21] = 2.0
-  weighted = evoef2.energy_term_weighting(terms, weights)
+  weighted = evoef2._energy_term_weighting(terms, weights)
   expected_total = weighted[1] + weighted[21]
   assert weighted[0] == pytest.approx(expected_total)
 

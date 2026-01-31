@@ -20,6 +20,12 @@ Metrics (energy terms) and implications:
 
 In general, more negative terms indicate more favorable interactions, while large
 positive repulsive terms or unfavorable conformational terms suggest strain or clashes.
+
+Stability metric interpretation:
+  - The "stability" energy corresponds to the total energy of a single structure.
+    Lower values indicate a more favorable (more stable) fold under this force field.
+  - Binding-related metrics (interface and DG_bind) are computed as differences of
+    stability energies; negative DG_bind implies favorable binding.
 """
 
 from __future__ import annotations

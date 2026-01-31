@@ -1781,56 +1781,59 @@ def _residue_intra_energy(res: Residue, terms: List[float]) -> None:
     res: Residue to score.
     terms: Energy term accumulator.
   """
-  atoms = list(res.atoms.values())
-  for i, a1 in enumerate(atoms):
-    if not a1.is_xyz_valid:
+  atoms = [atom for atom in res.atoms.values() if atom.is_xyz_valid]
+  if len(atoms) < 2:
+    return
+  coords = np.array([atom.xyz for atom in atoms], dtype=float)
+  diffs = coords[:, None, :] - coords[None, :, :]
+  dists = np.sqrt(np.sum(diffs * diffs, axis=-1))
+  idx_i, idx_j = np.triu_indices(len(atoms), 1)
+  mask = dists[idx_i, idx_j] <= ENERGY_DISTANCE_CUTOFF
+  if not np.any(mask):
+    return
+  for i, j in zip(idx_i[mask], idx_j[mask]):
+    a1 = atoms[i]
+    a2 = atoms[j]
+    dist = float(dists[i, j])
+    if a1.is_bb and a2.is_bb:
       continue
-    for j in range(i + 1, len(atoms)):
-      a2 = atoms[j]
-      if not a2.is_xyz_valid:
-        continue
-      dist = _xyz_distance(a1.xyz, a2.xyz)
-      if dist > ENERGY_DISTANCE_CUTOFF:
-        continue
-      if a1.is_bb and a2.is_bb:
-        continue
-      if not a1.is_bb and not a2.is_bb:
-        if res.name in {"ILE", "MET", "GLN", "GLU", "LYS", "ARG"}:
-          bond_type = _residue_intra_bond_connection(a1.name, a2.name, res.bonds)
-          if bond_type in (12, 13):
-            continue
-          terms[21] += _vdw_att(a1, a2, dist, bond_type)
-          terms[22] += _vdw_rep(a1, a2, dist, bond_type)
-          des_p, des_h = _lk_desolv(a1, a2, dist, bond_type)
-          terms[24] += des_p
-          terms[25] += des_h
-      else:
-        if a1.name == "CB" or a2.name == "CB":
-          continue
+    if not a1.is_bb and not a2.is_bb:
+      if res.name in {"ILE", "MET", "GLN", "GLU", "LYS", "ARG"}:
         bond_type = _residue_intra_bond_connection(a1.name, a2.name, res.bonds)
         if bond_type in (12, 13):
           continue
         terms[21] += _vdw_att(a1, a2, dist, bond_type)
         terms[22] += _vdw_rep(a1, a2, dist, bond_type)
-        terms[23] += _electro(a1, a2, dist, bond_type)
         des_p, des_h = _lk_desolv(a1, a2, dist, bond_type)
         terms[24] += des_p
         terms[25] += des_h
-        if dist < HBOND_DISTANCE_CUTOFF_MAX:
-          hb_tot = hb_dist = hb_theta = hb_phi = 0.0
-          if a1.is_hbond_h and a2.is_hbond_a:
-            atom_d = res.get_atom(a1.hb_d_or_b)
-            atom_b = res.get_atom(a2.hb_d_or_b)
-            if atom_d and atom_b:
-              hb_tot, hb_dist, hb_theta, hb_phi = _hbond(a1, a2, atom_d, atom_b, dist, bond_type)
-          elif a2.is_hbond_h and a1.is_hbond_a:
-            atom_d = res.get_atom(a2.hb_d_or_b)
-            atom_b = res.get_atom(a1.hb_d_or_b)
-            if atom_d and atom_b:
-              hb_tot, hb_dist, hb_theta, hb_phi = _hbond(a2, a1, atom_d, atom_b, dist, bond_type)
-          terms[26] += hb_dist
-          terms[27] += hb_theta
-          terms[28] += hb_phi
+    else:
+      if a1.name == "CB" or a2.name == "CB":
+        continue
+      bond_type = _residue_intra_bond_connection(a1.name, a2.name, res.bonds)
+      if bond_type in (12, 13):
+        continue
+      terms[21] += _vdw_att(a1, a2, dist, bond_type)
+      terms[22] += _vdw_rep(a1, a2, dist, bond_type)
+      terms[23] += _electro(a1, a2, dist, bond_type)
+      des_p, des_h = _lk_desolv(a1, a2, dist, bond_type)
+      terms[24] += des_p
+      terms[25] += des_h
+      if dist < HBOND_DISTANCE_CUTOFF_MAX:
+        hb_tot = hb_dist = hb_theta = hb_phi = 0.0
+        if a1.is_hbond_h and a2.is_hbond_a:
+          atom_d = res.get_atom(a1.hb_d_or_b)
+          atom_b = res.get_atom(a2.hb_d_or_b)
+          if atom_d and atom_b:
+            hb_tot, hb_dist, hb_theta, hb_phi = _hbond(a1, a2, atom_d, atom_b, dist, bond_type)
+        elif a2.is_hbond_h and a1.is_hbond_a:
+          atom_d = res.get_atom(a2.hb_d_or_b)
+          atom_b = res.get_atom(a1.hb_d_or_b)
+          if atom_d and atom_b:
+            hb_tot, hb_dist, hb_theta, hb_phi = _hbond(a2, a1, atom_d, atom_b, dist, bond_type)
+        terms[26] += hb_dist
+        terms[27] += hb_theta
+        terms[28] += hb_phi
 
 
 def _residue_and_next_energy(res: Residue, other: Residue, terms: List[float]) -> None:

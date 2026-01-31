@@ -18,7 +18,7 @@ print(sys.executable)
 project = "Neurosnap"
 copyright = "2022-2025, Neurosnap Inc."
 author = "Keaun Amani"
-release = "2026.01.26"
+release = "2026.01.31"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

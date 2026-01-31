@@ -247,7 +247,84 @@ def test_dg_bind_matches_subtraction():
 
 
 def test_debug_structure_smoke():
-  stats = evoef2.debug_evoef2_structure(str(FILES / "dimer_af2.pdb"))
+  stats = _debug_evoef2_structure(str(FILES / "dimer_af2.pdb"))
   assert stats["total_atoms"] > 0
   assert stats["valid_atoms"] > 0
   assert stats["protein_residues"] > 0
+
+
+def _debug_evoef2_structure(
+  structure,
+  *,
+  param_path=None,
+  topo_path=None,
+  dunbrack_path=None,
+):
+  topologies = evoef2.load_topology(topo_path)
+  dun = evoef2.load_dunbrack(dunbrack_path)
+  evo_struct = evoef2.rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
+  for chain in evo_struct.chains:
+    if chain.is_protein:
+      evoef2._calc_phi_psi(chain)
+      for res in chain.residues:
+        evoef2._residue_calc_sidechain_torsions(res, topologies)
+
+  total_atoms = 0
+  valid_atoms = 0
+  missing_atoms = 0
+  missing_h_atoms = 0
+  hb_h_atoms = 0
+  hb_a_atoms = 0
+  residues_with_default_phipsi = 0
+  protein_residues = 0
+  torsion_expected = 0
+  torsion_missing = 0
+  dunbrack_bins = 0
+  dunbrack_missing = 0
+
+  for chain in evo_struct.chains:
+    for res in chain.residues:
+      if res.is_protein:
+        protein_residues += 1
+        if res.phipsi == (-60.0, 60.0):
+          residues_with_default_phipsi += 1
+        expected = evoef2._DUNBRACK_TORSION_COUNT.get(res.name, 0)
+        torsion_expected += expected
+        if expected > 0 and len(res.xtorsions) == 0:
+          torsion_missing += 1
+        phi = int(res.phipsi[0])
+        psi = int(res.phipsi[1])
+        bin_index = ((phi + 180) // 10) * 36 + ((psi + 180) // 10)
+        if 0 <= bin_index < len(dun.bins):
+          if res.name in dun.bins[bin_index].by_residue:
+            dunbrack_bins += 1
+          else:
+            dunbrack_missing += 1
+
+      for atom in res.atoms.values():
+        total_atoms += 1
+        if atom.is_xyz_valid:
+          valid_atoms += 1
+        else:
+          missing_atoms += 1
+          if atom.is_h:
+            missing_h_atoms += 1
+        if atom.is_hbond_h:
+          hb_h_atoms += 1
+        if atom.is_hbond_a:
+          hb_a_atoms += 1
+
+  return {
+    "total_atoms": total_atoms,
+    "valid_atoms": valid_atoms,
+    "missing_atoms": missing_atoms,
+    "missing_h_atoms": missing_h_atoms,
+    "hb_h_atoms": hb_h_atoms,
+    "hb_a_atoms": hb_a_atoms,
+    "protein_residues": protein_residues,
+    "default_phipsi_residues": residues_with_default_phipsi,
+    "torsion_expected_total": torsion_expected,
+    "torsion_missing_residues": torsion_missing,
+    "dunbrack_bins_with_residue": dunbrack_bins,
+    "dunbrack_bins_missing_residue": dunbrack_missing,
+  }

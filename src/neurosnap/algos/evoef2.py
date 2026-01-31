@@ -2,6 +2,24 @@
 A Python implementation of the EvoEF2 protein scoring function / force field.
 Ported from the native EvoEF2 reference implementation.
 Original Implementation: https://github.com/tommyhuangthu/EvoEF2
+
+Metrics (energy terms) and implications:
+  - total: Weighted sum of all terms (lower is more favorable).
+  - reference_*: Per-residue reference energies that encode baseline preferences.
+  - intraR_vdwatt/vdwrep/electr/deslvP/deslvH: Intra-residue nonbonded interactions
+    (packing, electrostatics, and desolvation within a residue).
+  - intraR_hbscbb_*: Intra-residue hydrogen-bond geometry terms.
+  - interS_*: Same-chain (non-adjacent) interactions, capturing packing, electrostatics,
+    desolvation, disulfides, and hydrogen-bond geometries in folded structure.
+  - interD_*: Different-chain interactions for complexes (interface packing, electrostatics,
+    desolvation, disulfides, and hydrogen-bond geometries).
+  - ligand_*: Protein–ligand nonbonded and hydrogen-bond terms.
+  - aapropensity: Amino-acid propensity term from phi/psi bins (sequence–structure compatibility).
+  - ramachandran: Ramachandran backbone conformational preference term.
+  - dunbrack: Sidechain rotamer likelihood term from the Dunbrack library.
+
+In general, more negative terms indicate more favorable interactions, while large
+positive repulsive terms or unfavorable conformational terms suggest strain or clashes.
 """
 
 from __future__ import annotations

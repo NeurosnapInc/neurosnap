@@ -1190,7 +1190,8 @@ def rebuild_missing_atoms(
       _add_atoms_from_params(res, params)
       _add_bonds_from_topology(res, topologies)
       if res_name not in params and current_rows:
-        logger.warning("No EvoEF2 parameters for residue %s; skipping parameterization for its atoms.", res_name)
+        if res_name != "HOH":
+          logger.warning(f"No EvoEF2 parameters for residue {res_name}; skipping parameterization for its atoms.")
       for r in current_rows:
         atom_name = r["atom_name"]
         if atom_name not in res.atoms:

@@ -456,6 +456,8 @@ def _load_atom_params_cached(param_path: Path) -> Dict[str, Dict[str, AtomParam]
   with open(param_path, "r") as f:
     for line in f:
       line = line.strip()
+      if "!" in line:
+        line = line.split("!", 1)[0].strip()
       if not line or line.startswith("!"):
         continue
       parts = line.split()

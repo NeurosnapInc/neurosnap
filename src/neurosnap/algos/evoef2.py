@@ -26,10 +26,6 @@ Stability metric interpretation:
     Lower values indicate a more favorable (more stable) fold under this force field.
   - Binding-related metrics (interface and DG_bind) are computed as differences of
     stability energies; negative DG_bind implies favorable binding.
-
-TODO (nucleic acids):
-  - Add NA-specific torsion and base-stacking reference terms once suitable
-    reference tables are available.
 """
 
 from __future__ import annotations
@@ -48,41 +44,32 @@ from neurosnap.algos.evoef2_lib.constants import (
   AA_ONE_LETTER,
   AA_THREE_TO_ONE,
   COULOMB_CONSTANT,
-  DIELECTRIC_CONST_PROTEIN,
-  DIELECTRIC_CONST_PROTEIN_AVE,
-  DIELECTRIC_CONSTANT_WATER,
+  DNA_BI_CENTER,
+  DNA_BII_CENTER,
+  DNA_CHI_PURINE_CENTERS,
+  DNA_CHI_PYRIMIDINE_CENTERS,
   ELEC_DISTANCE_CUTOFF,
   ENERGY_DISTANCE_CUTOFF,
   ENERGY_SCALE_FACTOR_BOND_14,
   ENERGY_SCALE_FACTOR_BOND_15,
-  ENERGY_SCALE_FACTOR_BOND_123,
   ENERGY_TERM_NAMES,
   ENERGY_TERM_ORDER,
   HBOND_DISTANCE_CUTOFF_MAX,
   HBOND_LOCAL_REDUCE,
   HBOND_OPTIMAL_DISTANCE,
   HBOND_WELL_DEPTH,
-  IONIC_STRENGTH,
-  LK_SOLV_DISTANCE_CUTOFF,
   MAX_EVOEF_ENERGY_TERM_NUM,
   NA_BACKBONE_ATOMS,
-  NA_RESIDUES,
   NA_RESIDUE_MAP,
-  RNA_SUITE_CONFORMERS,
-  DNA_BI_CENTER,
-  DNA_BII_CENTER,
-  DNA_CHI_PURINE_CENTERS,
-  DNA_CHI_PYRIMIDINE_CENTERS,
+  NA_RESIDUES,
   PI,
-  PROTEIN_DESIGN_TEMPERATURE,
   RADIUS_SCALE_FOR_DESOLV,
   RADIUS_SCALE_FOR_VDW,
+  RNA_SUITE_CONFORMERS,
   SSBOND_ANGLE,
   SSBOND_CUTOFF_MAX,
   SSBOND_CUTOFF_MIN,
   SSBOND_DISTANCE,
-  SSBOND_TORSION,
-  WEIGHT_KEY_TO_INDEX,
 )
 from neurosnap.algos.evoef2_lib.weights import get_weights
 from neurosnap.log import logger
@@ -543,12 +530,7 @@ def _load_na_params(
       continue
     for atom_name, (atom_type, charge) in atoms.items():
       eps, rmin2 = vdw_params.get(atom_type, (0.0, 0.0))
-      is_bb = (
-        atom_name in NA_BACKBONE_ATOMS
-        or "'" in atom_name
-        or atom_name.startswith("P")
-        or atom_name.startswith("OP")
-      )
+      is_bb = atom_name in NA_BACKBONE_ATOMS or "'" in atom_name or atom_name.startswith("P") or atom_name.startswith("OP")
       polarity = "P" if atom_name[0] in {"O", "N", "P"} else "C"
       hb_h_or_a = "H" if atom_name.startswith("H") else ("A" if atom_name[0] in {"O", "N"} else "-")
       hybrid = "SP2" if atom_name[0] in {"O", "N"} and "'" not in atom_name else "SP3"

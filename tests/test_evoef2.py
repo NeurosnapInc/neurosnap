@@ -253,6 +253,32 @@ def test_debug_structure_smoke():
   assert stats["protein_residues"] > 0
 
 
+def test_na_binding_dna_dna_smoke():
+  data = calculate_binding(
+    str(FILES / "1nkp_mycmax_with_hydrogens.pdb"),
+    split1=["H"],
+    split2=["J"],
+  )
+  assert "interface" in data and "total" in data["interface"]
+  assert np.isfinite(data["interface"]["total"])
+
+
+def test_na_binding_protein_dna_smoke():
+  data = calculate_binding(
+    str(FILES / "1nkp_mycmax_with_hydrogens.pdb"),
+    split1=["D"],
+    split2=["J"],
+  )
+  assert "interface" in data and "total" in data["interface"]
+  assert np.isfinite(data["interface"]["total"])
+
+
+def test_rna_stability_smoke():
+  data = calculate_stability(str(FILES / "rna_monomer_1.cif"))
+  assert "total" in data
+  assert np.isfinite(data["total"])
+
+
 def _debug_evoef2_structure(
   structure,
   *,

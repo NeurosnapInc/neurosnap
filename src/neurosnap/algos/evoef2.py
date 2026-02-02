@@ -554,6 +554,15 @@ def _load_na_params(
   return param_map
 
 
+@lru_cache(maxsize=1)
+def _load_na_bundle() -> Tuple[Dict[str, Dict[str, AtomParam]], Dict[str, ResidueTopology]]:
+  na_top = _default_evoef2_root() / "top_all36_na.rtf"
+  na_prm = _default_evoef2_root() / "par_all36_na.prm"
+  na_params = _load_na_params(na_top, na_prm)
+  na_topologies = _load_na_topology_cached(na_top)
+  return na_params, na_topologies
+
+
 def _assign_hbond_bases(res: Residue) -> None:
   """Assign hb_d_or_b for NA atoms based on local bonds."""
   if not res.is_nucleic:
@@ -1468,10 +1477,7 @@ def rebuild_missing_atoms(
   params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
   if has_na:
-    na_top = _default_evoef2_root() / "top_all36_na.rtf"
-    na_prm = _default_evoef2_root() / "par_all36_na.prm"
-    na_params = _load_na_params(na_top, na_prm)
-    na_topologies = _load_na_topology_cached(na_top)
+    na_params, na_topologies = _load_na_bundle()
     for res_name, atoms in na_params.items():
       params[res_name] = atoms
     for res_name, topo in na_topologies.items():
@@ -2610,7 +2616,7 @@ def calculate_stability(
     if chain.is_protein:
       # Phi/psi angles are required for Ramachandran and Dunbrack terms.
       _calc_phi_psi(chain)
-    if _chain_is_polymer(chain):
+    if any(res.is_nucleic for res in chain.residues):
       _calc_na_torsions(chain)
 
   terms = _energy_term_initialize()
@@ -2797,7 +2803,7 @@ def _calculate_stability_from_structure(
   for chain in evo_struct.chains:
     if chain.is_protein:
       _calc_phi_psi(chain)
-    if _chain_is_polymer(chain):
+    if any(res.is_nucleic for res in chain.residues):
       _calc_na_torsions(chain)
   terms = _energy_term_initialize()
   for chain in evo_struct.chains:

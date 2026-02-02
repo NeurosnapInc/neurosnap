@@ -556,8 +556,8 @@ def _load_na_params(
 
 @lru_cache(maxsize=1)
 def _load_na_bundle() -> Tuple[Dict[str, Dict[str, AtomParam]], Dict[str, ResidueTopology]]:
-  na_top = _default_evoef2_root() / "top_all36_na.rtf"
-  na_prm = _default_evoef2_root() / "par_all36_na.prm"
+  na_top = _default_evoef2_root() / "charmm36_na_top.rtf"
+  na_prm = _default_evoef2_root() / "charmm36_na_par.prm"
   na_params = _load_na_params(na_top, na_prm)
   na_topologies = _load_na_topology_cached(na_top)
   return na_params, na_topologies

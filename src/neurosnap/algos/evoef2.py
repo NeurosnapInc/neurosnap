@@ -450,6 +450,7 @@ def _chain_is_polymer(chain: Chain) -> bool:
 
 def _load_na_vdw_params(prm_path: Path) -> Dict[str, Tuple[float, float]]:
   """Parse CHARMM36 NA NONBONDED params: type -> (epsilon, rmin/2)."""
+  # NOTE: We only need LJ params; bonded terms in PRM are unused here.
   params: Dict[str, Tuple[float, float]] = {}
   in_nonbonded = False
   with open(prm_path, "r") as f:
@@ -487,6 +488,7 @@ def _load_na_vdw_params(prm_path: Path) -> Dict[str, Tuple[float, float]]:
 
 def _load_na_atoms_from_rtf(top_path: Path) -> Dict[str, Dict[str, Tuple[str, float]]]:
   """Parse CHARMM36 NA RTF atoms: res -> atom -> (type, charge)."""
+  # RTF provides per-residue atom names, types, and charges.
   residues: Dict[str, Dict[str, Tuple[str, float]]] = {}
   current_res: Optional[str] = None
   with open(top_path, "r") as f:
@@ -522,6 +524,7 @@ def _load_na_params(
   prm_path: Path,
 ) -> Dict[str, Dict[str, AtomParam]]:
   """Build EvoEF2-style NA params from CHARMM36 RTF/PRM."""
+  # Merge RTF atom definitions (type/charge) with PRM nonbonded (epsilon/rmin/2).
   atom_defs = _load_na_atoms_from_rtf(top_path)
   vdw_params = _load_na_vdw_params(prm_path)
   param_map: Dict[str, Dict[str, AtomParam]] = {}
@@ -530,9 +533,12 @@ def _load_na_params(
       continue
     for atom_name, (atom_type, charge) in atoms.items():
       eps, rmin2 = vdw_params.get(atom_type, (0.0, 0.0))
+      # Backbone classification and polarity are heuristic but consistent.
       is_bb = atom_name in NA_BACKBONE_ATOMS or "'" in atom_name or atom_name.startswith("P") or atom_name.startswith("OP")
       polarity = "P" if atom_name[0] in {"O", "N", "P"} else "C"
+      # H-bond role: hydrogens are donors; hetero atoms default to acceptors.
       hb_h_or_a = "H" if atom_name.startswith("H") else ("A" if atom_name[0] in {"O", "N"} else "-")
+      # Hybridization heuristic for the angle-dependent H-bond term.
       hybrid = "SP2" if atom_name[0] in {"O", "N"} and "'" not in atom_name else "SP3"
       param = AtomParam(
         name=atom_name,
@@ -556,6 +562,8 @@ def _load_na_params(
 
 @lru_cache(maxsize=1)
 def _load_na_bundle() -> Tuple[Dict[str, Dict[str, AtomParam]], Dict[str, ResidueTopology]]:
+  # Cached NA params/topology to avoid repeated CHARMM parsing per call.
+  # Source (CHARMM36 NA): https://github.com/mackerell-lab/charmm36-force-field/raw/refs/heads/main/toppar_c36_jul24.tgz
   na_top = _default_evoef2_root() / "charmm36_na_top.rtf"
   na_prm = _default_evoef2_root() / "charmm36_na_par.prm"
   na_params = _load_na_params(na_top, na_prm)
@@ -565,6 +573,8 @@ def _load_na_bundle() -> Tuple[Dict[str, Dict[str, AtomParam]], Dict[str, Residu
 
 def _assign_hbond_bases(res: Residue) -> None:
   """Assign hb_d_or_b for NA atoms based on local bonds."""
+  # EvoEF2 expects donor/base atoms for H-bond geometry; we approximate by
+  # the first bonded heavy atom in the residue.
   if not res.is_nucleic:
     return
   for atom in res.atoms.values():
@@ -607,6 +617,7 @@ def _angle_diff_deg(a: float, b: float) -> float:
 
 def _calc_na_torsions(chain: Chain) -> None:
   """Compute NA torsions (alpha..zeta, delta, chi) per residue."""
+  # Torsion definitions follow NA standards (alpha..zeta and chi).
   for i, res in enumerate(chain.residues):
     if not res.is_nucleic:
       continue
@@ -615,6 +626,7 @@ def _calc_na_torsions(chain: Chain) -> None:
     next_res = chain.residues[i + 1] if i < len(chain.residues) - 1 else None
 
     if prev_res and prev_res.is_nucleic:
+      # alpha uses previous residue O3' to current backbone.
       o3p = prev_res.get_atom("O3'")
       p = res.get_atom("P")
       o5 = res.get_atom("O5'")
@@ -636,6 +648,7 @@ def _calc_na_torsions(chain: Chain) -> None:
       res.na_torsions["delta"] = _rad_to_deg(_get_torsion_angle(c5.xyz, c4.xyz, c3.xyz, o3.xyz))
 
     if next_res and next_res.is_nucleic and c4 and c3 and o3:
+      # epsilon/zeta depend on next residue P/O5'.
       p_next = next_res.get_atom("P")
       o5_next = next_res.get_atom("O5'")
       if p_next:
@@ -646,6 +659,7 @@ def _calc_na_torsions(chain: Chain) -> None:
     o4 = res.get_atom("O4'")
     c1 = res.get_atom("C1'")
     if o4 and c1:
+      # chi is base-type specific (purine vs pyrimidine).
       if _na_is_purine(res):
         n9 = res.get_atom("N9")
         c4b = res.get_atom("C4")
@@ -659,6 +673,7 @@ def _calc_na_torsions(chain: Chain) -> None:
 
 
 def _rna_suite_energy(prev_res: Optional[Residue], res: Residue) -> float:
+  # Suite is defined across two residues: (delta-1, epsilon-1, zeta-1, alpha, beta, gamma, delta).
   if not res.is_nucleic or not _is_rna_residue(res):
     return 0.0
   if prev_res is None or not _is_rna_residue(prev_res):
@@ -678,6 +693,7 @@ def _rna_suite_energy(prev_res: Optional[Residue], res: Residue) -> float:
     res.na_torsions["gamma"],
     res.na_torsions["delta"],
   ]
+  # Score is distance in torsion space to nearest cluster center.
   sigma = 30.0
   best = None
   for _, angles in RNA_SUITE_CONFORMERS:
@@ -691,6 +707,7 @@ def _rna_suite_energy(prev_res: Optional[Residue], res: Residue) -> float:
 
 
 def _dna_bibii_energy(res: Residue) -> float:
+  # BI/BII preference modeled as distance to two epsilon/zeta centers.
   if not res.is_nucleic or _is_rna_residue(res):
     return 0.0
   if "epsilon" not in res.na_torsions or "zeta" not in res.na_torsions:
@@ -704,6 +721,7 @@ def _dna_bibii_energy(res: Residue) -> float:
 
 
 def _dna_chi_energy(res: Residue) -> float:
+  # Chi preference modeled as distance to canonical anti/syn centers.
   if not res.is_nucleic or _is_rna_residue(res):
     return 0.0
   if "chi" not in res.na_torsions:
@@ -1472,11 +1490,13 @@ def rebuild_missing_atoms(
   protein = structure if isinstance(structure, Protein) else Protein(structure, format="auto")
   df = protein.df
   df = df[df["model"] == protein.models()[0]]
+  # Only merge NA params/topology if the structure contains NA residues.
   has_na = any(_is_nucleic_res_name(name) for name in df["res_name"].unique())
 
   params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
   if has_na:
+    # Merge NA params/topology into EvoEF2 tables.
     na_params, na_topologies = _load_na_bundle()
     for res_name, atoms in na_params.items():
       params[res_name] = atoms
@@ -2616,6 +2636,7 @@ def calculate_stability(
     if chain.is_protein:
       # Phi/psi angles are required for Ramachandran and Dunbrack terms.
       _calc_phi_psi(chain)
+    # Only compute NA torsions for chains containing NA residues.
     if any(res.is_nucleic for res in chain.residues):
       _calc_na_torsions(chain)
 
@@ -2633,6 +2654,7 @@ def calculate_stability(
         _aa_propensity_ramachandran(res, aap, rama, terms)
         _aa_dunbrack(res, dun, terms)
       if res.is_nucleic:
+        # NA-specific torsion terms (nonbonded-only NA support).
         prev_res = chain.residues[i - 1] if i > 0 else None
         terms[94] += _rna_suite_energy(prev_res, res)
         terms[95] += _dna_bibii_energy(res)
@@ -2803,6 +2825,7 @@ def _calculate_stability_from_structure(
   for chain in evo_struct.chains:
     if chain.is_protein:
       _calc_phi_psi(chain)
+    # Only compute NA torsions for chains containing NA residues.
     if any(res.is_nucleic for res in chain.residues):
       _calc_na_torsions(chain)
   terms = _energy_term_initialize()
@@ -2817,6 +2840,7 @@ def _calculate_stability_from_structure(
         _aa_propensity_ramachandran(res, aap, rama, terms)
         _aa_dunbrack(res, dun, terms)
       if res.is_nucleic:
+        # NA-specific torsion terms (nonbonded-only NA support).
         prev_res = chain.residues[i - 1] if i > 0 else None
         terms[94] += _rna_suite_energy(prev_res, res)
         terms[95] += _dna_bibii_energy(res)

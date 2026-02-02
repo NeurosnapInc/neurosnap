@@ -68,6 +68,11 @@ from neurosnap.algos.evoef2_lib.constants import (
   NA_BACKBONE_ATOMS,
   NA_RESIDUES,
   NA_RESIDUE_MAP,
+  RNA_SUITE_CONFORMERS,
+  DNA_BI_CENTER,
+  DNA_BII_CENTER,
+  DNA_CHI_PURINE_CENTERS,
+  DNA_CHI_PYRIMIDINE_CENTERS,
   PI,
   PROTEIN_DESIGN_TEMPERATURE,
   RADIUS_SCALE_FOR_DESOLV,
@@ -234,6 +239,7 @@ class Residue:
   is_protein: bool = True
   is_nucleic: bool = False
   xtorsions: List[float] = field(default_factory=list)
+  na_torsions: Dict[str, float] = field(default_factory=dict)
 
   def get_atom(self, name: str) -> Optional[Atom]:
     """Return an atom by name if present."""
@@ -587,6 +593,144 @@ def _assign_hbond_bases(res: Residue) -> None:
         break
     if bonded:
       atom.hb_d_or_b = bonded
+
+
+def _is_rna_residue(res: Residue) -> bool:
+  if not res.is_nucleic:
+    return False
+  return res.get_atom("O2'") is not None
+
+
+def _na_is_purine(res: Residue) -> bool:
+  return res.name in {"ADE", "GUA"}
+
+
+def _na_is_pyrimidine(res: Residue) -> bool:
+  return res.name in {"CYT", "THY", "URA"}
+
+
+def _angle_diff_deg(a: float, b: float) -> float:
+  diff = (a - b + 180.0) % 360.0 - 180.0
+  return diff
+
+
+def _calc_na_torsions(chain: Chain) -> None:
+  """Compute NA torsions (alpha..zeta, delta, chi) per residue."""
+  for i, res in enumerate(chain.residues):
+    if not res.is_nucleic:
+      continue
+    res.na_torsions.clear()
+    prev_res = chain.residues[i - 1] if i > 0 else None
+    next_res = chain.residues[i + 1] if i < len(chain.residues) - 1 else None
+
+    if prev_res and prev_res.is_nucleic:
+      o3p = prev_res.get_atom("O3'")
+      p = res.get_atom("P")
+      o5 = res.get_atom("O5'")
+      c5 = res.get_atom("C5'")
+      if o3p and p and o5 and c5:
+        res.na_torsions["alpha"] = _rad_to_deg(_get_torsion_angle(o3p.xyz, p.xyz, o5.xyz, c5.xyz))
+
+    p = res.get_atom("P")
+    o5 = res.get_atom("O5'")
+    c5 = res.get_atom("C5'")
+    c4 = res.get_atom("C4'")
+    c3 = res.get_atom("C3'")
+    o3 = res.get_atom("O3'")
+    if p and o5 and c5 and c4:
+      res.na_torsions["beta"] = _rad_to_deg(_get_torsion_angle(p.xyz, o5.xyz, c5.xyz, c4.xyz))
+    if o5 and c5 and c4 and c3:
+      res.na_torsions["gamma"] = _rad_to_deg(_get_torsion_angle(o5.xyz, c5.xyz, c4.xyz, c3.xyz))
+    if c5 and c4 and c3 and o3:
+      res.na_torsions["delta"] = _rad_to_deg(_get_torsion_angle(c5.xyz, c4.xyz, c3.xyz, o3.xyz))
+
+    if next_res and next_res.is_nucleic and c4 and c3 and o3:
+      p_next = next_res.get_atom("P")
+      o5_next = next_res.get_atom("O5'")
+      if p_next:
+        res.na_torsions["epsilon"] = _rad_to_deg(_get_torsion_angle(c4.xyz, c3.xyz, o3.xyz, p_next.xyz))
+      if p_next and o5_next:
+        res.na_torsions["zeta"] = _rad_to_deg(_get_torsion_angle(c3.xyz, o3.xyz, p_next.xyz, o5_next.xyz))
+
+    o4 = res.get_atom("O4'")
+    c1 = res.get_atom("C1'")
+    if o4 and c1:
+      if _na_is_purine(res):
+        n9 = res.get_atom("N9")
+        c4b = res.get_atom("C4")
+        if n9 and c4b:
+          res.na_torsions["chi"] = _rad_to_deg(_get_torsion_angle(o4.xyz, c1.xyz, n9.xyz, c4b.xyz))
+      elif _na_is_pyrimidine(res):
+        n1 = res.get_atom("N1")
+        c2b = res.get_atom("C2")
+        if n1 and c2b:
+          res.na_torsions["chi"] = _rad_to_deg(_get_torsion_angle(o4.xyz, c1.xyz, n1.xyz, c2b.xyz))
+
+
+def _rna_suite_energy(prev_res: Optional[Residue], res: Residue) -> float:
+  if not res.is_nucleic or not _is_rna_residue(res):
+    return 0.0
+  if prev_res is None or not _is_rna_residue(prev_res):
+    return 0.0
+  needed_prev = {"delta", "epsilon", "zeta"}
+  needed_curr = {"alpha", "beta", "gamma", "delta"}
+  if not needed_prev.issubset(prev_res.na_torsions.keys()):
+    return 0.0
+  if not needed_curr.issubset(res.na_torsions.keys()):
+    return 0.0
+  suite = [
+    prev_res.na_torsions["delta"],
+    prev_res.na_torsions["epsilon"],
+    prev_res.na_torsions["zeta"],
+    res.na_torsions["alpha"],
+    res.na_torsions["beta"],
+    res.na_torsions["gamma"],
+    res.na_torsions["delta"],
+  ]
+  sigma = 30.0
+  best = None
+  for _, angles in RNA_SUITE_CONFORMERS:
+    score = 0.0
+    for val, center in zip(suite, angles):
+      diff = _angle_diff_deg(val, center)
+      score += (diff / sigma) ** 2
+    if best is None or score < best:
+      best = score
+  return best if best is not None else 0.0
+
+
+def _dna_bibii_energy(res: Residue) -> float:
+  if not res.is_nucleic or _is_rna_residue(res):
+    return 0.0
+  if "epsilon" not in res.na_torsions or "zeta" not in res.na_torsions:
+    return 0.0
+  eps = res.na_torsions["epsilon"]
+  zet = res.na_torsions["zeta"]
+  sigma = 30.0
+  bi = (_angle_diff_deg(eps, DNA_BI_CENTER[0]) / sigma) ** 2 + (_angle_diff_deg(zet, DNA_BI_CENTER[1]) / sigma) ** 2
+  bii = (_angle_diff_deg(eps, DNA_BII_CENTER[0]) / sigma) ** 2 + (_angle_diff_deg(zet, DNA_BII_CENTER[1]) / sigma) ** 2
+  return min(bi, bii)
+
+
+def _dna_chi_energy(res: Residue) -> float:
+  if not res.is_nucleic or _is_rna_residue(res):
+    return 0.0
+  if "chi" not in res.na_torsions:
+    return 0.0
+  chi = res.na_torsions["chi"]
+  sigma = 30.0
+  if _na_is_purine(res):
+    centers = DNA_CHI_PURINE_CENTERS
+  elif _na_is_pyrimidine(res):
+    centers = DNA_CHI_PYRIMIDINE_CENTERS
+  else:
+    return 0.0
+  best = None
+  for center in centers:
+    score = (_angle_diff_deg(chi, center) / sigma) ** 2
+    if best is None or score < best:
+      best = score
+  return best if best is not None else 0.0
 
 
 def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, AtomParam]]:
@@ -2484,6 +2628,8 @@ def calculate_stability(
     if chain.is_protein:
       # Phi/psi angles are required for Ramachandran and Dunbrack terms.
       _calc_phi_psi(chain)
+    if _chain_is_polymer(chain):
+      _calc_na_torsions(chain)
 
   terms = _energy_term_initialize()
   # Compute stability across the whole structure.
@@ -2498,6 +2644,11 @@ def calculate_stability(
       if res.is_protein:
         _aa_propensity_ramachandran(res, aap, rama, terms)
         _aa_dunbrack(res, dun, terms)
+      if res.is_nucleic:
+        prev_res = chain.residues[i - 1] if i > 0 else None
+        terms[94] += _rna_suite_energy(prev_res, res)
+        terms[95] += _dna_bibii_energy(res)
+        terms[96] += _dna_chi_energy(res)
       # same-chain pairs (protein backbone special-case)
       for j in range(i + 1, len(chain.residues)):
         other = chain.residues[j]
@@ -2664,6 +2815,8 @@ def _calculate_stability_from_structure(
   for chain in evo_struct.chains:
     if chain.is_protein:
       _calc_phi_psi(chain)
+    if _chain_is_polymer(chain):
+      _calc_na_torsions(chain)
   terms = _energy_term_initialize()
   for chain in evo_struct.chains:
     for i, res in enumerate(chain.residues):
@@ -2675,6 +2828,11 @@ def _calculate_stability_from_structure(
       if res.is_protein:
         _aa_propensity_ramachandran(res, aap, rama, terms)
         _aa_dunbrack(res, dun, terms)
+      if res.is_nucleic:
+        prev_res = chain.residues[i - 1] if i > 0 else None
+        terms[94] += _rna_suite_energy(prev_res, res)
+        terms[95] += _dna_bibii_energy(res)
+        terms[96] += _dna_chi_energy(res)
       for j in range(i + 1, len(chain.residues)):
         other = chain.residues[j]
         if j == i + 1 and res.is_protein and other.is_protein:

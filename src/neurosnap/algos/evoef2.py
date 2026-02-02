@@ -26,6 +26,10 @@ Stability metric interpretation:
     Lower values indicate a more favorable (more stable) fold under this force field.
   - Binding-related metrics (interface and DG_bind) are computed as differences of
     stability energies; negative DG_bind implies favorable binding.
+
+TODO (nucleic acids):
+  - Add NA-specific torsion and base-stacking reference terms once suitable
+    reference tables are available.
 """
 
 from __future__ import annotations
@@ -61,6 +65,9 @@ from neurosnap.algos.evoef2_lib.constants import (
   IONIC_STRENGTH,
   LK_SOLV_DISTANCE_CUTOFF,
   MAX_EVOEF_ENERGY_TERM_NUM,
+  NA_BACKBONE_ATOMS,
+  NA_RESIDUES,
+  NA_RESIDUE_MAP,
   PI,
   PROTEIN_DESIGN_TEMPERATURE,
   RADIUS_SCALE_FOR_DESOLV,
@@ -225,6 +232,7 @@ class Residue:
   phipsi: Tuple[float, float] = (0.0, 0.0)
   n_cb_in_8a: int = 0
   is_protein: bool = True
+  is_nucleic: bool = False
   xtorsions: List[float] = field(default_factory=list)
 
   def get_atom(self, name: str) -> Optional[Atom]:
@@ -435,6 +443,152 @@ def _default_evoef2_root() -> Path:
   return Path(__file__).resolve().parent / "evoef2_lib"
 
 
+def _is_nucleic_res_name(res_name: str) -> bool:
+  return res_name in NA_RESIDUES or res_name in NA_RESIDUE_MAP
+
+
+def _is_polymer_residue(res: Residue) -> bool:
+  return res.is_protein or res.is_nucleic
+
+
+def _chain_is_polymer(chain: Chain) -> bool:
+  return any(_is_polymer_residue(res) for res in chain.residues)
+
+
+def _load_na_vdw_params(prm_path: Path) -> Dict[str, Tuple[float, float]]:
+  """Parse CHARMM36 NA NONBONDED params: type -> (epsilon, rmin/2)."""
+  params: Dict[str, Tuple[float, float]] = {}
+  in_nonbonded = False
+  with open(prm_path, "r") as f:
+    for raw in f:
+      line = raw.strip()
+      if not line:
+        continue
+      if line.startswith("!"):
+        continue
+      if line.startswith("NONBONDED"):
+        in_nonbonded = True
+        continue
+      if not in_nonbonded:
+        continue
+      if line.startswith("HBOND") or line.startswith("NBFIX"):
+        break
+      if line.startswith("CUTNB"):
+        continue
+      if "!" in line:
+        line = line.split("!", 1)[0].strip()
+      if not line:
+        continue
+      parts = line.split()
+      if len(parts) < 4:
+        continue
+      atom_type = parts[0]
+      try:
+        eps = float(parts[2])
+        rmin2 = float(parts[3])
+      except ValueError:
+        continue
+      params[atom_type] = (abs(eps), rmin2)
+  return params
+
+
+def _load_na_atoms_from_rtf(top_path: Path) -> Dict[str, Dict[str, Tuple[str, float]]]:
+  """Parse CHARMM36 NA RTF atoms: res -> atom -> (type, charge)."""
+  residues: Dict[str, Dict[str, Tuple[str, float]]] = {}
+  current_res: Optional[str] = None
+  with open(top_path, "r") as f:
+    for raw in f:
+      line = raw.strip()
+      if not line or line.startswith("*") or line.startswith("!"):
+        continue
+      if "!" in line:
+        line = line.split("!", 1)[0].strip()
+      if not line:
+        continue
+      parts = line.split()
+      if not parts:
+        continue
+      if parts[0] == "RESI" and len(parts) >= 2:
+        current_res = parts[1]
+        residues.setdefault(current_res, {})
+        continue
+      if parts[0] == "ATOM" and current_res and len(parts) >= 4:
+        atom_name = parts[1]
+        atom_type = parts[2]
+        try:
+          charge = float(parts[3])
+        except ValueError:
+          charge = 0.0
+        residues[current_res][atom_name] = (atom_type, charge)
+  return residues
+
+
+@lru_cache(maxsize=1)
+def _load_na_params(
+  top_path: Path,
+  prm_path: Path,
+) -> Dict[str, Dict[str, AtomParam]]:
+  """Build EvoEF2-style NA params from CHARMM36 RTF/PRM."""
+  atom_defs = _load_na_atoms_from_rtf(top_path)
+  vdw_params = _load_na_vdw_params(prm_path)
+  param_map: Dict[str, Dict[str, AtomParam]] = {}
+  for res_name, atoms in atom_defs.items():
+    if not _is_nucleic_res_name(res_name):
+      continue
+    for atom_name, (atom_type, charge) in atoms.items():
+      eps, rmin2 = vdw_params.get(atom_type, (0.0, 0.0))
+      is_bb = (
+        atom_name in NA_BACKBONE_ATOMS
+        or "'" in atom_name
+        or atom_name.startswith("P")
+        or atom_name.startswith("OP")
+      )
+      polarity = "P" if atom_name[0] in {"O", "N", "P"} else "C"
+      hb_h_or_a = "H" if atom_name.startswith("H") else ("A" if atom_name[0] in {"O", "N"} else "-")
+      hybrid = "SP2" if atom_name[0] in {"O", "N"} and "'" not in atom_name else "SP3"
+      param = AtomParam(
+        name=atom_name,
+        type=atom_type,
+        is_bb=is_bb,
+        polarity=polarity,
+        epsilon=eps,
+        radius=rmin2,
+        charge=charge,
+        hb_h_or_a=hb_h_or_a,
+        hb_d_or_b="-",
+        hb_b2="-",
+        hybrid=hybrid,
+        eef1_free_dg=0.0,
+        eef1_volume=0.0,
+        eef1_lambda=1.0,
+      )
+      param_map.setdefault(res_name, {})[atom_name] = param
+  return param_map
+
+
+def _assign_hbond_bases(res: Residue) -> None:
+  """Assign hb_d_or_b for NA atoms based on local bonds."""
+  if not res.is_nucleic:
+    return
+  for atom in res.atoms.values():
+    if atom.hb_h_or_a not in {"H", "A"}:
+      continue
+    if atom.hb_d_or_b != "-":
+      continue
+    bonded = None
+    for bond in res.bonds:
+      other = None
+      if bond.a == atom.name:
+        other = bond.b
+      elif bond.b == atom.name:
+        other = bond.a
+      if other and other in res.atoms and not other.startswith("H"):
+        bonded = other
+        break
+    if bonded:
+      atom.hb_d_or_b = bonded
+
+
 def load_atom_params(param_path: Optional[Path] = None) -> Dict[str, Dict[str, AtomParam]]:
   """Load atom parameters from the EvoEF2 CHARMM19+LK parameter file.
 
@@ -515,6 +669,67 @@ def load_topology(top_path: Optional[Path] = None) -> Dict[str, ResidueTopology]
 @lru_cache(maxsize=1)
 def _load_topology_cached(top_path: Path) -> Dict[str, ResidueTopology]:
   """LRU-cached loader for residue topology."""
+  topologies: Dict[str, ResidueTopology] = {}
+  current: Optional[ResidueTopology] = None
+  with open(top_path, "r") as f:
+    for raw in f:
+      line = raw.strip()
+      if "!" in line:
+        line = line.split("!", 1)[0].strip()
+      if not line or line.startswith("!") or line.startswith("*"):
+        continue
+      parts = line.split()
+      if not parts:
+        continue
+      keyword = parts[0]
+      if keyword in {"RESI", "PRES"}:
+        if len(parts) >= 2:
+          name = parts[1]
+          current = ResidueTopology(name=name)
+          topologies[name] = current
+        continue
+      if current is None:
+        continue
+      if keyword == "ATOM" and len(parts) >= 2:
+        current.atoms.append(parts[1])
+      elif keyword == "DELETE" and len(parts) >= 3 and parts[1] == "ATOM":
+        current.deletes.append(parts[2])
+      elif keyword == "BOND":
+        atoms = parts[1:]
+        for i in range(0, len(atoms) - 1, 2):
+          current.bonds.append(Bond(atoms[i], atoms[i + 1]))
+      elif keyword == "IC":
+        if len(parts) >= 10:
+          atom_a = parts[1]
+          atom_b = parts[2]
+          atom_c = parts[3]
+          atom_d = parts[4]
+          torsion_proper = True
+          if atom_c.startswith("*"):
+            torsion_proper = False
+            atom_c = atom_c[1:]
+          ic_param = [0.0] * 5
+          ic_param[0] = float(parts[5])
+          ic_param[1] = _deg_to_rad(float(parts[6]))
+          ic_param[2] = _deg_to_rad(float(parts[7]))
+          ic_param[3] = _deg_to_rad(float(parts[8]))
+          ic_param[4] = float(parts[9])
+          current.ics.append(
+            CharmmIC(
+              atom_a=atom_a,
+              atom_b=atom_b,
+              atom_c=atom_c,
+              atom_d=atom_d,
+              ic_param=ic_param,
+              torsion_proper=torsion_proper,
+            )
+          )
+  return topologies
+
+
+@lru_cache(maxsize=1)
+def _load_na_topology_cached(top_path: Path) -> Dict[str, ResidueTopology]:
+  """LRU-cached loader for NA topology."""
   topologies: Dict[str, ResidueTopology] = {}
   current: Optional[ResidueTopology] = None
   with open(top_path, "r") as f:
@@ -1118,12 +1333,23 @@ def rebuild_missing_atoms(
   Returns:
     Structure with missing atoms reconstructed where possible.
   """
-  params = load_atom_params(param_path)
-  topologies = load_topology(topo_path)
   # Normalize input into a Protein object for consistent parsing.
   protein = structure if isinstance(structure, Protein) else Protein(structure, format="auto")
   df = protein.df
   df = df[df["model"] == protein.models()[0]]
+  has_na = any(_is_nucleic_res_name(name) for name in df["res_name"].unique())
+
+  params = load_atom_params(param_path)
+  topologies = load_topology(topo_path)
+  if has_na:
+    na_top = _default_evoef2_root() / "top_all36_na.rtf"
+    na_prm = _default_evoef2_root() / "par_all36_na.prm"
+    na_params = _load_na_params(na_top, na_prm)
+    na_topologies = _load_na_topology_cached(na_top)
+    for res_name, atoms in na_params.items():
+      params[res_name] = atoms
+    for res_name, topo in na_topologies.items():
+      topologies[res_name] = topo
 
   chains: List[Chain] = []
   for chain_id in sorted(df["chain"].unique()):
@@ -1146,8 +1372,17 @@ def rebuild_missing_atoms(
           res_name = "HSE"
         elif res_name == "HIP":
           res_name = "HSP"
+        if res_name in NA_RESIDUE_MAP:
+          res_name = NA_RESIDUE_MAP[res_name]
         is_protein = res_name in AA_THREE_TO_ONE
-        res = Residue(name=res_name, chain=chain_id, pos=int(res_id), is_protein=is_protein)
+        is_nucleic = _is_nucleic_res_name(res_name)
+        res = Residue(
+          name=res_name,
+          chain=chain_id,
+          pos=int(res_id),
+          is_protein=is_protein,
+          is_nucleic=is_nucleic,
+        )
         # Initialize residue with full atom set and topology bonds.
         _add_atoms_from_params(res, params)
         _add_bonds_from_topology(res, topologies)
@@ -1170,7 +1405,7 @@ def rebuild_missing_atoms(
           atom = res.atoms[atom_name]
           atom.xyz = np.array([r["x"], r["y"], r["z"]], dtype=float)
           atom.is_xyz_valid = True
-        if is_protein:
+        if is_protein or is_nucleic:
           protein_residues.append(res)
         else:
           ligand_residues.append(res)
@@ -1185,8 +1420,17 @@ def rebuild_missing_atoms(
         res_name = "HSE"
       elif res_name == "HIP":
         res_name = "HSP"
+      if res_name in NA_RESIDUE_MAP:
+        res_name = NA_RESIDUE_MAP[res_name]
       is_protein = res_name in AA_THREE_TO_ONE
-      res = Residue(name=res_name, chain=chain_id, pos=int(res_id), is_protein=is_protein)
+      is_nucleic = _is_nucleic_res_name(res_name)
+      res = Residue(
+        name=res_name,
+        chain=chain_id,
+        pos=int(res_id),
+        is_protein=is_protein,
+        is_nucleic=is_nucleic,
+      )
       _add_atoms_from_params(res, params)
       _add_bonds_from_topology(res, topologies)
       if res_name not in params and current_rows:
@@ -1208,26 +1452,30 @@ def rebuild_missing_atoms(
         atom = res.atoms[atom_name]
         atom.xyz = np.array([r["x"], r["y"], r["z"]], dtype=float)
         atom.is_xyz_valid = True
-      if is_protein:
+      if is_protein or is_nucleic:
         protein_residues.append(res)
       else:
         ligand_residues.append(res)
 
     if protein_residues:
-      chain = Chain(name=chain_id, residues=protein_residues, is_protein=True)
-      # Apply termini patches before rebuilding missing atoms.
-      _patch_nter_or_cter(protein_residues[0], params, topologies, "NTER")
-      if protein_residues[0].get_atom("HT1") is not None or protein_residues[0].get_atom("HN1") is not None:
-        _patch_nter_or_cter(protein_residues[-1], params, topologies, "CTER")
+      chain_is_protein = any(res.is_protein for res in protein_residues)
+      chain = Chain(name=chain_id, residues=protein_residues, is_protein=chain_is_protein)
+      # Apply termini patches only for protein chains.
+      if protein_residues[0].is_protein:
+        _patch_nter_or_cter(protein_residues[0], params, topologies, "NTER")
+        if protein_residues[0].get_atom("HT1") is not None or protein_residues[0].get_atom("HN1") is not None:
+          _patch_nter_or_cter(protein_residues[-1], params, topologies, "CTER")
       # Ensure atoms reference their parent residue (used in H-bond lookups).
       for res in chain.residues:
         for atom in res.atoms.values():
           atom.res = res
+        _assign_hbond_bases(res)
       # Rebuild missing heavy atoms and hydrogens from ICs.
       _chain_calc_all_atom_xyz(chain, topologies)
       # Cache sidechain torsions for Dunbrack scoring.
       for res in chain.residues:
-        _residue_calc_sidechain_torsions(res, topologies)
+        if res.is_protein:
+          _residue_calc_sidechain_torsions(res, topologies)
       chains.append(chain)
 
     if ligand_residues:
@@ -1501,10 +1749,10 @@ def _iter_neighbor_atoms(atom: Atom, grid: Dict[Tuple[int, int, int], List[Atom]
           yield other
 
 
-def _collect_atoms(chain: Chain, *, protein_only: Optional[bool] = None) -> List[Atom]:
+def _collect_atoms(chain: Chain, *, polymer_only: Optional[bool] = None) -> List[Atom]:
   atoms: List[Atom] = []
   for res in chain.residues:
-    if protein_only is not None and res.is_protein != protein_only:
+    if polymer_only is not None and _is_polymer_residue(res) != polymer_only:
       continue
     for atom in res.atoms.values():
       if atom.is_xyz_valid:
@@ -1513,9 +1761,9 @@ def _collect_atoms(chain: Chain, *, protein_only: Optional[bool] = None) -> List
 
 
 def _inter_chain_energy(chain_a: Chain, chain_b: Chain, terms: List[float]) -> None:
-  """Compute inter-chain protein-protein energies using a spatial grid."""
-  atoms_a = _collect_atoms(chain_a, protein_only=True)
-  atoms_b = _collect_atoms(chain_b, protein_only=True)
+  """Compute inter-chain polymer-polymer energies using a spatial grid."""
+  atoms_a = _collect_atoms(chain_a, polymer_only=True)
+  atoms_b = _collect_atoms(chain_b, polymer_only=True)
   if not atoms_a or not atoms_b:
     return
   cell_size = ENERGY_DISTANCE_CUTOFF
@@ -1568,9 +1816,9 @@ def _inter_chain_energy(chain_a: Chain, chain_b: Chain, terms: List[float]) -> N
 
 
 def _protein_ligand_energy(protein_chain: Chain, ligand_chain: Chain, terms: List[float]) -> None:
-  """Compute protein-ligand energies using a spatial grid."""
-  atoms_p = _collect_atoms(protein_chain, protein_only=True)
-  atoms_l = _collect_atoms(ligand_chain, protein_only=False)
+  """Compute polymer-ligand energies using a spatial grid."""
+  atoms_p = _collect_atoms(protein_chain, polymer_only=True)
+  atoms_l = _collect_atoms(ligand_chain, polymer_only=False)
   if not atoms_p or not atoms_l:
     return
   cell_size = ENERGY_DISTANCE_CUTOFF
@@ -1611,7 +1859,7 @@ def _protein_ligand_energy(protein_chain: Chain, ligand_chain: Chain, terms: Lis
 
 def _same_chain_nonadjacent_energy(chain: Chain, terms: List[float]) -> None:
   """Compute non-adjacent same-chain energies using a spatial grid."""
-  atoms = _collect_atoms(chain, protein_only=True)
+  atoms = _collect_atoms(chain, polymer_only=True)
   if len(atoms) < 2:
     return
   cell_size = ENERGY_DISTANCE_CUTOFF
@@ -1896,7 +2144,7 @@ def _residue_intra_energy(res: Residue, terms: List[float]) -> None:
     if a1.is_bb and a2.is_bb:
       continue
     if not a1.is_bb and not a2.is_bb:
-      if res.name in {"ILE", "MET", "GLN", "GLU", "LYS", "ARG"}:
+      if res.is_nucleic or res.name in {"ILE", "MET", "GLN", "GLU", "LYS", "ARG"}:
         bond_type = _residue_intra_bond_connection(a1.name, a2.name, res.bonds)
         if bond_type in (12, 13):
           continue
@@ -2241,29 +2489,31 @@ def calculate_stability(
   # Compute stability across the whole structure.
   for chain in evo_struct.chains:
     for i, res in enumerate(chain.residues):
-      if not res.is_protein:
+      if not _is_polymer_residue(res):
         continue
       # Per-residue reference and internal terms.
-      _aa_reference_energy(res, terms)
+      if res.is_protein:
+        _aa_reference_energy(res, terms)
       _residue_intra_energy(res, terms)
-      _aa_propensity_ramachandran(res, aap, rama, terms)
-      _aa_dunbrack(res, dun, terms)
-      # same-chain pairs
+      if res.is_protein:
+        _aa_propensity_ramachandran(res, aap, rama, terms)
+        _aa_dunbrack(res, dun, terms)
+      # same-chain pairs (protein backbone special-case)
       for j in range(i + 1, len(chain.residues)):
         other = chain.residues[j]
-        if j == i + 1:
-          # Adjacent residues use special 1-4 scaling rules.
+        if j == i + 1 and res.is_protein and other.is_protein:
+          # Adjacent protein residues use special 1-4 scaling rules.
           _residue_and_next_energy(res, other, terms)
     _same_chain_nonadjacent_energy(chain, terms)
   # different chains (avoid double counting by index)
   for i, chain_i in enumerate(evo_struct.chains):
     for k in range(i + 1, len(evo_struct.chains)):
       chain_k = evo_struct.chains[k]
-      if chain_i.is_protein and chain_k.is_protein:
+      if _chain_is_polymer(chain_i) and _chain_is_polymer(chain_k):
         _inter_chain_energy(chain_i, chain_k, terms)
-      elif chain_i.is_protein and not chain_k.is_protein:
+      elif _chain_is_polymer(chain_i) and not _chain_is_polymer(chain_k):
         _protein_ligand_energy(chain_i, chain_k, terms)
-      elif not chain_i.is_protein and chain_k.is_protein:
+      elif not _chain_is_polymer(chain_i) and _chain_is_polymer(chain_k):
         _protein_ligand_energy(chain_k, chain_i, terms)
 
   weighted = _energy_term_weighting(terms, weights)
@@ -2302,11 +2552,11 @@ def calculate_interface_energy(
       chain_k = evo_struct.chains[k]
       if not ((chain_i.name in set1 and chain_k.name in set2) or (chain_i.name in set2 and chain_k.name in set1)):
         continue
-      if chain_i.is_protein and chain_k.is_protein:
+      if _chain_is_polymer(chain_i) and _chain_is_polymer(chain_k):
         _inter_chain_energy(chain_i, chain_k, terms)
-      elif chain_i.is_protein and not chain_k.is_protein:
+      elif _chain_is_polymer(chain_i) and not _chain_is_polymer(chain_k):
         _protein_ligand_energy(chain_i, chain_k, terms)
-      elif not chain_i.is_protein and chain_k.is_protein:
+      elif not _chain_is_polymer(chain_i) and _chain_is_polymer(chain_k):
         _protein_ligand_energy(chain_k, chain_i, terms)
   weighted = _energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)
@@ -2417,25 +2667,27 @@ def _calculate_stability_from_structure(
   terms = _energy_term_initialize()
   for chain in evo_struct.chains:
     for i, res in enumerate(chain.residues):
-      if not res.is_protein:
+      if not _is_polymer_residue(res):
         continue
-      _aa_reference_energy(res, terms)
+      if res.is_protein:
+        _aa_reference_energy(res, terms)
       _residue_intra_energy(res, terms)
-      _aa_propensity_ramachandran(res, aap, rama, terms)
-      _aa_dunbrack(res, dun, terms)
+      if res.is_protein:
+        _aa_propensity_ramachandran(res, aap, rama, terms)
+        _aa_dunbrack(res, dun, terms)
       for j in range(i + 1, len(chain.residues)):
         other = chain.residues[j]
-        if j == i + 1:
+        if j == i + 1 and res.is_protein and other.is_protein:
           _residue_and_next_energy(res, other, terms)
     _same_chain_nonadjacent_energy(chain, terms)
   for i, chain_i in enumerate(evo_struct.chains):
     for k in range(i + 1, len(evo_struct.chains)):
       chain_k = evo_struct.chains[k]
-      if chain_i.is_protein and chain_k.is_protein:
+      if _chain_is_polymer(chain_i) and _chain_is_polymer(chain_k):
         _inter_chain_energy(chain_i, chain_k, terms)
-      elif chain_i.is_protein and not chain_k.is_protein:
+      elif _chain_is_polymer(chain_i) and not _chain_is_polymer(chain_k):
         _protein_ligand_energy(chain_i, chain_k, terms)
-      elif not chain_i.is_protein and chain_k.is_protein:
+      elif not _chain_is_polymer(chain_i) and _chain_is_polymer(chain_k):
         _protein_ligand_energy(chain_k, chain_i, terms)
   weighted = _energy_term_weighting(terms, weights)
   return _energy_terms_to_dict(weighted)

@@ -226,6 +226,45 @@ AA_THREE_TO_ONE = {
   "TYR": "Y",
 }
 
+# Nucleic acid residues (common PDB names and CHARMM names)
+NA_RNA_RESIDUES = {"A", "C", "G", "U", "I"}
+NA_DNA_RESIDUES = {"DA", "DC", "DG", "DT", "DI"}
+NA_CHARMm_RESIDUES = {"ADE", "GUA", "CYT", "THY", "URA"}
+NA_RESIDUES = NA_RNA_RESIDUES | NA_DNA_RESIDUES | NA_CHARMm_RESIDUES
+
+# Map common PDB names to CHARMM NA residue names.
+NA_RESIDUE_MAP = {
+  "A": "ADE",
+  "G": "GUA",
+  "C": "CYT",
+  "U": "URA",
+  "DA": "ADE",
+  "DG": "GUA",
+  "DC": "CYT",
+  "DT": "THY",
+  "I": "GUA",
+  "DI": "GUA",
+}
+
+# Backbone atoms for nucleic acids (sugar/phosphate)
+NA_BACKBONE_ATOMS = {
+  "P",
+  "OP1",
+  "OP2",
+  "OP3",
+  "O1P",
+  "O2P",
+  "O5'",
+  "C5'",
+  "C4'",
+  "O4'",
+  "C3'",
+  "O3'",
+  "C2'",
+  "O2'",
+  "C1'",
+}
+
 _ATOM_ORDER_SEQUENCE = "ABGDEZ"
 
 _DUNBRACK_TORSION_COUNT = {

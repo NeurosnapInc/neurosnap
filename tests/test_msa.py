@@ -121,15 +121,17 @@ def test_write_msa_roundtrip(tmp_path):
   out = tmp_path / "out.fasta"
   names = ["n1", "n2"]
   seqs = ["AAAA", "CCCC"]
-  write_msa(str(out), names, seqs)
+  write_msa(str(out), list(zip(names, seqs)))
   rn, rs = collect_msa(read_msa(str(out)))
   assert rn == names and rs == seqs
 
 
-def test_write_msa_len_mismatch_asserts(tmp_path):
+def test_write_msa_iterable_input(tmp_path):
   out = tmp_path / "out.fasta"
-  with pytest.raises(AssertionError):
-    write_msa(str(out), ["n1"], ["AA", "BB"])
+  pairs = (("n1", "AA"), ("n2", "BB"))
+  write_msa(str(out), pairs)
+  rn, rs = collect_msa(read_msa(str(out)))
+  assert rn == ["n1", "n2"] and rs == ["AA", "BB"]
 
 
 # ---------- pad_seqs ----------

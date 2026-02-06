@@ -12,7 +12,7 @@ import tempfile
 import time
 from collections import Counter
 from datetime import datetime
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import requests
 from Bio import SearchIO
@@ -297,20 +297,17 @@ def read_msa(
           return
 
 
-def write_msa(output_path: str, names: List[str], seqs: List[str]):
+def write_msa(output_path: str, sequences: Iterable[Tuple[str, str]]):
   """Writes an MSA, a3m, or fasta to a file.
-  Makes no assumptions about the validity of names or
-  sequences. Will throw an exception if ``len(names) != len(seqs)``
+  Makes no assumptions about the validity of names or sequences.
 
   Parameters:
     output_path: Path to output file to write, will overwrite existing files
-    names: List of proteins names from the file
-    seqs: List of proteins sequences from the file
+    sequences: Iterable of (name, sequence) pairs
 
   """
-  assert len(names) == len(seqs), "The number of names and sequences do not match."
   with open(output_path, "w") as f:
-    for name, seq in zip(names, seqs):
+    for name, seq in sequences:
       f.write(f">{name}\n{seq}\n")
 
 
@@ -548,7 +545,7 @@ def run_phmmer_mafft(
       reference_seqs[key] = seq
 
     # write cleaned fasta
-    write_msa(tmp_fasta_path, list(reference_seqs.keys()), list(reference_seqs.values()))
+    write_msa(tmp_fasta_path, reference_seqs.items())
 
     # find hits
     hits = run_phmmer(query, tmp_fasta_path, cpu=phmmer_cpu)

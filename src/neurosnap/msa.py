@@ -297,7 +297,7 @@ def read_msa(
           return
 
 
-def write_msa(output_path: str, sequences: Iterable[Tuple[str, str]]):
+def write_msa(output_path: Union[str, os.PathLike], sequences: Iterable[Tuple[str, str]]):
   """Writes an MSA, a3m, or fasta to a file.
   Makes no assumptions about the validity of names or sequences.
 

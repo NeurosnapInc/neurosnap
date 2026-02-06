@@ -128,10 +128,10 @@ def test_write_msa_roundtrip(tmp_path):
 
 def test_write_msa_iterable_input(tmp_path):
   out = tmp_path / "out.fasta"
-  pairs = (("n1", "AA"), ("n2", "BB"))
+  pairs = (("n1", "AA"), ("n2", "CC"))
   write_msa(str(out), pairs)
   rn, rs = collect_msa(read_msa(str(out)))
-  assert rn == ["n1", "n2"] and rs == ["AA", "BB"]
+  assert rn == ["n1", "n2"] and rs == ["AA", "CC"]
 
 
 # ---------- pad_seqs ----------

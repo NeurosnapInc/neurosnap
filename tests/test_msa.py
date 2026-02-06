@@ -7,7 +7,9 @@ import pytest
 
 from neurosnap.msa import (
   align_mafft,
+  alignment_coverage,
   consensus_sequence,
+  filter_msa,
   pad_seqs,
   read_msa,
   run_mmseqs2,
@@ -161,6 +163,34 @@ def test_seqid_basic_and_bounds():
 def test_seqid_unequal_length_asserts():
   with pytest.raises(AssertionError):
     seqid("AAA", "AA")
+
+
+# ---------- alignment_coverage ----------
+
+
+def test_alignment_coverage_basic():
+  assert alignment_coverage("A-CD", "AB-D") == 100.0
+
+
+# ---------- filter_msa ----------
+
+
+def test_filter_msa_identity_and_query_default(tmp_path):
+  a3m = ">q\nACDE\n>hit1\nACDE\n>hit2\nACDD\n"
+  out = tmp_path / "filtered.a3m"
+  names, seqs = filter_msa(a3m, str(out), cov=50, id=90)
+  assert names == ["q", "hit1"]
+  assert seqs == ["ACDE", "ACDE"]
+  rn, rs = read_msa(str(out))
+  assert rn == names and rs == seqs
+
+
+def test_filter_msa_max_seqs(tmp_path):
+  a3m = ">q\nACDE\n>hit1\nACDE\n>hit2\nACDD\n"
+  out = tmp_path / "filtered_max.a3m"
+  names, seqs = filter_msa(a3m, str(out), cov=0, id=0, max_seqs=2)
+  assert names == ["q", "hit1"]
+  assert seqs == ["ACDE", "ACDE"]
 
 
 # ---------- consensus_sequence ----------

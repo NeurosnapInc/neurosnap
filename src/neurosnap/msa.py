@@ -27,6 +27,7 @@ from neurosnap.log import logger
 ### FUNCTIONS ###
 def read_msa(
   input_fasta: Union[str, io.TextIOBase],
+  *,
   size: float = float("inf"),
   allow_chars: str = "",
   drop_chars: str = "",

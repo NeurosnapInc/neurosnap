@@ -1498,7 +1498,7 @@ class Protein:
     # Update the pandas dataframe to reflect the changes
     self.generate_df()
 
-  def save(self, fpath: str, format: str = "auto"):
+  def save(self, fpath: Union[str, pathlib.Path], format: str = "auto"):
     """Save the structure as a PDB or mmCIF file.
     Will overwrite any existing files.
 
@@ -1507,6 +1507,7 @@ class Protein:
       format: File format to save in, either 'pdb' or 'mmcif', set to 'auto' to infer format from extension.
 
     """
+    fpath = str(fpath)
     format = format.lower()
     # infer format from extension if not provided
     if format == "auto":

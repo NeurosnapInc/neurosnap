@@ -34,6 +34,9 @@ def read_msa(
   remove_chars: str = "*",
   uppercase: bool = True,
   name_allow_all_chars: bool = False,
+  query: Optional[str] = None,
+  cov: int = 0,
+  id: int = 0,
 ) -> Iterator[Tuple[str, str]]:
   """Reads an MSA, a3m, or fasta file and yields (name, seq) pairs as a stream.
   Returned headers will consist of all characters up until the first space with
@@ -47,6 +50,14 @@ def read_msa(
     remove_chars: Removes these characters from sequences. For example, ``"*-X"``
     uppercase: Converts all amino acid chars to uppercase when True
     name_allow_all_chars: Uses the entire header string for names instead of the standard regex pattern
+    query: Query amino acid sequence. If not provided, the first sequence in the MSA is used.
+    cov: Minimum percentage of query sequence coverage required to keep a sequence. It measures the
+      proportion of non-gap positions in the query that are aligned to non-gap positions in the candidate.
+      For example, with a 50% threshold, at least half of the query positions must align. Raising this
+      value filters out shorter/partial matches and increases overall overlap.
+    id: Minimum percentage of sequence identity required to keep a sequence. Identity is the exact match
+      rate at aligned positions between the query and candidate. Higher values keep only close homologs;
+      lower values allow more diverse sequences.
 
   Yields:
     Tuples of the form ``(name, seq)``
@@ -85,6 +96,10 @@ def read_msa(
   current_seq = ""
   dropped = False
   yielded = 0
+  query_aligned = None
+  q_positions = None
+  q_non_gap_count = None
+  buffer = []
 
   try:
     for i, line in enumerate(f, start=1):
@@ -96,10 +111,59 @@ def read_msa(
           if not dropped and current_seq == "":
             raise ValueError(f"Invalid MSA/fasta. Header {current_name} is missing a sequence.")
           if not dropped:
-            yield current_name, current_seq
-            yielded += 1
-            if yielded >= size:
-              return
+            if query_aligned is None:
+              if query is None:
+                query_aligned = current_seq
+              elif len(query) == len(current_seq):
+                query_aligned = query
+            if query_aligned is None:
+              buffer.append((current_name, current_seq))
+            else:
+              if q_positions is None:
+                q_positions = [idx for idx, c in enumerate(query_aligned) if c != "-"]
+                q_non_gap_count = len(q_positions)
+                assert q_non_gap_count > 0, "Query sequence cannot be all gaps."
+              if buffer:
+                for name, seq in buffer:
+                  keep = True
+                  if cov > 0 or id > 0:
+                    aligned = 0
+                    matches = 0
+                    for idx in q_positions:
+                      qc = query_aligned[idx]
+                      sc = seq[idx]
+                      if sc != "-":
+                        aligned += 1
+                        if sc == qc:
+                          matches += 1
+                    coverage = 100 * aligned / q_non_gap_count
+                    identity = 100 * matches / aligned if aligned else 0.0
+                    keep = coverage >= cov and identity >= id
+                  if keep:
+                    yield name, seq
+                    yielded += 1
+                    if yielded >= size:
+                      return
+                buffer = []
+              keep = True
+              if cov > 0 or id > 0:
+                aligned = 0
+                matches = 0
+                for idx in q_positions:
+                  qc = query_aligned[idx]
+                  sc = current_seq[idx]
+                  if sc != "-":
+                    aligned += 1
+                    if sc == qc:
+                      matches += 1
+                coverage = 100 * aligned / q_non_gap_count
+                identity = 100 * matches / aligned if aligned else 0.0
+                keep = coverage >= cov and identity >= id
+              if keep:
+                yield current_name, current_seq
+                yielded += 1
+                if yielded >= size:
+                  return
         match = reg_name.search(line)
         assert match is not None, f"Invalid MSA/fasta. {line} is not a valid header."
         name = match.group(1)
@@ -136,7 +200,101 @@ def read_msa(
     if not dropped and current_seq == "":
       assert len(current_seq), f"Invalid sequence for entry with name {current_name}. Sequence is empty."
     if not dropped:
-      yield current_name, current_seq
+      if query_aligned is None:
+        if query is None:
+          query_aligned = current_seq
+        elif len(query) == len(current_seq):
+          query_aligned = query
+      if query_aligned is None:
+        buffer.append((current_name, current_seq))
+      else:
+        if q_positions is None:
+          q_positions = [idx for idx, c in enumerate(query_aligned) if c != "-"]
+          q_non_gap_count = len(q_positions)
+          assert q_non_gap_count > 0, "Query sequence cannot be all gaps."
+        if buffer:
+          for name, seq in buffer:
+            keep = True
+            if cov > 0 or id > 0:
+              aligned = 0
+              matches = 0
+              for idx in q_positions:
+                qc = query_aligned[idx]
+                sc = seq[idx]
+                if sc != "-":
+                  aligned += 1
+                  if sc == qc:
+                    matches += 1
+              coverage = 100 * aligned / q_non_gap_count
+              identity = 100 * matches / aligned if aligned else 0.0
+              keep = coverage >= cov and identity >= id
+            if keep:
+              yield name, seq
+              yielded += 1
+              if yielded >= size:
+                return
+          buffer = []
+        keep = True
+        if cov > 0 or id > 0:
+          aligned = 0
+          matches = 0
+          for idx in q_positions:
+            qc = query_aligned[idx]
+            sc = current_seq[idx]
+            if sc != "-":
+              aligned += 1
+              if sc == qc:
+                matches += 1
+          coverage = 100 * aligned / q_non_gap_count
+          identity = 100 * matches / aligned if aligned else 0.0
+          keep = coverage >= cov and identity >= id
+        if keep:
+          yield current_name, current_seq
+          yielded += 1
+          if yielded >= size:
+            return
+
+  if query is not None and query_aligned is None:
+    if len(buffer) == 0:
+      raise ValueError("Query sequence length does not match MSA and was not found in the MSA.")
+    if len(query) == len(buffer[0][1]):
+      query_aligned = query
+    else:
+      q_ungapped = query.replace("-", "")
+      for _, seq in buffer:
+        if seq.replace("-", "") == q_ungapped:
+          query_aligned = seq
+          break
+      if query_aligned is None:
+        raise ValueError("Query sequence length does not match MSA and was not found in the MSA.")
+
+  if buffer:
+    if query_aligned is None:
+      raise ValueError("Query sequence could not be determined.")
+    if q_positions is None:
+      q_positions = [idx for idx, c in enumerate(query_aligned) if c != "-"]
+      q_non_gap_count = len(q_positions)
+      assert q_non_gap_count > 0, "Query sequence cannot be all gaps."
+    for name, seq in buffer:
+      keep = True
+      if cov > 0 or id > 0:
+        aligned = 0
+        matches = 0
+        for idx in q_positions:
+          qc = query_aligned[idx]
+          sc = seq[idx]
+          if sc != "-":
+            aligned += 1
+            if sc == qc:
+              matches += 1
+        coverage = 100 * aligned / q_non_gap_count
+        identity = 100 * matches / aligned if aligned else 0.0
+        keep = coverage >= cov and identity >= id
+      if keep:
+        yield name, seq
+        yielded += 1
+        if yielded >= size:
+          return
 
 
 def write_msa(output_path: str, names: List[str], seqs: List[str]):
@@ -227,92 +385,6 @@ def alignment_coverage(seq1: str, seq2: str) -> float:
   query_length = len(seq1.replace("-", ""))
 
   return aligned_query_positions / query_length * 100
-
-
-def filter_msa(
-  input_fasta: Union[str, io.TextIOBase],
-  output_path: Union[str, os.PathLike],
-  *,
-  query: Optional[str] = None,
-  cov: int = 50,
-  id: int = 90,
-  max_seqs: Union[int, float] = float("inf"),
-) -> Tuple[List[str], List[str]]:
-  """Filter an MSA based on sequence coverage and identity against a query.
-
-  Parameters:
-    input_fasta: Path to read input a3m file, fasta as a raw string, or a file-handle like object to read.
-    output_path: Path to output file to write, will overwrite existing files.
-    query: Query amino acid sequence. If not provided, the first sequence in the MSA is used.
-    cov: Minimum percentage of query sequence coverage required to keep a sequence. It measures the
-      proportion of non-gap positions in the query that are aligned to non-gap positions in the candidate.
-      For example, with a 50% threshold, at least half of the query positions must align. Raising this
-      value filters out shorter/partial matches and increases overall overlap.
-    id: Minimum percentage of sequence identity required to keep a sequence. Identity is the exact match
-      rate at aligned positions between the query and candidate. Higher values keep only close homologs;
-      lower values allow more diverse sequences.
-    max_seqs: Maximum number of sequences to write to the output. Sequences beyond this limit are dropped.
-
-  Returns:
-    A tuple of the form ``(names, seqs)`` for the filtered MSA.
-  """
-  # TODO: Possibly merge with read_msa
-  names = []
-  seqs = []
-  for name, seq in read_msa(input_fasta):
-    names.append(name)
-    seqs.append(seq)
-  assert len(seqs) > 0, "MSA is empty."
-
-  if query is None:
-    query_aligned = seqs[0]
-  else:
-    if len(query) == len(seqs[0]):
-      query_aligned = query
-    else:
-      q_ungapped = query.replace("-", "")
-      query_aligned = None
-      for seq in seqs:
-        if seq.replace("-", "") == q_ungapped:
-          query_aligned = seq
-          break
-      if query_aligned is None:
-        raise ValueError("Query sequence length does not match MSA and was not found in the MSA.")
-
-  q = query_aligned
-  assert len(q) > 0, "Query sequence cannot be empty."
-  q_positions = [i for i, c in enumerate(q) if c != "-"]
-  q_non_gap_count = len(q_positions)
-  assert q_non_gap_count > 0, "Query sequence cannot be all gaps."
-
-  kept_names = []
-  kept_seqs = []
-
-  for name, seq in zip(names, seqs):
-    aligned = 0
-    matches = 0
-    for i in q_positions:
-      qc = q[i]
-      sc = seq[i]
-      if sc != "-":
-        aligned += 1
-        if sc == qc:
-          matches += 1
-    coverage = 100 * aligned / q_non_gap_count
-    identity = 100 * matches / aligned if aligned else 0.0
-    if coverage >= cov and identity >= id:
-      kept_names.append(name)
-      kept_seqs.append(seq)
-
-  if max_seqs != float("inf"):
-    kept_names = kept_names[: int(max_seqs)]
-    kept_seqs = kept_seqs[: int(max_seqs)]
-
-  with open(output_path, "w") as f:
-    for name, seq in zip(kept_names, kept_seqs):
-      f.write(f">{name}\n{seq}\n")
-
-  return kept_names, kept_seqs
 
 
 def consensus_sequence(sequences: List[str]) -> str:

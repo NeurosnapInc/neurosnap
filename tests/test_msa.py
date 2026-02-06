@@ -59,14 +59,21 @@ def chdir_tmp(tmp_path, monkeypatch):
 # ---------- read_msa ----------
 
 
+def collect_msa(pairs_iter):
+  pairs = list(pairs_iter)
+  return [n for n, _ in pairs], [s for _, s in pairs]
+
+
 def test_read_msa_from_string_basic():
   a3m = ">sp|Q9|name one\nACDEx-\n>seq2 desc\nACDE-\n"
-  names, seqs = read_msa(
-    a3m,
-    allow_chars="-X",  # X allowed
-    drop_chars="",  # nothing dropped
-    remove_chars="*",  # nothing to remove in this string
-    uppercase=True,
+  names, seqs = collect_msa(
+    read_msa(
+      a3m,
+      allow_chars="-X",  # X allowed
+      drop_chars="",  # nothing dropped
+      remove_chars="*",  # nothing to remove in this string
+      uppercase=True,
+    )
   )
   # '|' becomes '_' and header stops at first space (default behavior)
   assert names == ["sp_Q9_name", "seq2"]
@@ -76,7 +83,7 @@ def test_read_msa_from_string_basic():
 def test_read_msa_from_file_and_truncation(tmp_path):
   fp = tmp_path / "toy.fasta"
   fp.write_text(">a\nAAAA\n>c\nCCCC\n")
-  names, seqs = read_msa(str(fp), size=2)
+  names, seqs = collect_msa(read_msa(str(fp), size=2))
   assert names == ["a", "c"]
   assert seqs == ["AAAA", "CCCC"]
 
@@ -84,14 +91,14 @@ def test_read_msa_from_file_and_truncation(tmp_path):
 def test_read_msa_drop_and_remove_and_uppercase():
   # drop 'X' rows, remove '-' and '*', uppercase on
   s = ">ok\nac-de*\n>bad\nAXC\n>ok2\nacde\n"
-  names, seqs = read_msa(s, allow_chars="", drop_chars="X", remove_chars="-*", uppercase=True)
+  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="X", remove_chars="-*", uppercase=True))
   assert names == ["ok", "ok2"]
   assert seqs == ["ACDE", "ACDE"]
 
 
 def test_read_msa_name_allow_all_chars():
   s = ">we keep the whole header | yes\nACD\n"
-  names, seqs = read_msa(s, name_allow_all_chars=True)
+  names, seqs = collect_msa(read_msa(s, name_allow_all_chars=True))
   assert names == ["we keep the whole header _ yes"]  # nothing stripped/replaced
   assert seqs == ["ACD"]
 
@@ -99,13 +106,13 @@ def test_read_msa_name_allow_all_chars():
 def test_read_msa_invalid_chars_raises():
   s = ">h\nACDEZ\n"  # 'Z' not in STANDARD_AAs and not allowed
   with pytest.raises(ValueError):
-    read_msa(s, allow_chars="")  # do not allow Z
+    list(read_msa(s, allow_chars=""))  # do not allow Z
 
 
 def test_read_msa_header_without_sequence_raises():
   s = ">only\n"
   with pytest.raises(AssertionError):
-    read_msa(s)
+    list(read_msa(s))
 
 
 # ---------- write_msa ----------
@@ -116,7 +123,7 @@ def test_write_msa_roundtrip(tmp_path):
   names = ["n1", "n2"]
   seqs = ["AAAA", "CCCC"]
   write_msa(str(out), names, seqs)
-  rn, rs = read_msa(str(out))
+  rn, rs = collect_msa(read_msa(str(out)))
   assert rn == names and rs == seqs
 
 
@@ -181,7 +188,7 @@ def test_filter_msa_identity_and_query_default(tmp_path):
   names, seqs = filter_msa(a3m, str(out), cov=50, id=90)
   assert names == ["q", "hit1"]
   assert seqs == ["ACDE", "ACDE"]
-  rn, rs = read_msa(str(out))
+  rn, rs = collect_msa(read_msa(str(out)))
   assert rn == names and rs == seqs
 
 

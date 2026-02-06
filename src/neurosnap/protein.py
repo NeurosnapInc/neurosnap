@@ -2130,7 +2130,7 @@ def fetch_uniprot(uniprot_id: str, head: bool = False) -> Union[str, bool]:
   if head:
     return True
 
-  _, seqs = read_msa(r.text)
+  seqs = [seq for _, seq in read_msa(r.text)]
   if len(seqs) > 1:
     print(r.text)
     raise ValueError("Too many sequences returned")

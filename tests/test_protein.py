@@ -542,7 +542,7 @@ def test_fetch_uniprot_head_and_seq(monkeypatch):
   # GET happy path via UniProtKB with mocked read_msa
   fasta = ">sp|P12345| Some protein\nACDEFGHIKLMNPQRSTVWY\n"
   monkeypatch.setattr("neurosnap.protein.requests.get", lambda url: R(200, fasta))
-  monkeypatch.setattr("neurosnap.protein.read_msa", lambda txt: (["h"], ["ACDEFGHIKLMNPQRSTVWY"]))
+  monkeypatch.setattr("neurosnap.protein.read_msa", lambda txt: iter([("h", "ACDEFGHIKLMNPQRSTVWY")]))
   seq = fetch_uniprot("P12345", head=False)
   assert seq == "ACDEFGHIKLMNPQRSTVWY"
 

@@ -12,7 +12,7 @@ import tempfile
 import time
 from collections import Counter
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import requests
 from Bio import SearchIO
@@ -34,8 +34,10 @@ def read_msa(
   remove_chars: str = "*",
   uppercase: bool = True,
   name_allow_all_chars: bool = False,
-) -> Tuple[List[str], List[str]]:
-  """Reads an MSA, a3m, or fasta file and returns an array of names and seqs. Returned headers will consist of all characters up until the first space with the "|" character replaced with an underscore.
+) -> Iterator[Tuple[str, str]]:
+  """Reads an MSA, a3m, or fasta file and yields (name, seq) pairs as a stream.
+  Returned headers will consist of all characters up until the first space with
+  the "|" character replaced with an underscore.
 
   Parameters:
     input_fasta: Path to read input a3m file, fasta as a raw string, or a file-handle like object to read
@@ -46,15 +48,13 @@ def read_msa(
     uppercase: Converts all amino acid chars to uppercase when True
     name_allow_all_chars: Uses the entire header string for names instead of the standard regex pattern
 
-  Returns:
-    A tuple of the form ``(names, seqs)``
+  Yields:
+    Tuples of the form ``(name, seq)``
 
-    - ``names``: list of protein names from the a3m file, including gaps
-    - ``seqs``: list of protein sequences from the a3m file, including gaps
+    - ``name``: protein name from the a3m file, including gaps
+    - ``seq``: protein sequence from the a3m file, including gaps
 
   """
-  names = []
-  seqs = []
   allow_chars = allow_chars.replace("-", "\\-")
   drop_chars = drop_chars.replace("-", "\\-")
   remove_chars = remove_chars.replace("-", "\\-")
@@ -81,22 +81,35 @@ def read_msa(
   else:
     raise ValueError(f"Invalid input for input_fasta, {type(input_fasta)} is not a valid type.")
 
-  for i, line in enumerate(f, start=1):
-    line = line.strip()
-    if line:
+  current_name = None
+  current_seq = ""
+  dropped = False
+  yielded = 0
+
+  try:
+    for i, line in enumerate(f, start=1):
+      line = line.strip()
+      if not line:
+        continue
       if line.startswith(">"):
-        if seqs and seqs[-1] == "":
-          raise ValueError(f"Invalid MSA/fasta. Header {names[-1]} is missing a sequence.")
-        if len(seqs) >= size + 1:
-          break
+        if current_name is not None:
+          if not dropped and current_seq == "":
+            raise ValueError(f"Invalid MSA/fasta. Header {current_name} is missing a sequence.")
+          if not dropped:
+            yield current_name, current_seq
+            yielded += 1
+            if yielded >= size:
+              return
         match = reg_name.search(line)
         assert match is not None, f"Invalid MSA/fasta. {line} is not a valid header."
         name = match.group(1)
         name = name.replace("|", "_")
         assert len(name), f"Invalid MSA/fasta. line {i} has an empty header."
-        names.append(name)
-        seqs.append("")
+        current_name = name
+        current_seq = ""
+        dropped = False
       else:
+        assert current_name is not None, f"Invalid MSA/fasta. line {i} has sequence data before a header."
         if uppercase:
           line = line.upper()
         # remove whitespace and remove_chars
@@ -106,25 +119,24 @@ def read_msa(
         if drop_chars:
           match = reg_dc.search(line)
           if match is not None:
-            names.pop()
-            seqs.pop()
+            dropped = True
             continue
 
-        match = reg_ac.search(line)
-        if match is None:
-          raise ValueError(
-            f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'"
-          )
-        seqs[-1] += line
+        if not dropped:
+          match = reg_ac.search(line)
+          if match is None:
+            raise ValueError(
+              f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'"
+            )
+          current_seq += line
+  finally:
+    f.close()
 
-  f.close()
-
-  # ensure all sequences are valid
-  for name, seq in zip(names, seqs):
-    assert len(seq), f"Invalid sequence for entry with name {name}. Sequence is empty."
-
-  assert len(names) == len(seqs), "Invalid MSA/fasta. The number sequences and headers found do not match."
-  return names, seqs
+  if current_name is not None:
+    if not dropped and current_seq == "":
+      assert len(current_seq), f"Invalid sequence for entry with name {current_name}. Sequence is empty."
+    if not dropped:
+      yield current_name, current_seq
 
 
 def write_msa(output_path: str, names: List[str], seqs: List[str]):
@@ -245,7 +257,11 @@ def filter_msa(
     A tuple of the form ``(names, seqs)`` for the filtered MSA.
   """
   # TODO: Possibly merge with read_msa
-  names, seqs = read_msa(input_fasta)
+  names = []
+  seqs = []
+  for name, seq in read_msa(input_fasta):
+    names.append(name)
+    seqs.append(seq)
   assert len(seqs) > 0, "MSA is empty."
 
   if query is None:
@@ -415,7 +431,12 @@ def align_mafft(seqs: Union[str, List[str], Dict[str, str]], ep: float = 0.0, op
       # Keep behavior similar to original; surface stderr
       raise Exception(align_out.stderr.decode("utf-8", errors="ignore"))
 
-  return read_msa(io.StringIO(align_out.stdout.decode("utf-8")), allow_chars="-")
+  names = []
+  seqs = []
+  for name, seq in read_msa(io.StringIO(align_out.stdout.decode("utf-8")), allow_chars="-"):
+    names.append(name)
+    seqs.append(seq)
+  return names, seqs
 
 
 def run_phmmer_mafft(
@@ -442,7 +463,11 @@ def run_phmmer_mafft(
     tmp_fasta_path = f"{tmp_dir}/tmp.fasta"
 
     # clean input fasta
-    names, seqs = read_msa(ref_db_path, remove_chars="*-", drop_chars="X")
+    names = []
+    seqs = []
+    for name, seq in read_msa(ref_db_path, remove_chars="*-", drop_chars="X"):
+      names.append(name)
+      seqs.append(seq)
 
     # ensure no duplicate IDs
     reference_seqs = {}

@@ -38,8 +38,15 @@ Python package for working with Neurosnap programmatically. It includes:
 Use this package when you need reproducible scripts, batch processing, notebook
 workflows, or integration with lab and MLOps infrastructure.
 
+For many practical structure and sequence workflows, the Neurosnap SDK can serve
+as a reliable, free, and open alternative to PyRosetta.
+
 Documentation Map
 -----------------
+
+**Start here:**
+
+* :doc:`getting_started`
 
 **Core SDK modules:**
 
@@ -69,6 +76,7 @@ Documentation Map
    :hidden:
    :maxdepth: 2
 
+   getting_started
    modules
 
 Learning Resources

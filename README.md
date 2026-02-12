@@ -3,7 +3,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/NeurosnapInc/neurosnap?color=%234361EE)
 [![Discord](https://img.shields.io/discord/1014770343883309076)](https://discord.gg/2yDZX6rTh4)
 
-# Neurosnap Tools
+# Neurosnap SDK
 [![Neurosnap Header](https://raw.githubusercontent.com/NeurosnapInc/neurosnap/refs/heads/main/assets/header.webp)](https://neurosnap.ai/)
 
 Collection of useful bioinformatic functions and tools for various computational biology pipelines. Primarily designed for working with amino acid sequences and chemical structures.
@@ -59,7 +59,7 @@ If you found this tool to be helpful please feel free to cite it using the follo
 ```BibTeX
 @misc{amani-2024,
 	author = {Amani, Keaun and Amirabadi, Danial Gharaie},
-	title = {{Neurosnap Tools Package}},
+	title = {{Neurosnap SDK}},
 	year = {2024},
 	url = {https://github.com/NeurosnapInc/neurosnap},
 }

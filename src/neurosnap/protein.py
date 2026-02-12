@@ -50,18 +50,18 @@ from neurosnap.msa import read_msa
 
 ### CLASSES ###
 class Protein:
+  """Class that wraps around a protein structure.
+
+  Utilizes the biopython protein structure under the hood.
+  Atoms that are not part of a chain will automatically be
+  added to a new chain that does not overlap with any
+  existing chains.
+
+  Parameters:
+    pdb: Can be either a file handle, PDB or mmCIF filepath, PDB ID, or UniProt ID
+    format: File format of the input ("pdb", "mmcif", or "auto" to infer format from extension)
+  """
   def __init__(self, pdb: Union[str, pathlib.Path, io.IOBase], format: str = "auto"):
-    """Class that wraps around a protein structure.
-
-    Utilizes the biopython protein structure under the hood.
-    Atoms that are not part of a chain will automatically be
-    added to a new chain that does not overlap with any
-    existing chains.
-
-    Parameters:
-      pdb: Can be either a file handle, PDB or mmCIF filepath, PDB ID, or UniProt ID
-      format: File format of the input ("pdb", "mmcif", or "auto" to infer format from extension)
-    """
     self.title = "Untitled Protein"
     if isinstance(pdb, io.IOBase):
       pass

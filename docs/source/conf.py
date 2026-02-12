@@ -76,3 +76,6 @@ html_theme_options = {
     "alt_text": "",
   },
 }
+html_context = {
+  "default_mode": "light",
+}

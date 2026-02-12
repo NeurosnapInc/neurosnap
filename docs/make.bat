@@ -7,8 +7,12 @@ REM Command file for Sphinx documentation
 if "%SPHINXBUILD%" == "" (
 	set SPHINXBUILD=sphinx-build
 )
+if "%SPHINXAPIDOC%" == "" (
+	set SPHINXAPIDOC=sphinx-apidoc
+)
 set SOURCEDIR=source
 set BUILDDIR=build
+set APIPKGDIR=..\src\neurosnap
 
 %SPHINXBUILD% >NUL 2>NUL
 if errorlevel 9009 (
@@ -24,6 +28,10 @@ if errorlevel 9009 (
 )
 
 if "%1" == "" goto help
+
+if "%1" == "html" (
+	%SPHINXAPIDOC% --implicit-namespaces -f -e -M -o %SOURCEDIR% %APIPKGDIR%
+)
 
 %SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS% %O%
 goto end

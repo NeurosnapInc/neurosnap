@@ -1,5 +1,9 @@
-.PHONY: docs
+.PHONY: docs docs-api docs-html
 
-docs:
-	sphinx-apidoc -o ./docs/source ./src/neurosnap
+docs-api:
+	sphinx-apidoc --implicit-namespaces -f -e -M -o ./docs/source ./src/neurosnap
+
+docs-html:
 	cd docs && make html
+
+docs: docs-api docs-html

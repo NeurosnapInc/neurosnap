@@ -43,27 +43,27 @@ Documentation Map
 
 Core SDK modules:
 
-* `API client <neurosnap.html#module-neurosnap.api>`_
-* `Protein utilities <neurosnap.html#module-neurosnap.protein>`_
-* `MSA utilities <neurosnap.html#module-neurosnap.msa>`_
-* `Chemical utilities <neurosnap.html#module-neurosnap.chemicals>`_
-* `Conformer generation <neurosnap.html#module-neurosnap.conformers>`_
-* `Nucleotide utilities <neurosnap.html#module-neurosnap.nucleotide>`_
-* `Constants and residue metadata <neurosnap.html#module-neurosnap.constants>`_
-* `Rendering utilities <neurosnap.html#module-neurosnap.rendering>`_
-* `Logging utilities <neurosnap.html#module-neurosnap.log>`_
+* `API client <neurosnap.api.html>`_
+* `Protein utilities <neurosnap.protein.html>`_
+* `MSA utilities <neurosnap.msa.html>`_
+* `Chemical utilities <neurosnap.chemicals.html>`_
+* `Conformer generation <neurosnap.conformers.html>`_
+* `Nucleotide utilities <neurosnap.nucleotide.html>`_
+* `Constants and residue metadata <neurosnap.constants.html>`_
+* `Rendering utilities <neurosnap.rendering.html>`_
+* `Logging utilities <neurosnap.log.html>`_
 
 Algorithm modules:
 
-* `AlphaFold metrics <neurosnap.html#module-neurosnap.algos.alphafold>`_
-* `pDockQ scoring <neurosnap.html#module-neurosnap.algos.pdockq>`_
-* `ipSAE metrics <neurosnap.html#module-neurosnap.algos.ipsae>`_
-* `LDDT scoring <neurosnap.html#module-neurosnap.algos.LDDT>`_
-* `Electrostatic interface scoring <neurosnap.html#module-neurosnap.algos.ec_interface>`_
-* `EvoEF2 force field <neurosnap.html#module-neurosnap.algos.evoef2>`_
-* `ClusterProt clustering <neurosnap.html#module-neurosnap.algos.clusterprot>`_
-* `Kluster workflow <neurosnap.html#module-neurosnap.algos.kluster>`_
-* `Amber relax <neurosnap.html#module-neurosnap.algos.amber_relax>`_
+* `AlphaFold metrics <neurosnap.algos.alphafold.html>`_
+* `pDockQ scoring <neurosnap.algos.pdockq.html>`_
+* `ipSAE metrics <neurosnap.algos.ipsae.html>`_
+* `LDDT scoring <neurosnap.algos.LDDT.html>`_
+* `Electrostatic interface scoring <neurosnap.algos.ec_interface.html>`_
+* `EvoEF2 force field <neurosnap.algos.evoef2.html>`_
+* `ClusterProt clustering <neurosnap.algos.clusterprot.html>`_
+* `Kluster workflow <neurosnap.algos.kluster.html>`_
+* `Amber relax <neurosnap.algos.amber_relax.html>`_
 
 .. toctree::
    :hidden:

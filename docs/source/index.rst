@@ -41,9 +41,33 @@ workflows, or integration with lab and MLOps infrastructure.
 Documentation Map
 -----------------
 
+Core SDK modules:
+
+* `API client <neurosnap.html#module-neurosnap.api>`_
+* `Protein utilities <neurosnap.html#module-neurosnap.protein>`_
+* `MSA utilities <neurosnap.html#module-neurosnap.msa>`_
+* `Chemical utilities <neurosnap.html#module-neurosnap.chemicals>`_
+* `Conformer generation <neurosnap.html#module-neurosnap.conformers>`_
+* `Nucleotide utilities <neurosnap.html#module-neurosnap.nucleotide>`_
+* `Constants and residue metadata <neurosnap.html#module-neurosnap.constants>`_
+* `Rendering utilities <neurosnap.html#module-neurosnap.rendering>`_
+* `Logging utilities <neurosnap.html#module-neurosnap.log>`_
+
+Algorithm modules:
+
+* `AlphaFold metrics <neurosnap.html#module-neurosnap.algos.alphafold>`_
+* `pDockQ scoring <neurosnap.html#module-neurosnap.algos.pdockq>`_
+* `ipSAE metrics <neurosnap.html#module-neurosnap.algos.ipsae>`_
+* `LDDT scoring <neurosnap.html#module-neurosnap.algos.LDDT>`_
+* `Electrostatic interface scoring <neurosnap.html#module-neurosnap.algos.ec_interface>`_
+* `EvoEF2 force field <neurosnap.html#module-neurosnap.algos.evoef2>`_
+* `ClusterProt clustering <neurosnap.html#module-neurosnap.algos.clusterprot>`_
+* `Kluster workflow <neurosnap.html#module-neurosnap.algos.kluster>`_
+* `Amber relax <neurosnap.html#module-neurosnap.algos.amber_relax>`_
+
 .. toctree::
+   :hidden:
    :maxdepth: 2
-   :caption: Reference
 
    modules
 

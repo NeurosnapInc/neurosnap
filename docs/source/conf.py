@@ -33,6 +33,16 @@ extensions = [
   "sphinx_autodoc_typehints",
 ]
 
+# Optional dependencies used by some algorithm modules.
+# Mocking keeps docs buildable in lightweight environments.
+autodoc_mock_imports = [
+  "sklearn",
+  "umap",
+  "plotly",
+  "openmm",
+  "pdbfixer",
+]
+
 # https://gist.github.com/bskinn/0e164963428d4b51017cebdb6cda5209
 # useful for main intersphinx mappings
 

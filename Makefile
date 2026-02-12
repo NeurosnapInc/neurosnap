@@ -1,7 +1,7 @@
 .PHONY: docs docs-api docs-html
 
-ifneq ("$(wildcard .docs-sync.env)","")
-include .docs-sync.env
+ifneq ("$(wildcard .local.secrets.env)","")
+include .local.secrets.env
 endif
 
 docs-api:

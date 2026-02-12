@@ -11,6 +11,6 @@ dist/
 # sphinx
 docs/build/
 docs/source/neurosnap.*.rst
-.docs-sync.env
+.local.secrets.env
 # docs/source/
 # !docs/source/conf.py

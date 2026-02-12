@@ -1,5 +1,5 @@
-neurosnap
-=========
+Neurosnap SDK
+=============
 
 .. toctree::
    :maxdepth: 4

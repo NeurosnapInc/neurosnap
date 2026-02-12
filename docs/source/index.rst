@@ -25,10 +25,10 @@ Core platform areas:
 * `Security <https://neurosnap.ai/security>`_: platform security posture and
   data-handling commitments.
 
-Neurosnap Tools (Python SDK)
-----------------------------
+Neurosnap SDK (Python Package)
+------------------------------
 
-`Neurosnap Tools <https://github.com/NeurosnapInc/neurosnap>`_ is the official
+`Neurosnap SDK <https://github.com/NeurosnapInc/neurosnap>`_ is the official
 Python package for working with Neurosnap programmatically. It includes:
 
 * A lightweight SDK wrapper for Neurosnap API endpoints.

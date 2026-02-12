@@ -28,3 +28,20 @@ html[data-theme="dark"] {
   height: 2.4em;
   width: 2.4em;
 }
+
+.bd-header-navbar .navbar-nav .nav-item .nav-link.doc-home-link {
+  background: #4361EE;
+  border-radius: 9999px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.6rem 0.9rem;
+}
+
+.bd-header-navbar .navbar-nav .nav-item .nav-link.doc-home-link:hover,
+.bd-header-navbar .navbar-nav .nav-item .nav-link.doc-home-link:focus-visible {
+  background: #3a55d4;
+  color: #ffffff;
+  text-decoration: none;
+}

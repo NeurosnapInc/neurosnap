@@ -18,6 +18,7 @@ help:
 
 apidoc:
 	@$(SPHINXAPIDOC) --implicit-namespaces -f -e -M -o "$(SOURCEDIR)" "$(APIPKGDIR)"
+	@python ../scripts/patch_apidoc_titles.py
 
 html: apidoc
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)

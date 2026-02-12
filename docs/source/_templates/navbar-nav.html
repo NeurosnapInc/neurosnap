@@ -1,0 +1,14 @@
+{# Custom navbar ordering: put Documentation Home before generated nav links. #}
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    <li class="nav-item">
+      <a class="nav-link nav-external doc-home-link" href="{{ pathto(root_doc) }}">
+        Documentation Home
+      </a>
+    </li>
+    {{ generate_header_nav_html(
+      n_links_before_dropdown=theme_header_links_before_dropdown,
+      dropdown_text=theme_header_dropdown_text
+    ) }}
+  </ul>
+</nav>

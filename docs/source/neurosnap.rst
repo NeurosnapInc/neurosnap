@@ -1,5 +1,5 @@
-neurosnap package
-=================
+Neurosnap SDK package
+=====================
 
 .. automodule:: neurosnap
    :members:

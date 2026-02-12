@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.abspath("../src/neurosnap/"))
 
@@ -16,7 +17,7 @@ print(sys.executable)
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "Neurosnap"
-copyright = "2022-2025, Neurosnap Inc."
+copyright = f"2022-{datetime.now().year}, Neurosnap Inc."
 author = "Keaun Amani"
 release = "2026.02.06"
 

@@ -41,7 +41,7 @@ workflows, or integration with lab and MLOps infrastructure.
 Documentation Map
 -----------------
 
-Core SDK modules:
+**Core SDK modules:**
 
 * `API client <neurosnap.api.html>`_
 * `Protein utilities <neurosnap.protein.html>`_
@@ -53,7 +53,7 @@ Core SDK modules:
 * `Rendering utilities <neurosnap.rendering.html>`_
 * `Logging utilities <neurosnap.log.html>`_
 
-Algorithm modules:
+**Algorithm modules:**
 
 * `AlphaFold metrics <neurosnap.algos.alphafold.html>`_
 * `pDockQ scoring <neurosnap.algos.pdockq.html>`_

@@ -66,4 +66,13 @@ exclude_patterns = []
 
 html_theme = "pydata_sphinx_theme"  # NOTE: Default is "sphinx_rtd_theme"
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 html_favicon = "_static/favicon.ico"
+html_logo = "_static/favicon.ico"
+html_theme_options = {
+  "logo": {
+    "text": "neurosnap",
+    "link": "/",
+    "alt_text": "",
+  },
+}

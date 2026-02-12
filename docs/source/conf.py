@@ -16,10 +16,11 @@ print(sys.executable)
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+now = datetime.now()
 project = "Neurosnap"
-copyright = f"2022-{datetime.now().year}, Neurosnap Inc."
+copyright = f"2022-{now.year}, Neurosnap Inc."
 author = "Keaun Amani"
-release = "2026.02.06"
+release = f"{now.year}.{now.month}.{now.day}"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

@@ -19,6 +19,9 @@ Install
    # stable release
    pip install -U neurosnap
 
+   # latest version from GitHub
+   pip install -U git+https://github.com/NeurosnapInc/neurosnap.git
+
    # optional extras for structure clustering workflows
    pip install -U "neurosnap[clusterprot]"
 

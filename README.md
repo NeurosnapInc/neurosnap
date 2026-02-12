@@ -6,7 +6,7 @@
 # Neurosnap SDK
 [![Neurosnap Header](https://raw.githubusercontent.com/NeurosnapInc/neurosnap/refs/heads/main/assets/header.webp)](https://neurosnap.ai/)
 
-Collection of useful bioinformatic functions and tools for various computational biology pipelines. Primarily designed for working with amino acid sequences and chemical structures.
+Neurosnap SDK is a collection of utilities for bioinformatics, structural biology, and cheminformatics workflows, with strong support for amino acid sequences and molecular structures.
 
 This a package developed by Keaun Amani at [neurosnap.ai](https://neurosnap.ai/). You are welcome to use this code and contribute as you see fit. We are currently working on expanding this package as well to add support for more common functions.
 
@@ -54,7 +54,7 @@ pip install --editable .[dev]
 ```
 
 # Citations
-If you found this tool to be helpful please feel free to cite it using the following.
+If you found this SDK helpful, please feel free to cite it using the following.
 
 ```BibTeX
 @misc{amani-2024,

@@ -9,7 +9,7 @@ version = "2026.02.06"
 authors = [
   {name="Keaun Amani"},
 ]
-description = "Collection of useful bioinformatic functions and tools for various computational biology pipelines."
+description = "Neurosnap SDK for bioinformatics, structural biology, and cheminformatics workflows."
 license = {file = "LICENSE"}
 readme = "README.md"
 classifiers = [

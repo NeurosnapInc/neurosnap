@@ -32,7 +32,7 @@ Neurosnap SDK (Python Package)
 Python package for working with Neurosnap programmatically. It includes:
 
 * A lightweight SDK wrapper for Neurosnap API endpoints.
-* Utility modules for common bioinformatics and cheminformatics tasks.
+* Utility modules for common bioinformatics, structural biology, and cheminformatics tasks.
 * Building blocks for sequence-centric and structure-aware pipeline development.
 
 Use this package when you need reproducible scripts, batch processing, notebook

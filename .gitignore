@@ -10,5 +10,6 @@ dist/
 
 # sphinx
 docs/build/
+docs/source/neurosnap.*.rst
 # docs/source/
 # !docs/source/conf.py

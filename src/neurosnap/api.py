@@ -12,18 +12,30 @@ from tabulate import tabulate
 from neurosnap.log import logger
 
 # try to get the version of the user agent
-version = "X"
+version = "unknown"
 try:
   from importlib.metadata import version
 
   version("neurosnap")
-except:
+except:  # noqa: E722
   pass
 # User agent to use throughout the application
-USER_AGENT = f"Neurosnap-OSS-Tools/v{version}"
+USER_AGENT = f"Neurosnap-OSS-Tools/v-{version}"
 
 
 class NeurosnapAPI:
+  """Client wrapper for interacting with the Neurosnap REST API.
+
+  Provides authenticated helpers for:
+  - listing services and jobs
+  - submitting jobs and monitoring status
+  - retrieving job metadata and output files
+  - managing job notes and sharing settings
+
+  Authentication is performed with a Neurosnap API key, and connectivity is
+  validated during initialization.
+  """
+
   BASE_URL = "https://neurosnap.ai/api"
 
   def __init__(self, api_key: str):

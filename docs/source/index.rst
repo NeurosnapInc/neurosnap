@@ -1,87 +1,61 @@
-Neurosnap Tools
-===============
+Neurosnap Documentation
+=======================
 
-.. image:: https://img.shields.io/github/license/KeaunAmani/neurosnap?color=%234361EE
-   :target: https://github.com/KeaunAmani/neurosnap/blob/master/LICENSE
-   :alt: GitHub License
+Neurosnap combines a production web application for AI-native molecular discovery
+with a Python package for scripting, automation, and custom analysis workflows.
+This documentation covers both.
 
-.. image:: https://img.shields.io/github/created-at/KeaunAmani/neurosnap?color=%234361EE
-   :target: https://img.shields.io/github/created-at/KeaunAmani/neurosnap?color=%234361EE
-   :alt: GitHub Created At
+Neurosnap Platform
+------------------
 
-.. image:: https://img.shields.io/github/last-commit/KeaunAmani/neurosnap?color=%234361EE
-   :target: https://img.shields.io/github/last-commit/KeaunAmani/neurosnap?color=%234361EE
-   :alt: GitHub Last Commit
+`Neurosnap.ai <https://neurosnap.ai/>`_ is a browser-based platform for
+computational biology and cheminformatics, with support for structure prediction,
+binder design, docking, screening, and downstream analysis workflows.
 
-.. image:: https://img.shields.io/discord/1014770343883309076
-   :target: https://discord.gg/2yDZX6rTh4
-   :alt: Discord
+Core platform areas:
 
+* `Services <https://neurosnap.ai/services>`_: hosted tools and models for
+  protein and small-molecule workflows.
+* `Use Cases <https://neurosnap.ai/#use-cases>`_: antibody engineering, peptide discovery,
+  enzyme engineering, and small-molecule discovery.
+* `NeuroFold <https://neurosnap.ai/neurofold>`_: structure prediction and
+  design-focused workflows.
+* `API <https://neurosnap.ai/blog/post/full-neurosnap-api-tutorial-the-quick-easy-api-for-bioinformatics/66b00dacec3f2aa9b4be703a>`_: programmatic access for automation and
+  integration into internal pipelines.
+* `Security <https://neurosnap.ai/security>`_: platform security posture and
+  data-handling commitments.
 
-Collection of useful bioinformatic functions and tools for various computational biology pipelines. Primarily designed for working with amino acid sequences and chemical structures.
+Neurosnap Tools (Python SDK)
+----------------------------
 
-This a package developed by Keaun Amani at `<https://neurosnap.ai>`_. You are welcome to use this code and contribute as you see fit. We are currently working on expanding this package as well to add support for more common functions.
+`Neurosnap Tools <https://github.com/NeurosnapInc/neurosnap>`_ is the official
+Python package for working with Neurosnap programmatically. It includes:
 
-..
-    reference link for how to write .rst files, very useful
-    https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html
+* A lightweight SDK wrapper for Neurosnap API endpoints.
+* Utility modules for common bioinformatics and cheminformatics tasks.
+* Building blocks for sequence-centric and structure-aware pipeline development.
+
+Use this package when you need reproducible scripts, batch processing, notebook
+workflows, or integration with lab and MLOps infrastructure.
+
+Documentation Map
+-----------------
 
 .. toctree::
    :maxdepth: 2
-   :caption: Documentation
+   :caption: Reference
 
    modules
 
+Learning Resources
+------------------
 
-Contributing
-=============
+* `Example notebooks <https://github.com/NeurosnapInc/neurosnap/tree/main/example_notebooks>`_
+* `Neurosnap Blog <https://neurosnap.ai/blog>`_
+* `Discord community <https://discord.gg/2yDZX6rTh4>`_
 
-We welcome contributions to this package. If you have a feature that you want to code or have added, submit a pull request or an issue.
+.. Indices and tables
+.. ------------------
 
-
-.. code-block:: shell
-
-   # set up a virtualenv
-   python3.8 -m venv venv
-
-   # this step might differ depending on your shell
-   source venv/bin/activate
-
-   pip install --editable .[dev]
-
-Building documentation
-----------------------
-
-To build documentation, enter your virtual environment and run :code:`make docs` from the root of the repository.
-
-Then, open :code:`docs/build/html/index.html` in a web browser.
-
-Installation
-============
-
-.. code-block:: sh
-
-   pip install -U --no-cache-dir git+https://github.com/NeurosnapInc/neurosnap.git
-
-Tutorials
-=========
-
-Various interactive jupyter notebooks can be found in the `example_notebooks directory <https://github.com/NeurosnapInc/neurosnap/tree/main/example_notebooks>`_ of this repository. For additional tutorials check out the `Official Neurosnap Blog <https://neurosnap.ai/blog>`_ or `join our discord server <https://discord.gg/2yDZX6rTh4>`_.
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
-
-..
-   this is a comment block btw
-   the search page above doesn't work due to a bug in the theme:
-   https://github.com/readthedocs/sphinx_rtd_theme/issues/998
-
-   its not terrible because the rtd_theme has a search bar in the top left
-   already. However, if we switch to a different theme, then it might not be the
-   case. Also, the search page is pretty standard in sphinx so we should leave
-   it in, in case we switch themes or anything.
+.. * :ref:`genindex`
+.. * :ref:`modindex`

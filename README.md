@@ -29,7 +29,7 @@ pip install -U --no-cache-dir "neurosnap @ git+https://github.com/NeurosnapInc/n
 ```
 
 # Documentation
-Official documentation can be found here: [https://neurosnapinc.github.io/](https://neurosnapinc.github.io/).
+Official documentation can be found here: [https://neurosnap.ai/docs/](https://neurosnap.ai/docs/).
 
 ## Building documentation
 To build documentation, enter your virtual environment and run `make docs` from

@@ -44,12 +44,9 @@ Various interactive jupyter notebooks can be found in the [example_notebooks dir
 We welcome contributions to this package. If you have a feature that you want to code or have added, submit a pull request or an issue.
 
 ```sh
-# set up a virtualenv
-python -m venv .venv
-
-# this step might differ depending on your shell
-source .venv/bin/activate
-
+# setup virtual environment & activate it
+python -m venv .venv && source .venv/bin/activate
+# install package locally as editable and with dev dependencies
 pip install --editable .[dev]
 ```
 

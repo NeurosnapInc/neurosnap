@@ -36,16 +36,12 @@ python -m build
 twine check dist/*
 ```
 
-## 5. (Recommended) Upload to TestPyPI first
-
-```sh
-twine upload --repository testpypi dist/*
-```
-
-## 6. Upload to PyPI
+## 5. Upload to PyPI
 
 ```sh
 # This prompts for credentials unless configured via .pypirc or environment variables.
+# export TWINE_USERNAME=__token__
+# export TWINE_PASSWORD='pypi-...'
 twine upload dist/*
 ```
 

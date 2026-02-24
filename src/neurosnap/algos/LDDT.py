@@ -205,7 +205,6 @@ def _calc_lddt_from_maps(
   R: float = 15.0,
   sep_thresh: int = -1,
   T_set: Sequence[float] = (0.5, 1.0, 2.0, 4.0),
-  precision: int = 4,
 ) -> float:
   """
   Mariani V, Biasini M, Barbato A, Schwede T.
@@ -247,8 +246,6 @@ def _calc_lddt_from_maps(
     preserved_fractions.append(_f_preserved)
 
   lddt = np.mean(preserved_fractions)
-  if precision > 0:
-    lddt = round(lddt, precision)
   return lddt
 
 
@@ -263,7 +260,6 @@ def calc_lddt(
   R: float = 15.0,
   sep_thresh: int = -1,
   T_set: Sequence[float] = (0.5, 1.0, 2.0, 4.0),
-  precision: int = 4,
   require_standard_aa: bool = True,
 ) -> float:
   """Compute lDDT from distance maps or Protein structures.
@@ -278,7 +274,6 @@ def calc_lddt(
     R: Maximum reference distance to consider when defining the L set.
     sep_thresh: Minimum sequence separation between residue pairs.
     T_set: Error thresholds used to compute preserved distance fractions.
-    precision: Decimal precision of the reported score; use 0 or negative to skip rounding.
     require_standard_aa: Skip residues with unknown amino-acid or nucleotide codes when True.
 
   Returns:
@@ -296,7 +291,7 @@ def calc_lddt(
   if is_ref_array and is_pred_array:
     if reference.shape != prediction.shape:
       raise ValueError("Distance maps must share the same shape to compute lDDT.")
-    return _calc_lddt_from_maps(reference, prediction, R=R, sep_thresh=sep_thresh, T_set=T_set, precision=precision)
+    return _calc_lddt_from_maps(reference, prediction, R=R, sep_thresh=sep_thresh, T_set=T_set)
 
   if is_ref_protein and is_pred_protein:
     # Extract per-residue coordinates for both proteins
@@ -311,6 +306,6 @@ def calc_lddt(
     # Build distance maps on the common residue set
     true_map = _coords_to_distmat(common_keys, ref_cb)
     pred_map = _coords_to_distmat(common_keys, pred_cb)
-    return _calc_lddt_from_maps(true_map, pred_map, R=R, sep_thresh=sep_thresh, T_set=T_set, precision=precision)
+    return _calc_lddt_from_maps(true_map, pred_map, R=R, sep_thresh=sep_thresh, T_set=T_set)
 
   raise TypeError("calc_lddt expects both inputs to be either numpy.ndarray distance maps or Protein objects.")

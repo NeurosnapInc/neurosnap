@@ -40,7 +40,7 @@ def test_calc_lddt_identical_proteins_returns_one(rank1_protein):
 
 
 def test_calc_lddt_variant_models_close_but_not_identical(rank1_protein, rank2_protein):
-  score = calc_lddt(rank1_protein, rank2_protein, precision=0)
+  score = calc_lddt(rank1_protein, rank2_protein)
   assert score < 1.0
   assert score == pytest.approx(0.982843137254902, rel=1e-6)
 

@@ -1,5 +1,5 @@
 """
-Tests for the neurosnap.algos.LDDT module.
+Tests for the neurosnap.algos.lddt module.
 """
 
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from neurosnap.algos.LDDT import calc_lddt
+from neurosnap.algos.lddt import calc_lddt
 from neurosnap.protein import Protein
 
 HERE = Path(__file__).resolve().parent

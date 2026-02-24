@@ -277,7 +277,11 @@ def calc_lddt(
     require_standard_aa: Skip residues with unknown amino-acid or nucleotide codes when True.
 
   Returns:
-    lDDT score between the reference and prediction.
+    lDDT score between the reference and prediction. Typical range is [0.0, 1.0],
+    where 1.0 indicates perfect local distance agreement and 0.0 indicates no
+    preserved distances under the selected thresholds. Returns NaN when no
+    residue pairs satisfy the L-set criteria (for example, no pairs within `R`
+    and above `sep_thresh`).
 
   Raises:
     ValueError: If distance maps do not share the same shape.

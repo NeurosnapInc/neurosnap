@@ -364,6 +364,44 @@ def test_align_backbone_protein_only():
   assert np.allclose(coords_ref, coords_after, atol=1e-3)
 
 
+def test_align_backbone_pairwise_chain_mapping():
+  prot_ref = _make_protein(_replace_chain(PROTEIN_BACKBONE_ATOMS, "B"))
+  prot_offset = _make_protein(_replace_chain(_transform_atoms(PROTEIN_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR), "A"))
+
+  coords_ref = _collect_backbone_coords(prot_ref)
+  coords_before = _collect_backbone_coords(prot_offset)
+  assert coords_ref.shape == coords_before.shape
+  assert not np.allclose(coords_ref, coords_before)
+
+  prot_ref.align(prot_offset, chains1=["B"], chains2=["A"])
+  coords_after = _collect_backbone_coords(prot_offset)
+  assert np.allclose(coords_ref, coords_after, atol=1e-3)
+
+
+def test_align_backbone_default_mode_requires_matching_chain_ids():
+  prot_ref = _make_protein(_replace_chain(PROTEIN_BACKBONE_ATOMS, "B"))
+  prot_offset = _make_protein(_replace_chain(_transform_atoms(PROTEIN_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR), "A"))
+
+  with pytest.raises(AssertionError, match="Proteins do not share common backbone atoms to align"):
+    prot_ref.align(prot_offset)
+
+
+def test_rmsd_pairwise_chain_mapping():
+  prot_ref = _make_protein(_replace_chain(PROTEIN_BACKBONE_ATOMS, "B"))
+  prot_offset = _make_protein(_replace_chain(_transform_atoms(PROTEIN_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR), "A"))
+
+  rmsd = prot_ref.calculate_rmsd(prot_offset, chains1=["B"], chains2=["A"], align=True)
+  assert rmsd < 1e-3
+
+
+def test_align_pairwise_chain_mapping_requires_equal_lengths():
+  prot_ref = _make_protein(list(MIXED_BACKBONE_ATOMS))
+  prot_offset = _make_protein(_transform_atoms(MIXED_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))
+
+  with pytest.raises(AssertionError, match="same number of chains"):
+    prot_ref.align(prot_offset, chains1=["A", "B"], chains2=["A"])
+
+
 def test_align_backbone_nucleotide_only():
   prot_ref = _make_protein(list(DNA_BACKBONE_ATOMS))
   prot_offset = _make_protein(_transform_atoms(DNA_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))

@@ -61,6 +61,7 @@ class Protein:
     pdb: Can be either a file handle, PDB or mmCIF filepath, PDB ID, or UniProt ID
     format: File format of the input ("pdb", "mmcif", or "auto" to infer format from extension)
   """
+
   def __init__(self, pdb: Union[str, pathlib.Path, io.IOBase], format: str = "auto"):
     self.title = "Untitled Protein"
     if isinstance(pdb, io.IOBase):
@@ -905,7 +906,9 @@ class Protein:
     Parameters:
       other_protein: Another Neurosnap Protein object to compare against
       chains1: The chain(s) you want to include in the alignment within the reference protein, set to an empty list to use all chains.
+        If both chains1 and chains2 are provided, they are interpreted as pairwise chain mappings in matching order.
       chains2: The chain(s) you want to include in the alignment within the other protein, set to an empty list to use all chains.
+        If both chains1 and chains2 are provided, they are interpreted as pairwise chain mappings in matching order.
       model1: Model ID of reference protein to align to
       model2: Model ID of other protein to transform and align to reference
 
@@ -913,6 +916,11 @@ class Protein:
     assert model1 in self.models(), "Specified model needs to be present in the reference structure."
     assert model2 in other_protein.models(), "Specified model needs to be present in the other structure."
     # validate chains1
+    chains1 = list(chains1) if chains1 else []
+    chains2 = list(chains2) if chains2 else []
+    chains1_provided = bool(chains1)
+    chains2_provided = bool(chains2)
+
     avail_chains = self.chains(model1)
     if chains1:
       for chain in chains1:
@@ -926,6 +934,13 @@ class Protein:
         assert chain in avail_chains, f"Chain {chain} was not found in the other protein. Found chains include {', '.join(avail_chains)}."
     else:
       chains2 = avail_chains
+
+    # when both chain lists are provided, interpret them as explicit chain mappings
+    chain_mapping_mode = chains1_provided and chains2_provided
+    if chain_mapping_mode:
+      assert len(chains1) == len(chains2), (
+        "When chains1 and chains2 are both provided, they must contain the same number of chains for pairwise mapping."
+      )
 
     # Use the Superimposer to align the structures
     def _allowed_backbone_atoms(residue) -> Optional[Set[str]]:
@@ -942,14 +957,10 @@ class Protein:
         return BACKBONE_ATOMS_RNA
       return None
 
-    def aux_get_atom_map(sample_model, chains):
-      if chains:
-        chain_order = list(chains)
-      else:
-        chain_order = [chain.id for chain in sample_model if chain.id.strip()]
+    def aux_get_atom_map(sample_model, chain_specs):
       chain_lookup = {chain.id: chain for chain in sample_model}
       atoms = {}
-      for chain_id in chain_order:
+      for map_key, chain_id in chain_specs:
         chain = chain_lookup.get(chain_id)
         if chain is None:
           continue
@@ -958,14 +969,21 @@ class Protein:
           if not backbone_atoms:
             continue
           het_flag, seq_id, icode = residue.id
-          resid_key = (chain_id, het_flag, seq_id, (icode or "").strip())
+          resid_key = (map_key, het_flag, seq_id, (icode or "").strip())
           for atom in residue:
             if atom.name in backbone_atoms:
               atoms[(resid_key, atom.name)] = atom
       return atoms
 
-    ref_atom_map = aux_get_atom_map(self.structure[model1], chains1)
-    mov_atom_map = aux_get_atom_map(other_protein.structure[model2], chains2)
+    if chain_mapping_mode:
+      ref_chain_specs = [(pair_idx, chain_id) for pair_idx, chain_id in enumerate(chains1)]
+      mov_chain_specs = [(pair_idx, chain_id) for pair_idx, chain_id in enumerate(chains2)]
+    else:
+      ref_chain_specs = [(chain_id, chain_id) for chain_id in chains1]
+      mov_chain_specs = [(chain_id, chain_id) for chain_id in chains2]
+
+    ref_atom_map = aux_get_atom_map(self.structure[model1], ref_chain_specs)
+    mov_atom_map = aux_get_atom_map(other_protein.structure[model2], mov_chain_specs)
     assert ref_atom_map, "Reference protein does not contain any backbone atoms to align."
     assert mov_atom_map, "Other protein does not contain any backbone atoms to align."
 

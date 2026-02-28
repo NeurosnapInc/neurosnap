@@ -10,6 +10,7 @@ from typing import Iterable, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
+from scipy.spatial import cKDTree
 from scipy.special import expit as sigmoid
 from tqdm import tqdm
 
@@ -205,18 +206,57 @@ def render_pseudo3D(
   z = rescale(seg_z)[:, None]
 
   # add shadow (make lines darker if they are behind other lines)
-  seg_len_cutoff = (seg_len[:, None] + seg_len[None, :]) / 2
+  n_seg = len(seg)
   seg_mid_z = seg_mid[:, 2]
-  seg_mid_dist = np.sqrt(np.square(seg_mid[:, None] - seg_mid[None, :]).sum(-1))
-  shadow_mask = sigmoid(seg_len_cutoff * 2.0 - seg_mid_dist) * (seg_mid_z[:, None] < seg_mid_z[None, :])
-  np.fill_diagonal(shadow_mask, 0.0)
-  shadow_mask = shadow ** shadow_mask.sum(-1, keepdims=True)
+  if n_seg <= 3500:
+    # Keep the original full pairwise model for smaller structures.
+    # This path is visually faithful, but allocates O(n^2) intermediate arrays.
+    seg_len_cutoff = (seg_len[:, None] + seg_len[None, :]) / 2
+    seg_mid_dist = np.sqrt(np.square(seg_mid[:, None] - seg_mid[None, :]).sum(-1))
+    shadow_pair = sigmoid(seg_len_cutoff * 2.0 - seg_mid_dist) * (seg_mid_z[:, None] < seg_mid_z[None, :])
+    np.fill_diagonal(shadow_pair, 0.0)
+    shadow_mask = shadow ** shadow_pair.sum(-1, keepdims=True)
 
-  seg_mid_xz = seg_mid[:, :2]
-  seg_mid_xydist = np.sqrt(np.square(seg_mid_xz[:, None] - seg_mid_xz[None, :]).sum(-1))
-  tint_mask = sigmoid(seg_len_cutoff / 2 - seg_mid_xydist) * (seg_mid_z[:, None] < seg_mid_z[None, :])
-  np.fill_diagonal(tint_mask, 0.0)
-  tint_mask = 1 - tint_mask.max(-1, keepdims=True)
+    seg_mid_xy = seg_mid[:, :2]
+    seg_mid_xydist = np.sqrt(np.square(seg_mid_xy[:, None] - seg_mid_xy[None, :]).sum(-1))
+    tint_pair = sigmoid(seg_len_cutoff / 2 - seg_mid_xydist) * (seg_mid_z[:, None] < seg_mid_z[None, :])
+    np.fill_diagonal(tint_pair, 0.0)
+    tint_mask = 1 - tint_pair.max(-1, keepdims=True)
+  else:
+    # Large structures can OOM on full pairwise shading.
+    # Approximate shading from a local XY neighborhood so memory stays bounded.
+    k_neighbors = min(96, n_seg - 1)
+    tree = cKDTree(seg_mid[:, :2])
+    # Query includes the point itself at column 0; we skip it below.
+    neighbor_dists, neighbor_idx = tree.query(seg_mid[:, :2], k=k_neighbors + 1)
+    neighbor_dists = np.asarray(neighbor_dists)
+    neighbor_idx = np.asarray(neighbor_idx)
+
+    shadow_sum = np.zeros(n_seg, dtype=float)
+    tint_max = np.zeros(n_seg, dtype=float)
+    for i in range(n_seg):
+      nbrs = neighbor_idx[i, 1:]
+      if nbrs.size == 0:
+        continue
+      dz = seg_mid_z[nbrs] - seg_mid_z[i]
+      behind = dz > 0
+      if not np.any(behind):
+        continue
+
+      # Only points in front of the current segment contribute occlusion/shadow.
+      nbrs = nbrs[behind]
+      dz = dz[behind]
+      dxy = neighbor_dists[i, 1:][behind]
+
+      seg_len_cutoff = (seg_len[i] + seg_len[nbrs]) / 2.0
+      d3 = np.sqrt(dxy * dxy + dz * dz)
+      shadow_vals = sigmoid(seg_len_cutoff * 2.0 - d3)
+      tint_vals = sigmoid(seg_len_cutoff / 2.0 - dxy)
+      shadow_sum[i] = shadow_vals.sum()
+      tint_max[i] = tint_vals.max() if tint_vals.size else 0.0
+
+    shadow_mask = shadow ** shadow_sum[:, None]
+    tint_mask = 1 - tint_max[:, None]
 
   # apply a soft tint/shadow blend to simulate depth
   colors[:, :3] = colors[:, :3] + (1 - colors[:, :3]) * (0.50 * z + 0.50 * tint_mask) / 3

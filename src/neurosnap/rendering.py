@@ -351,9 +351,11 @@ def render_protein_pseudo3D(
 
   """
   df = protein.df
-  coords = df[["x", "y", "z"]]
+  xyz = df[["x", "y", "z"]].to_numpy(dtype=np.float32, copy=False)
   chains = df["chain"].to_numpy()
-  segments = [coords.to_numpy()[chains == chain_id] for chain_id in pd.unique(chains)]
+  unique_chains = pd.unique(chains)
+  chain_masks = [chains == chain_id for chain_id in unique_chains]
+  segments = [xyz[mask] for mask in chain_masks]
 
   # build colors per style
   style = style.lower()
@@ -364,7 +366,7 @@ def render_protein_pseudo3D(
   if style in {"residue_id", "chain_id", "b-factor", "plddt", "residue_type"}:
     color_segments = []
     if style == "chain_id":
-      chain_map = {cid: idx for idx, cid in enumerate(pd.unique(chains))}
+      chain_map = {cid: idx for idx, cid in enumerate(unique_chains)}
     elif style == "residue_type":
       res_codes = {res: idx for idx, res in enumerate(pd.unique(df["res_name"]))}
     elif style == "plddt":
@@ -387,8 +389,7 @@ def render_protein_pseudo3D(
       custom_cmap = cmap_plddt
       cmin = 0.0
       cmax = 1.0
-    for chain_id in pd.unique(chains):
-      mask = chains == chain_id
+    for chain_id, mask in zip(unique_chains, chain_masks):
       if style == "residue_id":
         color_segments.append(df.loc[mask, "res_id"].to_numpy(dtype=float))
       elif style == "chain_id":
@@ -423,7 +424,7 @@ def render_protein_pseudo3D(
         elem = ""
       radii.append(VDW_RADII_BONDI.get(elem, 1.5))
     radii = np.asarray(radii, dtype=float)
-    size_segments = [radii[chains == chain_id] for chain_id in pd.unique(chains)]
+    size_segments = [radii[mask] for mask in chain_masks]
 
   return render_pseudo3D(
     segments,

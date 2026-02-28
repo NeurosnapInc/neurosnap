@@ -501,7 +501,7 @@ def animate_frames(
     animated_frames[0].save(output_path, **save_kwargs)
   elif ext == ".mp4":
     try:
-      import imageio
+      import imageio # pyright: ignore[reportMissingImports]
     except ImportError as e:
       raise ImportError("imageio is required to write mp4 animations. Install via `pip install imageio imageio-ffmpeg`.") from e
     fps = max(1e-3, 1000.0 / float(interval))  # avoid zero, allow sub-1 fps

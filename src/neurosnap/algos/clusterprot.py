@@ -152,7 +152,7 @@ def animate_results(cp_results: Dict, animation_fpath: str = "cluster_prot.gif")
   subtitles = []
   total = len(order)
   for i, idx in enumerate(tqdm(order, desc="Rendering frames", unit="frame"), start=1):
-    frames.append(render_protein_pseudo3D(proteins[idx]))
+    frames.append(render_protein_pseudo3D(proteins[idx], image_size=(800, 580)))
     subtitles.append(f"{proteins[idx].title} ({i}/{total})")
   animate_frames(frames, animation_fpath, title="ClusterProt Animation", subtitles=subtitles, interval=150, repeat=True)
 

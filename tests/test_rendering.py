@@ -40,6 +40,22 @@ def test_render_protein_pseudo3D_with_radii(tmp_path):
   assert out.exists() and out.stat().st_size > 0
 
 
+def test_render_protein_pseudo3D_covid_trimer(tmp_path):
+  prot = Protein("tests/files/covid_trimer.pdb")
+  img = render_protein_pseudo3D(
+    prot,
+    image_size=(320, 240),
+    upsample=1,
+  )
+  assert isinstance(img, Image.Image)
+  arr = np.asarray(img)
+  assert arr.shape == (240, 320, 4)
+  assert arr[..., :3].max() > arr[..., :3].min()
+  out = tmp_path / "covid_trimer.png"
+  img.save(out)
+  assert out.exists() and out.stat().st_size > 0
+
+
 def test_animate_frames_writes_gif(tmp_path):
   frames = [
     np.zeros((20, 20, 3), dtype=np.uint8),

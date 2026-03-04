@@ -99,6 +99,14 @@ def _pick_atom_coord(res, is_protein: bool) -> Optional[np.ndarray]:
   return None
 
 
+def _is_hydrogen_atom(atom) -> bool:
+  el = getattr(atom, "element", None)
+  if el is not None and str(el).strip().upper() == "H":
+    return True
+  name = atom.get_name().strip().upper()
+  return name.startswith("H")
+
+
 def _protein_to_residue_arrays(
   protein,
   model: Optional[int] = None,
@@ -158,6 +166,68 @@ def _protein_to_residue_arrays(
   )
 
 
+def _protein_to_site_arrays_with_nonstandard_atoms(
+  protein,
+  model: Optional[int] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+  """
+  Returns site-level arrays aligned across the structure order:
+    residue_names (N,), chains (N,), residue_numbers (N,), coords (N,3)
+
+  Standard amino acids / nucleotides contribute one representative site per residue.
+  Non-standard polymer residues (e.g., PTMs, ligands in polymer chains) contribute one
+  site per non-hydrogen atom in atom order.
+  """
+  if model is None:
+    model = protein.models()[0]
+  assert model in protein.models(), f"Model {model} not present."
+
+  residue_names: List[str] = []
+  chains: List[str] = []
+  residue_numbers: List[int] = []
+  coords: List[np.ndarray] = []
+
+  mdl = protein.structure[model]
+  for chain in mdl:
+    ch_id = chain.id
+    for res in chain:
+      if res.id[0] != " ":
+        continue
+      resname = res.get_resname()
+      resseq = int(res.id[1])
+
+      is_aa = resname in AA_SET
+      is_na = resname in NA_SET
+      if is_aa or is_na:
+        coord = _pick_atom_coord(res, is_protein=is_aa)
+        if coord is None:
+          continue
+        residue_names.append(resname)
+        chains.append(ch_id)
+        residue_numbers.append(resseq)
+        coords.append(coord.astype(float))
+        continue
+
+      # Non-standard residues: keep all heavy atoms as separate sites.
+      for atom in res.get_atoms():
+        if _is_hydrogen_atom(atom):
+          continue
+        residue_names.append(resname)
+        chains.append(ch_id)
+        residue_numbers.append(resseq)
+        coords.append(atom.coord.astype(float))
+
+  if not residue_names:
+    raise ValueError("No usable sites were found in the selected model.")
+
+  return (
+    np.array(residue_names, dtype=object),
+    np.array(chains, dtype=object),
+    np.array(residue_numbers, dtype=int),
+    np.vstack(coords).astype(float),
+  )
+
+
 def _classify_chains(chains: np.ndarray, residue_names: np.ndarray) -> Dict[str, str]:
   chain_types: Dict[str, str] = {}
   uniq = np.unique(chains)
@@ -182,24 +252,24 @@ def calculate_ipSAE(
 ) -> Dict[str, Any]:
   """Compute ipSAE/ipTM and related interface scores for all chain pairs.
 
-  Uses a Neurosnap ``Protein`` to derive an ordered residue list (one
-  representative atom per residue) and evaluates multiple interface
+  Uses a Neurosnap ``Protein`` to derive an ordered analysis list and evaluates multiple interface
   confidence metrics between every ordered pair of chains:
   ipSAE (three d0 variants), inter-chain ipTM (d0chn), pDockQ, pDockQ2,
   and LIS. Symmetric summaries include both per-direction asymmetry and
   pairwise maxima **and** minima.
 
   Alignment contract:
-    The function derives the residue order from the structure (biopolymer
-    residues only) and expects ``plddt`` (N,) and ``pae_matrix`` (N, N)
-    to match that order exactly. If they originate from AlphaFold/Boltz,
-    map them to this residue list first.
+    The function first derives a residue-level order from structure
+    (standard amino acids / nucleotides only; one representative atom per
+    residue). If payload shapes do not match, it falls back to a
+    token-expanded order where non-standard residues contribute one site per
+    heavy atom. ``plddt`` (N,) and ``pae_matrix`` (N, N) must match whichever
+    order is selected.
 
   Args:
-    protein: Neurosnap ``Protein`` containing the structure. Only standard
-      amino acids and nucleotides with a valid representative atom are used.
-    plddt: Per-residue pLDDT aligned to the derived residue order (normalized to [0-100] NOT [0-1]).
-    pae_matrix: Residue–residue PAE (Å) aligned to the same order.
+    protein: Neurosnap ``Protein`` containing the structure.
+    plddt: Per-site pLDDT aligned to the selected analysis order (normalized to [0-100] NOT [0-1]).
+    pae_matrix: Site-site PAE (Å) aligned to the same order.
     model: Structure model ID to analyze. Defaults to the first model.
     pae_cutoff: PAE threshold (Å) for ipSAE and counting “valid” pairs.
     dist_cutoff: Distance cutoff (Å) for interface-restricted counts.
@@ -209,7 +279,9 @@ def calculate_ipSAE(
   Returns:
     A dictionary with the following top-level keys:
 
-    - **by_residue**: Per-direction arrays (length N) for each chain pair:
+    - **by_residue**: Per-direction arrays (length N) for each chain pair.
+      The key name is historical; entries are per analysis site and may include
+      atom-level sites for non-standard residues in token-expanded mode:
       - ``iptm_d0chn``: ipTM using d0 based on total residues in the pair.
       - ``ipsae_d0chn``: ipSAE with PAE cutoff, same d0 as above.
       - ``ipsae_d0dom``: ipSAE with PAE cutoff, d0 from count of residues
@@ -217,16 +289,16 @@ def calculate_ipSAE(
       - ``ipsae_d0res``: ipSAE with PAE cutoff, d0 per row from the number
         of valid partners in the other chain (residue-level).
       - ``n0res_byres`` / ``d0res_byres``: Companion per-row counts and d0.
-    - **asym**: Best single-residue values per direction (A→B, B→A) and
-      the residue identifier strings that achieve them:
+    - **asym**: Best single-site values per direction (A→B, B→A) and
+      the site identifier strings that achieve them:
       - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
       - ``*_res`` entries contain the winning residue labels.
     - **max**: Symmetric maxima for each metric across directions plus
-      the residue label responsible for the maximum:
+      the site label responsible for the maximum:
       - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
       - ``*_res`` contain the max-residue labels.
     - **min**: Symmetric minima for each metric across directions plus
-      the residue label responsible for the minimum:
+      the site label responsible for the minimum:
       - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
       - ``*_res`` contain the min-residue labels.
     - **counts**: Supporting counts and d0 companions:
@@ -238,20 +310,23 @@ def calculate_ipSAE(
       - ``pDockQ``, ``pDockQ2``, ``LIS``.
     - **params**: The parameters actually used (cutoffs, model).
     - **pml**: Optional PyMOL alias script string (if ``return_pml`` is True).
-    - **residue_order**: The derived residue metadata:
+    - **residue_order**: Metadata for the selected analysis order:
       - ``names`` (3-letter codes), ``chains`` (chain IDs), ``numbers`` (seq IDs).
 
   Raises:
-    ValueError: If the derived residue list is empty, or if ``plddt``/``pae_matrix``
-      shapes do not match the derived residue count/order.
+    ValueError: If no usable analysis sites are found, or if ``plddt``/``pae_matrix``
+      shapes do not match either the residue-level or token-expanded order.
 
   Notes:
-    - Representative atom per residue:
+    - Representative atom for standard residues:
       * Proteins: Cβ (GLY→Cα; fallback to Cα if Cβ missing).
       * Nucleic acids: prefer C3′/C3*, then C1′/C1*, then P.
-    - Non-standard residues encountered in the structure are removed from the
-      supplied pLDDT/PAE arrays automatically when present so the alignment
-      matches the retained biopolymer subset.
+    - Non-standard residues are handled in two modes:
+      * Residue-level mode (default): non-standard residues are removed from
+        pLDDT/PAE when payload length matches the raw polymer residue count.
+      * Token-expanded mode (auto fallback): if payload length instead matches
+        one representative site per standard residue plus all heavy atoms for
+        non-standard residues, those non-standard atoms are retained as sites.
     - Chain-type classification (protein vs nucleic acid) sets a minimum d0
       (2.0 for any pair containing NA; 1.0 otherwise) and influences d0
       via the standard length-based formula.
@@ -270,20 +345,35 @@ def calculate_ipSAE(
   keep_indices = np.asarray(keep_indices, dtype=int)
   N = len(chains)
 
-  # prune non-standard residues from AF payload if necessary
+  # Default: residue-level mode with optional pruning of non-standard residues.
   if plddt.shape[0] == total_polymer_residues:
     if pae_matrix.shape != (total_polymer_residues, total_polymer_residues):
-      raise ValueError(
-        f"pae_matrix shape {pae_matrix.shape} does not match expected ({total_polymer_residues},{total_polymer_residues})."
-      )
+      raise ValueError(f"pae_matrix shape {pae_matrix.shape} does not match expected ({total_polymer_residues},{total_polymer_residues}).")
     plddt = plddt.take(keep_indices, axis=0)
     pae_matrix = pae_matrix[np.ix_(keep_indices, keep_indices)]
 
-  # final shape checks post-filter
-  if plddt.shape != (N,):
-    raise ValueError(f"plddt shape {plddt.shape} does not match derived residue count {N}.")
-  if pae_matrix.shape != (N, N):
-    raise ValueError(f"pae_matrix shape {pae_matrix.shape} does not match ({N},{N}).")
+  # If residue-level alignment still does not fit, try token-expanded mode:
+  # standard residues as one site + all heavy atoms for non-standard residues.
+  if plddt.shape != (N,) or pae_matrix.shape != (N, N):
+    (
+      residue_names_token,
+      chains_token,
+      residue_nums_token,
+      coords_token,
+    ) = _protein_to_site_arrays_with_nonstandard_atoms(protein, model=model)
+    Nt = len(chains_token)
+    if plddt.shape == (Nt,) and pae_matrix.shape == (Nt, Nt):
+      residue_names = residue_names_token
+      chains = chains_token
+      residue_nums = residue_nums_token
+      coords_cb = coords_token
+      N = Nt
+    else:
+      raise ValueError(
+        f"Unable to align payload: plddt shape {plddt.shape}, pae_matrix shape {pae_matrix.shape}, "
+        f"residue-level expected ({len(keep_indices)}, {len(keep_indices)}), "
+        f"token-expanded expected ({Nt}, {Nt})."
+      )
 
   uniq_chains = np.unique(chains)
   chain_type = _classify_chains(chains, residue_names)

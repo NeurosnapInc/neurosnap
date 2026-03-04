@@ -276,3 +276,56 @@ def test_calculate_ipsae_prunes_nonstandard_residues():
 
   # by-residue arrays should match the filtered residue count
   assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (2,)
+
+
+def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
+  builder = StructureBuilder()
+  builder.init_structure("TOKEN_EXPANDED")
+  builder.init_model(0)
+
+  # Chain A: standard residue, then non-standard residue with 3 heavy atoms.
+  builder.init_chain("A")
+  builder.init_seg("    ")
+  builder.init_residue("ALA", " ", 1, " ")
+  builder.init_atom("CA", np.array([0.0, 0.0, 0.0]), 1.0, 80.0, " ", "CA", element="C")
+  builder.init_atom("CB", np.array([1.0, 0.0, 0.0]), 1.0, 80.0, " ", "CB", element="C")
+
+  builder.init_residue("MSE", " ", 2, " ")
+  builder.init_atom("N", np.array([2.0, 0.0, 0.0]), 1.0, 70.0, " ", "N", element="N")
+  builder.init_atom("CA", np.array([3.0, 0.0, 0.0]), 1.0, 60.0, " ", "CA", element="C")
+  builder.init_atom("SE", np.array([4.0, 0.0, 0.0]), 1.0, 50.0, " ", "SE", element="SE")
+
+  # Chain B: standard residue.
+  builder.init_chain("B")
+  builder.init_seg("    ")
+  builder.init_residue("ALA", " ", 1, " ")
+  builder.init_atom("CA", np.array([0.0, 5.0, 0.0]), 1.0, 90.0, " ", "CA", element="C")
+  builder.init_atom("CB", np.array([1.0, 5.0, 0.0]), 1.0, 90.0, " ", "CB", element="C")
+
+  structure = builder.get_structure()
+  handle = io.StringIO()
+  pdbio = PDBIO()
+  pdbio.set_structure(structure)
+  pdbio.save(handle)
+  handle.seek(0)
+  prot = Protein(handle, format="pdb")
+
+  # Token-expanded payload:
+  #   ALA(1) -> 1 representative token
+  #   MSE(2) -> 3 atom-level tokens
+  #   ALA(B1) -> 1 representative token
+  # total = 5
+  plddt = np.array([80.0, 70.0, 60.0, 50.0, 90.0], dtype=float)
+  pae = np.full((5, 5), 5.0, dtype=float)
+  np.fill_diagonal(pae, 0.0)
+
+  res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae, pae_cutoff=10.0)
+
+  names = res["residue_order"]["names"].tolist()
+  numbers = res["residue_order"]["numbers"].tolist()
+  chains = res["residue_order"]["chains"].tolist()
+
+  assert len(names) == 5
+  assert names.count("MSE") == 3
+  assert sum(1 for ch, n, nm in zip(chains, numbers, names) if ch == "A" and n == 2 and nm == "MSE") == 3
+  assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (5,)

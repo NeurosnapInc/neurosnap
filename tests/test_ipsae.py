@@ -329,3 +329,17 @@ def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
   assert names.count("MSE") == 3
   assert sum(1 for ch, n, nm in zip(chains, numbers, names) if ch == "A" and n == 2 and nm == "MSE") == 3
   assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (5,)
+
+
+def test_calculate_ipsae_min_metric_with_ptm_fixture():
+  prot = Protein(str(FILES / "dimer_ptm_protein_with_nanobody.cif"))
+  plddt, pae = _load_plddt_pae(FILES / "dimer_ptm_protein_with_nanobody.json")
+  res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae)
+
+  assert "min" in res
+  assert "ipsae_d0res" in res["min"]
+  min_ab = res["min"]["ipsae_d0res"]["A"]["B"]
+  min_ba = res["min"]["ipsae_d0res"]["B"]["A"]
+  assert np.isfinite(min_ab)
+  assert np.isfinite(min_ba)
+  assert min_ab == min_ba

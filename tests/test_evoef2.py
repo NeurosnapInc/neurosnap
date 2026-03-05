@@ -279,6 +279,13 @@ def test_rna_stability_smoke():
   assert np.isfinite(data["total"])
 
 
+def test_ptm_stability_smoke():
+  data = calculate_stability(str(FILES / "lrrk2_8fo2_with_ptm_truncated.cif"))
+  assert "total" in data
+  assert np.isfinite(data["total"])
+  assert data["total"] == pytest.approx(-5820.224155352682, abs=5.0)
+
+
 def _debug_evoef2_structure(
   structure,
   *,

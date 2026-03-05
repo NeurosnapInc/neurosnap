@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # changes for these values should be reflected in docs/source/conf.py as well
 name = "neurosnap"
-version = "2026.03.03"
+version = "2026.03.05"
 authors = [
   {name="Keaun Amani"},
 ]
@@ -59,6 +59,21 @@ kluster = [
 [project.urls]
 Homepage = "https://github.com/NeurosnapInc/neurosnap"
 Issues = "https://github.com/NeurosnapInc/neurosnap/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+neurosnap = [
+  "algos/evoef2_lib/*.prm",
+  "algos/evoef2_lib/*.inp",
+  "algos/evoef2_lib/*.rtf",
+  "algos/evoef2_lib/*.lib",
+  "algos/evoef2_lib/*.npz",
+]
 
 [tool.ruff]
 line-length = 150

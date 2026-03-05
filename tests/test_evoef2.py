@@ -235,7 +235,7 @@ def test_interface_and_binding_have_expected_keys():
 
 
 def test_ptm_binding_smoke():
-  cif_path = str(FILES / "dimer_ptm_protein_with_nanobody.cif")
+  cif_path = str(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
   interface = calculate_interface_energy(cif_path, split1=["A"], split2=["B"])
   binding = calculate_binding(cif_path, split1=["A"], split2=["B"])
   assert "total" in interface

@@ -332,8 +332,8 @@ def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
 
 
 def test_calculate_ipsae_min_metric_with_ptm_fixture():
-  prot = Protein(str(FILES / "dimer_ptm_protein_with_nanobody.cif"))
-  plddt, pae = _load_plddt_pae(FILES / "dimer_ptm_protein_with_nanobody.json")
+  prot = Protein(str(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif"))
+  plddt, pae = _load_plddt_pae(FILES / "chai1_dimer_ptm_protein_with_nanobody.json")
   res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae)
 
   assert "min" in res

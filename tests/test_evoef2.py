@@ -234,6 +234,19 @@ def test_interface_and_binding_have_expected_keys():
   assert np.isfinite(binding["dg_bind"]["total"])
 
 
+def test_ptm_binding_smoke():
+  cif_path = str(FILES / "dimer_ptm_protein_with_nanobody.cif")
+  interface = calculate_interface_energy(cif_path, split1=["A"], split2=["B"])
+  binding = calculate_binding(cif_path, split1=["A"], split2=["B"])
+  assert "total" in interface
+  assert "dg_bind" in binding
+  assert "stability_complex" in binding
+  assert "stability_split1" in binding
+  assert "stability_split2" in binding
+  assert np.isfinite(interface["total"])
+  assert np.isfinite(binding["dg_bind"]["total"])
+
+
 def test_dg_bind_matches_subtraction():
   pdb_path = str(FILES / "dimer_af2.pdb")
   binding = calculate_binding(pdb_path, split1=["A"], split2=["B"])

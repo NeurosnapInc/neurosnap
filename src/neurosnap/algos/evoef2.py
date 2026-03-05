@@ -2694,8 +2694,11 @@ def calculate_interface_energy(
 
   Args:
     structure: Protein object or PDB/mmCIF path.
-    split1: Chain IDs for group 1.
-    split2: Chain IDs for group 2.
+    split1: Chain IDs for group 1 as they appear in ``Protein(...).chains()``.
+      Pass a sequence of exact chain name strings, e.g. ``["A"]`` or ``["A", "C"]``.
+      Matching is case-sensitive and no whitespace is trimmed.
+    split2: Chain IDs for group 2 in the same format as ``split1``,
+      e.g. ``["B"]`` or ``["B", "D"]``.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
     weight_dict: Weights dictionary to use.
@@ -2739,8 +2742,11 @@ def calculate_binding(
 
   Args:
     structure: Protein object or PDB/mmCIF path.
-    split1: Chain IDs for group 1.
-    split2: Chain IDs for group 2.
+    split1: Chain IDs for group 1 as exact strings from ``Protein(...).chains()``.
+      Examples: ``["A"]`` for a monomer partner, ``["A", "C"]`` for a multi-chain partner.
+      IDs are matched exactly (case-sensitive, no normalization).
+    split2: Chain IDs for group 2 using the same format as ``split1``.
+      Example: ``["B"]``.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
     weight_dict: Weights dictionary to use.

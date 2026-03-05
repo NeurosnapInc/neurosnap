@@ -96,12 +96,18 @@ a powerful free/open alternative to PyRosetta-based setups.
 .. code-block:: python
 
    from neurosnap.algos.evoef2 import calculate_stability, calculate_binding
+   from neurosnap.protein import Protein
 
    stability = calculate_stability("complex.pdb")
+   # split1/split2 must be exact chain IDs from the structure (case-sensitive).
+   # You can inspect available IDs via:
+   chain_ids = Protein("complex.pdb").chains()
+   print("Available chains:", chain_ids)
+   # Example: partner 1 is chain A, partner 2 is chain B.
    binding = calculate_binding("complex.pdb", split1=["A"], split2=["B"])
 
    print("Stability total:", stability["total"])
-   print("Binding DG:", binding["DG_bind"])
+   print("Binding DG:", binding["dg_bind"]["total"])
 
 Next Steps
 ----------

@@ -70,11 +70,11 @@ class NeurosnapAPI:
       logger.error(msg)
       raise requests.HTTPError(msg)
 
-  def get_services(self, format_type: Optional[str] = None) -> List[Dict]:
+  def get_services(self, format: Optional[str] = None) -> List[Dict]:
     """Fetches and returns a list of available Neurosnap services. Optionally prints the services.
 
     Parameters:
-      format_type:
+      format:
         - "table": Prints services in a tabular format with key fields.
         - "json": Prints services as formatted JSON.
         - None (default): No printing.
@@ -98,18 +98,19 @@ class NeurosnapAPI:
       return {"Title": title, "Beta": service.get("beta"), "Link": link}
 
     formatted_services = [format_service(service) for service in services]
-    format_type = format_type.lower()
-    if format_type == "table":
-      print(tabulate(formatted_services, headers="keys"))
-    elif format_type == "json":
-      print(json.dumps(services, indent=2))
+    if isinstance(format, str):
+      format = format.lower()
+      if format == "table":
+        print(tabulate(formatted_services, headers="keys"))
+      elif format == "json":
+        print(json.dumps(services, indent=2))
     return services
 
-  def get_jobs(self, format_type: Optional[str] = None) -> List[Dict]:
+  def get_jobs(self, format: Optional[str] = None) -> List[Dict]:
     """Fetches and returns a list of submitted jobs. Optionally prints the jobs.
 
     Parameters:
-      format_type:
+      format:
         - "table": Prints jobs in tabular format.
         - "json": Prints jobs as formatted JSON.
         - None (default): No printing.
@@ -129,11 +130,12 @@ class NeurosnapAPI:
       if "Submitted" in job:
         timestamp = job["Submitted"] // 1000  # Convert milliseconds to seconds
         job["Submitted"] = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
-    format_type = format_type.lower()
-    if format_type == "table":
-      print(tabulate(jobs, headers="keys"))
-    elif format_type == "json":
-      print(json.dumps(jobs, indent=2))
+    if isinstance(format, str):
+      format = format.lower()
+      if format == "table":
+        print(tabulate(jobs, headers="keys"))
+      elif format == "json":
+        print(json.dumps(jobs, indent=2))
     return jobs
 
   def submit_job(self, service_name: str, fields: Union[MultipartEncoder, Dict[str, Any]], note: Optional[str] = None) -> str:

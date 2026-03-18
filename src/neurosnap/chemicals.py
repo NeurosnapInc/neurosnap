@@ -93,7 +93,7 @@ def validate_smiles(smiles: str) -> bool:
     return False
 
 
-def get_ccds(fpath: str = "~/.cache/ccd_codes.json") -> Set[str]:
+def get_ccds(fpath: str = "~/.cache/ccd_codes.json", overwrite: bool = False) -> Set[str]:
   """
   Retrieves a set of all CCD (Chemical Component Dictionary) codes from the PDB.
 
@@ -106,6 +106,8 @@ def get_ccds(fpath: str = "~/.cache/ccd_codes.json") -> Set[str]:
   Parameters:
       fpath: The path to store / cache all the stored ccd_codes as a JSON file.
               Default is "~/.cache/ccd_codes.json"
+      overwrite: If True will overwrite the existing file and perform a fresh download.
+              Default is False
 
   Returns:
       set: A set of all CCD codes (three-letter codes representing small molecules,
@@ -124,7 +126,7 @@ def get_ccds(fpath: str = "~/.cache/ccd_codes.json") -> Set[str]:
       - CCD data download: https://files.wwpdb.org/pub/pdb/data/monomers/components.cif
   """
   fpath = os.path.expanduser(fpath)
-  if os.path.exists(fpath):
+  if os.path.exists(fpath) and overwrite is False:
     logger.debug("Found CCD codes cached locally.")
     with open(fpath) as f:
       return set(json.load(f))

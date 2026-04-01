@@ -11,6 +11,7 @@ from .interactions import (
   find_hydrophobic_residues,
   find_salt_bridges,
 )
+from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3D
 from .selectors import select_residues
 from .structure import Atom, Chain, Residue, Structure, StructureEnsemble, StructureStack
 
@@ -38,6 +39,9 @@ __all__ = [
   "find_hydrophobic_residues",
   "calculate_hydrogen_bonds",
   "calculate_interface_hydrogen_bonding_residues",
+  "render_pseudo3D",
+  "render_structure_pseudo3D",
+  "animate_frames",
   "calculate_surface_area",
   "calculate_protein_volume",
   "remove_waters",

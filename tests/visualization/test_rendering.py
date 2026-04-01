@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image
 
-from neurosnap.rendering import animate_frames, render_pseudo3D, render_protein_pseudo3D
+from neurosnap.structure import animate_frames, render_pseudo3D, render_structure_pseudo3D
 from tests._structure_test_utils import parse_single_model
 
 
@@ -24,9 +24,9 @@ def test_render_pseudo3D_creates_image():
   assert np.linalg.norm(bbox_center - image_center) < min(arr.shape[:2]) * 0.2
 
 
-def test_render_protein_pseudo3D_with_radii(tmp_path):
+def test_render_structure_pseudo3D_with_radii(tmp_path):
   structure = parse_single_model("tests/files/1nkp_mycmax.pdb")
-  img = render_protein_pseudo3D(
+  img = render_structure_pseudo3D(
     structure,
     style="plddt",  # uses bfactor bins internally
     use_radii=True,
@@ -40,9 +40,9 @@ def test_render_protein_pseudo3D_with_radii(tmp_path):
   assert out.exists() and out.stat().st_size > 0
 
 
-def test_render_protein_pseudo3D_covid_trimer(tmp_path):
+def test_render_structure_pseudo3D_covid_trimer(tmp_path):
   structure = parse_single_model("tests/files/covid_trimer.pdb")
-  img = render_protein_pseudo3D(
+  img = render_structure_pseudo3D(
     structure,
     image_size=(320, 240),
     upsample=1,

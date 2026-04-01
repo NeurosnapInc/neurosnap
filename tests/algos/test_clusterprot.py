@@ -155,13 +155,13 @@ def test_animate_results_monkeypatched(tmp_path, proteins_from_paths, has_umap, 
   # Patch rendering + animation to avoid heavy work
   import neurosnap.algos.clusterprot as cpmod
 
-  def fake_render_protein_pseudo3D(structure, **kwargs):
+  def fake_render_structure_pseudo3D(structure, **kwargs):
     return np.zeros((4, 4, 3), dtype=np.uint8)
 
   def fake_animate_frames(frames, output_fpath, **kwargs):
     Path(output_fpath).write_bytes(b"GIF89a")  # minimal marker so file exists
 
-  monkeypatch.setattr(cpmod, "render_protein_pseudo3D", fake_render_protein_pseudo3D)
+  monkeypatch.setattr(cpmod, "render_structure_pseudo3D", fake_render_structure_pseudo3D)
   monkeypatch.setattr(cpmod, "animate_frames", fake_animate_frames)
 
   out = tmp_path / "cluster_prot.gif"

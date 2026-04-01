@@ -11,8 +11,7 @@ from tqdm import tqdm
 
 from neurosnap.io.pdb import parse_pdb
 from neurosnap.log import logger
-from neurosnap.rendering import animate_frames, render_protein_pseudo3D
-from neurosnap.structure import Structure, StructureEnsemble, StructureStack, align, calculate_distance_matrix
+from neurosnap.structure import Structure, StructureEnsemble, StructureStack, align, animate_frames, calculate_distance_matrix, render_structure_pseudo3D
 
 try:
   from sklearn.cluster import DBSCAN
@@ -163,7 +162,7 @@ def animate_results(cp_results: Dict, animation_fpath: str = "cluster_prot.gif")
   subtitles = []
   total = len(order)
   for i, idx in enumerate(tqdm(order, desc="Rendering frames", unit="frame"), start=1):
-    frames.append(render_protein_pseudo3D(structures[idx], model=model_id, image_size=(800, 580)))
+    frames.append(render_structure_pseudo3D(structures[idx], model=model_id, image_size=(800, 580)))
     subtitles.append(f"{titles[idx]} ({i}/{total})")
   animate_frames(frames, animation_fpath, title="ClusterProt Animation", subtitles=subtitles, interval=150, repeat=True)
 

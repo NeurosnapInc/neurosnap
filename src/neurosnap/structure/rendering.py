@@ -16,7 +16,8 @@ from tqdm import tqdm
 
 from neurosnap.constants import VDW_RADII_BONDI
 from neurosnap.log import logger
-from neurosnap.structure._common import resolve_model
+
+from ._common import resolve_model
 
 
 def render_pseudo3D(

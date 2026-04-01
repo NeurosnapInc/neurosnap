@@ -12,6 +12,12 @@ StructureLike = Union[Structure, StructureEnsemble, StructureStack]
 PolymerType = Literal["protein", "dna", "rna"]
 ResidueKey = Tuple[str, int, str, str, bool]
 
+# Backbone extraction needs a deterministic atom order so RMSD/alignment
+# calculations do not depend on the atom order used in the parsed file.
+_PROTEIN_BACKBONE_ATOMS = ("N", "CA", "C")
+_DNA_BACKBONE_ATOMS = ("P", "O1P", "O2P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4'", "C1'", "C2'", "C3'", "O3'")
+_RNA_BACKBONE_ATOMS = ("P", "O1P", "O2P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4'", "C1'", "C2'", "O2'", "C3'", "O3'")
+
 
 def available_model_ids(structure: StructureLike) -> List[int]:
   """Return the model identifiers present in a structure-like object."""
@@ -130,15 +136,17 @@ def classify_polymer_residue(residue: Residue) -> Optional[PolymerType]:
   return None
 
 
-def backbone_atom_names(residue: Residue) -> Optional[set[str]]:
-  """Return the backbone atom names to consider for an alignable residue."""
+def backbone_atom_order(residue: Residue, include_nucleotides: bool = True) -> Optional[Tuple[str, ...]]:
+  """Return backbone atom names in deterministic per-residue order."""
   polymer_type = classify_polymer_residue(residue)
   if polymer_type == "protein":
-    return {"N", "CA", "C"}
+    return _PROTEIN_BACKBONE_ATOMS
+  if not include_nucleotides:
+    return None
   if polymer_type == "dna":
-    return {atom_name.upper() for atom_name in BACKBONE_ATOMS_DNA}
+    return _DNA_BACKBONE_ATOMS
   if polymer_type == "rna":
-    return {atom_name.upper() for atom_name in BACKBONE_ATOMS_RNA}
+    return _RNA_BACKBONE_ATOMS
   return None
 
 

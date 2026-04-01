@@ -1,6 +1,6 @@
 """Public structure package exports."""
 
-from .analysis import calculate_protein_volume, calculate_surface_area, ca_distance_matrix, calculate_distance_matrix, extract_non_biopolymers
+from .analysis import calculate_protein_volume, calculate_surface_area, ca_distance_matrix, calculate_distance_matrix, extract_non_biopolymers, get_backbone
 from .compare import align, calculate_rmsd
 from .filters import remove_non_biopolymers, remove_nucleotides, remove_waters
 from .interface import calculate_bsa, find_contacts, find_interface_contacts, find_interface_residues, find_non_interface_hydrophobic_patches
@@ -24,6 +24,7 @@ __all__ = [
   "select_residues",
   "align",
   "calculate_rmsd",
+  "get_backbone",
   "calculate_distance_matrix",
   "ca_distance_matrix",
   "extract_non_biopolymers",

@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 from math import pi
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 import numpy as np
 from rdkit import Chem
@@ -12,8 +12,55 @@ from rdkit import Chem
 from neurosnap.constants import AA_RECORDS, STANDARD_NUCLEOTIDES, VDW_RADII_BONDI
 from neurosnap.log import logger
 
-from ._common import classify_polymer_residue, coord_matrix, filter_structure_atoms, residue_key, resolve_model
+from ._common import backbone_atom_order, classify_polymer_residue, coord_matrix, filter_structure_atoms, residue_key, resolve_model
 from .structure import Structure
+
+
+def get_backbone(
+  structure,
+  chains: Optional[Sequence[str]] = None,
+  model: Optional[int] = None,
+  *,
+  include_nucleotides: bool = True,
+) -> np.ndarray:
+  """Extract ordered backbone coordinates from a selected model.
+
+  Protein residues contribute ``N``, ``CA``, and ``C`` atoms. When
+  ``include_nucleotides`` is enabled, DNA and RNA residues contribute their
+  sugar-phosphate backbone atoms in a deterministic order. Non-polymers are
+  ignored.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chains: Optional chain IDs to include. If ``None``, all chains are used.
+    model: Optional model ID when selecting from an ensemble or stack.
+    include_nucleotides: If ``True``, include DNA and RNA backbone atoms in
+      addition to protein backbone atoms.
+
+  Returns:
+    A NumPy array of backbone coordinates with shape ``(n_atoms, 3)``.
+  """
+  structure_model = resolve_model(structure, model=model)
+  selected_chain_ids = None if chains is None else {str(chain_id) for chain_id in chains}
+  backbone_coords = []
+
+  for chain_view in structure_model.chains():
+    if selected_chain_ids is not None and chain_view.chain_id not in selected_chain_ids:
+      continue
+    for residue in chain_view.residues():
+      atom_order = backbone_atom_order(residue, include_nucleotides=include_nucleotides)
+      if not atom_order:
+        continue
+
+      residue_atoms = {atom.atom_name.strip().upper(): atom.coord for atom in residue.atoms()}
+      for atom_name in atom_order:
+        if atom_name in residue_atoms:
+          backbone_coords.append(residue_atoms[atom_name])
+
+  if not backbone_coords:
+    return np.zeros((0, 3), dtype=np.float32)
+  return np.asarray(backbone_coords, dtype=np.float32)
 
 
 def calculate_distance_matrix(structure, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:

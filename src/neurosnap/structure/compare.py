@@ -1,10 +1,11 @@
 """Pairwise comparison and alignment functions for Neurosnap structures."""
 
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, Optional, Sequence, Tuple
 
 import numpy as np
 
-from ._common import available_chain_ids, backbone_atom_names, coord_matrix, resolve_model, resolve_model_id, set_model_coordinates
+from ._common import available_chain_ids, backbone_atom_order, coord_matrix, resolve_model, resolve_model_id, set_model_coordinates
+from .analysis import get_backbone
 
 
 def align(
@@ -91,10 +92,8 @@ def calculate_rmsd(
   if align_structures:
     align(reference, mobile, chains1=chains1, chains2=chains2, model1=model1, model2=model2)
 
-  reference_model = resolve_model(reference, model=model1)
-  mobile_model = resolve_model(mobile, model=model2)
-  reference_coords = _ordered_backbone_coords(reference_model, chains=chains1)
-  mobile_coords = _ordered_backbone_coords(mobile_model, chains=chains2)
+  reference_coords = get_backbone(reference, chains=chains1, model=model1, include_nucleotides=True)
+  mobile_coords = get_backbone(mobile, chains=chains2, model=model2, include_nucleotides=True)
   if reference_coords.shape != mobile_coords.shape:
     raise ValueError("Structures must have the same number of backbone atoms for RMSD calculation.")
   if reference_coords.size == 0:
@@ -113,35 +112,15 @@ def _backbone_atom_map(structure_model, chain_specs: Iterable[Tuple[object, str]
     if chain is None:
       continue
     for residue in chain.residues():
-      allowed_backbone_atoms = backbone_atom_names(residue)
-      if not allowed_backbone_atoms:
-        continue
-      residue_key = (map_key, residue.res_id, residue.ins_code)
-      for atom in residue.atoms():
-        atom_name = atom.atom_name.strip().upper()
-        if atom_name in allowed_backbone_atoms:
-          atom_map[(residue_key[0], residue_key[1], residue_key[2], atom_name)] = atom.coord
-  return atom_map
-
-
-def _ordered_backbone_coords(structure_model, chains: Optional[Sequence[str]] = None) -> np.ndarray:
-  """Return ordered backbone coordinates from selected chains."""
-  selected_chain_ids = None if chains is None else set(chains)
-  coords: List[np.ndarray] = []
-  for chain in structure_model.chains():
-    if selected_chain_ids is not None and chain.chain_id not in selected_chain_ids:
-      continue
-    for residue in chain.residues():
-      allowed_backbone_atoms = backbone_atom_names(residue)
-      if not allowed_backbone_atoms:
+      atom_order = backbone_atom_order(residue, include_nucleotides=True)
+      if not atom_order:
         continue
       residue_atoms = {atom.atom_name.strip().upper(): atom.coord for atom in residue.atoms()}
-      for atom_name in sorted(allowed_backbone_atoms):
+      residue_key = (map_key, residue.res_id, residue.ins_code)
+      for atom_name in atom_order:
         if atom_name in residue_atoms:
-          coords.append(residue_atoms[atom_name])
-  if not coords:
-    return np.zeros((0, 3), dtype=np.float32)
-  return np.asarray(coords, dtype=np.float32)
+          atom_map[(residue_key[0], residue_key[1], residue_key[2], atom_name)] = residue_atoms[atom_name]
+  return atom_map
 
 
 def _kabsch_transform(reference_coords: np.ndarray, mobile_coords: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

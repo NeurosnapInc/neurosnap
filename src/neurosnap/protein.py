@@ -199,9 +199,9 @@ class Protein:
           model2 = m2.id
           break
 
-    assert model1 is not None, (
-      "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
-    )
+    assert (
+      model1 is not None
+    ), "Could not find any matching matching models to calculate RMSD for. Please ensure at least two models with matching backbone shapes are provided."
     return self.calculate_rmsd(other_protein, model1=model1, model2=model2)
 
   def models(self) -> List[int]:
@@ -262,7 +262,7 @@ class Protein:
                 try:
                   getAA(res.resname, non_standard="allow")
                   res_type = "AMINO_ACID"
-                except:
+                except:  # noqa: E722
                   pass
             df["model"].append(model.id)
             df["chain"].append(chain.id)
@@ -299,7 +299,7 @@ class Protein:
       resn = res.get_resname()
       try:
         seq += getAA(resn).code
-      except:
+      except:  # noqa: E722
         pass
 
     return seq
@@ -938,9 +938,9 @@ class Protein:
     # when both chain lists are provided, interpret them as explicit chain mappings
     chain_mapping_mode = chains1_provided and chains2_provided
     if chain_mapping_mode:
-      assert len(chains1) == len(chains2), (
-        "When chains1 and chains2 are both provided, they must contain the same number of chains for pairwise mapping."
-      )
+      assert len(chains1) == len(
+        chains2
+      ), "When chains1 and chains2 are both provided, they must contain the same number of chains for pairwise mapping."
 
     # Use the Superimposer to align the structures
     def _allowed_backbone_atoms(residue) -> Optional[Set[str]]:

@@ -2,21 +2,17 @@
 
 import time
 import xml.etree.ElementTree as ET
-from typing import Optional, Union
+from typing import Optional
 
 import pandas as pd
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 from neurosnap.api import USER_AGENT
-from neurosnap.structure._common import resolve_model
-from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
-
-StructureLike = Union[Structure, StructureEnsemble, StructureStack]
 
 
 def run_blast(
-  sequence: Union[str, StructureLike],
+  sequence: str,
   email: str,
   matrix: str = "BLOSUM62",
   alignments: int = 250,
@@ -29,11 +25,10 @@ def run_blast(
   output_path: Optional[str] = None,
   return_df: bool = True,
 ) -> Optional[pd.DataFrame]:
-  """Submit a BLASTP job to the EBI service and optionally return hits as a dataframe.
+  """Submit a BLASTP job to the EBI service and optionally return hits as a dataframe."""
+  if not isinstance(sequence, str):
+    raise TypeError(f"run_blast() expects an amino acid sequence string, found {type(sequence).__name__}.")
 
-  When a structure container is provided, the sequence is derived from the
-  first model and requires that model to contain exactly one chain.
-  """
   valid_databases = [
     "uniprotkb_refprotswissprot",
     "uniprotkb_pdb",
@@ -66,17 +61,6 @@ def run_blast(
   valid_output_formats = ["xml", "fasta", None]
   if output_format not in valid_output_formats:
     raise ValueError(f"Output format must be one of the following {valid_output_formats}")
-
-  if isinstance(sequence, (Structure, StructureEnsemble, StructureStack)):
-    structure_model = resolve_model(sequence)
-    chains = structure_model.chains()
-    if len(chains) > 1:
-      raise AssertionError("The structure has multiple chains. Extract a single chain sequence before calling run_blast().")
-    if not chains:
-      raise ValueError("The structure does not contain any chains.")
-    sequence = chains[0].sequence(polymer_type="protein")
-    if not sequence:
-      raise ValueError("Could not derive a protein sequence from the provided structure.")
 
   url = "https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/run"
   multipart_data = MultipartEncoder(

@@ -117,6 +117,7 @@ def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool =
     new_seq += x
   return new_seq
 
+
 def molecular_weight(sequence: str, aa_mws: Dict[str, float] = AA_MASS_PROTEIN_AVG) -> float:
   """
   Calculate the molecular weight of a protein or peptide sequence.
@@ -246,8 +247,8 @@ def net_charge(sequence: str, pH: float, pKa: Dict[str, float] = DEFAULT_PKA) ->
     + counts.get("Y", 0) * _fraction_deprotonated_acidic(pH, pKa["Y"])
     + counts.get("U", 0) * _fraction_deprotonated_acidic(pH, pKa["U"])  # optional
   )
-
   return (nterm + pos) - (cterm + neg)
+
 
 def isoelectric_point(
   sequence: str, pKa: Dict[str, float] = DEFAULT_PKA, *, pH_low: float = 0.0, pH_high: float = 14.0, tol: float = 1e-4, max_iter: int = 100
@@ -337,4 +338,3 @@ def isoelectric_point(
 
   # Fallback if not converged within max_iter
   return (lo + hi) / 2.0
-

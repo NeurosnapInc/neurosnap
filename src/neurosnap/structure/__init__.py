@@ -3,7 +3,7 @@
 from .analysis import ca_distance_matrix, calculate_distance_matrix
 from .compare import align, calculate_rmsd
 from .filters import remove_non_biopolymers, remove_nucleotides, remove_waters
-from .interface import find_interface_contacts, find_interface_residues, find_non_interface_hydrophobic_patches
+from .interface import calculate_bsa, find_contacts, find_interface_contacts, find_interface_residues, find_non_interface_hydrophobic_patches
 from .interactions import (
   calculate_hydrogen_bonds,
   calculate_interface_hydrogen_bonding_residues,
@@ -30,6 +30,8 @@ __all__ = [
   "find_interface_contacts",
   "find_interface_residues",
   "find_non_interface_hydrophobic_patches",
+  "find_contacts",
+  "calculate_bsa",
   "find_disulfide_bonds",
   "find_salt_bridges",
   "find_hydrophobic_residues",

@@ -2,20 +2,21 @@
 
 import time
 import xml.etree.ElementTree as ET
-from typing import Optional, TYPE_CHECKING, Union
+from typing import Optional, Union
 
 import pandas as pd
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 from neurosnap.api import USER_AGENT
+from neurosnap.structure._common import resolve_model
+from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
 
-if TYPE_CHECKING:
-  from neurosnap.protein import Protein
+StructureLike = Union[Structure, StructureEnsemble, StructureStack]
 
 
 def run_blast(
-  sequence: Union[str, "Protein"],
+  sequence: Union[str, StructureLike],
   email: str,
   matrix: str = "BLOSUM62",
   alignments: int = 250,
@@ -28,7 +29,11 @@ def run_blast(
   output_path: Optional[str] = None,
   return_df: bool = True,
 ) -> Optional[pd.DataFrame]:
-  """Submit a BLASTP job to the EBI service and optionally return hits as a dataframe."""
+  """Submit a BLASTP job to the EBI service and optionally return hits as a dataframe.
+
+  When a structure container is provided, the sequence is derived from the
+  first model and requires that model to contain exactly one chain.
+  """
   valid_databases = [
     "uniprotkb_refprotswissprot",
     "uniprotkb_pdb",
@@ -62,11 +67,16 @@ def run_blast(
   if output_format not in valid_output_formats:
     raise ValueError(f"Output format must be one of the following {valid_output_formats}")
 
-  if _is_protein_instance(sequence):
-    if len(sequence.chains()) > 1:
-      raise AssertionError("The protein has multiple chains. Use '.get_aas(chain)' to obtain the sequence for a specific chain.")
-    chain_id = sequence.chains()[0]
-    sequence = sequence.get_aas(chain_id)
+  if isinstance(sequence, (Structure, StructureEnsemble, StructureStack)):
+    structure_model = resolve_model(sequence)
+    chains = structure_model.chains()
+    if len(chains) > 1:
+      raise AssertionError("The structure has multiple chains. Extract a single chain sequence before calling run_blast().")
+    if not chains:
+      raise ValueError("The structure does not contain any chains.")
+    sequence = chains[0].sequence(polymer_type="protein")
+    if not sequence:
+      raise ValueError("Could not derive a protein sequence from the provided structure.")
 
   url = "https://www.ebi.ac.uk/Tools/services/rest/ncbiblast/run"
   multipart_data = MultipartEncoder(
@@ -191,12 +201,3 @@ def _parse_xml_to_fasta_and_dataframe(
   if return_df:
     return pd.DataFrame(hits)
   return None
-
-
-def _is_protein_instance(value) -> bool:
-  """Return ``True`` when a value is a Neurosnap Protein instance."""
-  try:
-    from neurosnap.protein import Protein
-  except ImportError:
-    return False
-  return isinstance(value, Protein)

@@ -11,7 +11,7 @@ def select_residues(structure, selectors: str, invert: bool = False, model: Opti
 
   Supported selector forms include:
     - ``"A"`` for an entire chain
-    - ``"A10"`` or ``"A10-20"`` for legacy single-character chain IDs
+    - ``"A10"`` or ``"A10-20"`` for compact single-character chain selectors
     - ``"AB:10"`` or ``"AB:10-20"`` for multi-character chain IDs
 
   Parameters:

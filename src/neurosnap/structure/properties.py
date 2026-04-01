@@ -1,13 +1,13 @@
 """Physical property calculations for Neurosnap structures."""
 
 from math import pi
-from typing import Optional
+from typing import Dict, Optional
 
 import numpy as np
 
 from neurosnap.constants import VDW_RADII_BONDI
 
-from ._common import classify_polymer_residue, coord_matrix, resolve_model
+from ._common import classify_polymer_residue, coord_matrix, residue_key, resolve_model
 
 
 def calculate_surface_area(
@@ -20,7 +20,7 @@ def calculate_surface_area(
   """Estimate solvent-accessible surface area using a simple Shrake-Rupley approximation.
 
   The returned total SASA is the same regardless of ``level``; the parameter is
-  kept for compatibility with the older Protein API.
+  kept for compatibility with the public surface-area API.
   """
   if level not in {"A", "R", "C", "M", "S"}:
     raise ValueError('level must be one of "A", "R", "C", "M", or "S".')
@@ -61,9 +61,7 @@ def _atom_surface_areas(structure_model, probe_radius: float = 1.4, n_sphere_poi
   atom_areas = np.zeros(atom_count, dtype=np.float32)
 
   for atom_index in range(atom_count):
-    candidate_neighbors = np.where(
-      (np.arange(atom_count) != atom_index) & (center_distances[atom_index] < (radii[atom_index] + radii + 1e-6))
-    )[0]
+    candidate_neighbors = np.where((np.arange(atom_count) != atom_index) & (center_distances[atom_index] < (radii[atom_index] + radii + 1e-6)))[0]
     if len(candidate_neighbors) == 0:
       atom_areas[atom_index] = 4.0 * pi * (radii[atom_index] ** 2)
       continue

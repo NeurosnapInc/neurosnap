@@ -1,14 +1,79 @@
 """Chain-interface analysis helpers for Neurosnap structures."""
 
+import copy
 from typing import Iterable, List, Optional, Set, Tuple
 
 import numpy as np
 
 from neurosnap.constants import HYDROPHOBIC_RESIDUES
 
-from ._common import available_chain_ids, resolve_model, residue_key
-from .properties import _residue_surface_area_map
-from .structure import Atom, Residue
+from ._common import StructureLike, available_chain_ids, filter_structure_atoms, residue_key, resolve_model
+from .properties import _residue_surface_area_map, calculate_surface_area
+from .structure import Atom, Residue, Structure
+
+
+def find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float = 4.5) -> List[Tuple[Atom, Atom]]:
+  """Identify atom-atom contacts between two atom sets using a distance cutoff.
+
+  Parameters:
+    atoms1: First set of atoms.
+    atoms2: Second set of atoms.
+    cutoff: Distance cutoff in Å.
+
+  Returns:
+    List of ``(atom1, atom2)`` pairs within the cutoff distance.
+  """
+  if not atoms1 or not atoms2:
+    return []
+
+  coords2 = np.asarray([np.asarray(atom.coord, dtype=np.float32) for atom in atoms2], dtype=np.float32)
+  contacts = []
+  for atom1 in atoms1:
+    distances = np.linalg.norm(coords2 - np.asarray(atom1.coord, dtype=np.float32), axis=1)
+    for atom2_index in np.where(distances <= cutoff)[0]:
+      contacts.append((atom1, atoms2[atom2_index]))
+  return contacts
+
+
+def calculate_bsa(
+  structure: StructureLike,
+  chain_group_1: List[str],
+  chain_group_2: List[str],
+  *,
+  model: Optional[int] = None,
+  level: str = "R",
+) -> float:
+  """Calculate buried surface area between two chain groups.
+
+  The buried surface area (BSA) is computed as:
+    ``(SASA(group 1) + SASA(group 2)) - SASA(complex)``
+
+  Parameters:
+    structure: Input complex as a Neurosnap structure container.
+    chain_group_1: Chain IDs for the first group.
+    chain_group_2: Chain IDs for the second group.
+    model: Optional model ID when selecting from an ensemble or stack.
+    level: Surface-area aggregation level forwarded to
+      :func:`calculate_surface_area`.
+
+  Returns:
+    Buried surface area in Å².
+  """
+  structure_model = resolve_model(structure, model=model)
+  all_chains = {chain.chain_id for chain in structure_model.chains()}
+  if not chain_group_1 or not chain_group_2:
+    raise ValueError("Chain groups cannot be empty.")
+  if not set(chain_group_1).isdisjoint(chain_group_2):
+    raise ValueError("Chain groups must not overlap.")
+  if set(chain_group_1).union(set(chain_group_2)) != all_chains:
+    raise ValueError("Chain groups must cover all chains.")
+
+  sasa_complex = calculate_surface_area(structure_model, level=level)
+  group1_structure = _substructure_by_chains(structure_model, keep_chains=set(chain_group_1))
+  group2_structure = _substructure_by_chains(structure_model, keep_chains=set(chain_group_2))
+  sasa_group1 = calculate_surface_area(group1_structure, level=level)
+  sasa_group2 = calculate_surface_area(group2_structure, level=level)
+  return float((sasa_group1 + sasa_group2) - sasa_complex)
 
 
 def find_interface_contacts(
@@ -27,7 +92,7 @@ def find_interface_contacts(
   chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
   atoms1 = [atom for residue in chain_lookup[chain1].residues() for atom in residue.atoms() if hydrogens or atom.element != "H"]
   atoms2 = [atom for residue in chain_lookup[chain2].residues() for atom in residue.atoms() if hydrogens or atom.element != "H"]
-  return _find_contacts(atoms1, atoms2, cutoff=cutoff)
+  return find_contacts(atoms1, atoms2, cutoff=cutoff)
 
 
 def find_interface_residues(
@@ -168,20 +233,6 @@ def _validate_chain_pair(structure_model, chain1: str, chain2: str):
     raise ValueError(f"Chain {chain2} was not found.")
 
 
-def _find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float) -> List[Tuple[Atom, Atom]]:
-  """Return atom pairs within a cutoff distance."""
-  if not atoms1 or not atoms2:
-    return []
-
-  coords2 = np.asarray([atom.coord for atom in atoms2], dtype=np.float32)
-  contacts = []
-  for atom1 in atoms1:
-    distances = np.linalg.norm(coords2 - atom1.coord, axis=1)
-    for atom2_index in np.where(distances <= cutoff)[0]:
-      contacts.append((atom1, atoms2[atom2_index]))
-  return contacts
-
-
 def _residue_lookup(chain) -> dict[tuple[str, int, str], Residue]:
   """Return residue lookup for a chain keyed by chain ID, residue ID, and insertion code."""
   return {(residue.chain_id, residue.res_id, residue.ins_code): residue for residue in chain.residues()}
@@ -194,3 +245,24 @@ def _atom_by_name(residue: Residue, atom_name: str) -> Optional[Atom]:
     if atom.atom_name.strip().upper() == atom_name:
       return atom
   return None
+
+
+def _substructure_by_chains(structure_model: Structure, keep_chains: Set[str]) -> Structure:
+  """Return a copied structure containing only the requested chains."""
+  copied_structure = _copy_structure(structure_model)
+  keep_mask = np.isin(copied_structure.atom_annotations["chain_id"], list(keep_chains))
+  filter_structure_atoms(copied_structure, keep_mask)
+  return copied_structure
+
+
+def _copy_structure(structure_model: Structure) -> Structure:
+  """Return a deep copied Structure instance."""
+  copied_structure = Structure(remove_annotations=False)
+  copied_structure._dtype_atoms = structure_model._dtype_atoms
+  copied_structure._dtype_atom_annotations = structure_model._dtype_atom_annotations
+  copied_structure._dtype_bond = structure_model._dtype_bond
+  copied_structure.atoms = structure_model.atoms.copy()
+  copied_structure.atom_annotations = structure_model.atom_annotations.copy()
+  copied_structure.bonds = structure_model.bonds.copy()
+  copied_structure.metadata = copy.deepcopy(structure_model.metadata)
+  return copied_structure

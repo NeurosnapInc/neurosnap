@@ -2,19 +2,22 @@
 
 import json
 import os
+import pathlib
 import tempfile
 import time
-from typing import List, Optional, TYPE_CHECKING, Union
+from typing import List, Optional, Union
 
 import pandas as pd
 import requests
 
-if TYPE_CHECKING:
-  from neurosnap.protein import Protein
+from neurosnap.io.pdb import save_pdb
+from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
+
+StructureLike = Union[Structure, StructureEnsemble, StructureStack]
 
 
 def foldseek_search(
-  protein: Union["Protein", str],
+  structure: Union[StructureLike, str, pathlib.Path],
   mode: str = "3diaa",
   databases: Optional[List[str]] = None,
   max_retries: int = 10,
@@ -24,7 +27,7 @@ def foldseek_search(
   """Perform a protein structure search using the Foldseek API.
 
   Parameters:
-      protein: Either a :class:`Protein` object or a path to a PDB file.
+      structure: A Neurosnap structure container or a path to a PDB file.
       mode: Search mode. Must be one of ``"3diaa"`` or ``"tm-align"``.
       databases: Databases to search. Defaults to Foldseek's common public
           structure databases.
@@ -46,13 +49,13 @@ def foldseek_search(
     databases = ["afdb50", "afdb-swissprot", "afdb-proteome", "bfmd", "cath50", "mgnify_esm30", "pdb100", "gmgcl_id", "bfvd"]
 
   created_temp_file = False
-  if _is_protein_instance(protein):
+  if isinstance(structure, (Structure, StructureEnsemble, StructureStack)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb") as temp_file:
-      protein.save(temp_file.name)
+      save_pdb(structure, temp_file.name)
       file_path = temp_file.name
       created_temp_file = True
   else:
-    file_path = protein
+    file_path = str(structure)
 
   data = {"mode": mode, "database[]": databases}
   try:
@@ -130,12 +133,3 @@ def foldseek_search(
     return pd.DataFrame(rows)
 
   raise ValueError("Invalid output_format. Choose 'json' or 'dataframe'.")
-
-
-def _is_protein_instance(value) -> bool:
-  """Return ``True`` when a value is a Neurosnap Protein instance."""
-  try:
-    from neurosnap.protein import Protein
-  except ImportError:
-    return False
-  return isinstance(value, Protein)

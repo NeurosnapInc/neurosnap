@@ -6,7 +6,7 @@ import pytest
 from neurosnap.io.pdb import save_pdb
 from neurosnap.structure import extract_non_biopolymers
 
-from ._structure_test_utils import PDB_NO_H, make_structure, parse_single_model
+from tests._structure_test_utils import PDB_NO_H, make_structure, parse_single_model
 
 
 def test_save_and_reload_pdb(tmp_path):

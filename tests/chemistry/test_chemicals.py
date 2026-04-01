@@ -15,10 +15,10 @@ from neurosnap.chemicals import (
   smiles_to_sdf,
   validate_smiles,
 )
-from neurosnap.protein import Protein
+from tests._structure_test_utils import parse_single_model
 
-HERE = Path(__file__).resolve().parent
-FILES = HERE / "files"
+TESTS_DIR = Path(__file__).resolve().parents[1]
+FILES = TESTS_DIR / "files"
 
 
 # -----------------------------
@@ -195,8 +195,7 @@ def test_move_ligand_to_center_aligns_centers(tmp_path: Path):
   assert Path(res_path).exists()
 
   # compute centers to verify alignment
-  # receptor center via Protein helper
-  r_center = Protein(str(receptor)).calculate_center_of_mass()
+  r_center = parse_single_model(receptor).calculate_center_of_mass()
 
   # ligand new center via RDKit
   suppl = Chem.SDMolSupplier(str(out), removeHs=False)

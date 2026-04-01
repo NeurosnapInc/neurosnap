@@ -6,10 +6,11 @@ import numpy as np
 import pytest
 
 from neurosnap.algos.clusterprot import ClusterProt, animate_results, create_figure_plotly
-from neurosnap.protein import Protein
+from neurosnap.io.pdb import parse_pdb
+from neurosnap.structure import StructureEnsemble
 
-HERE = Path(__file__).resolve().parent
-CLUSTER_DIR = HERE / "files" / "proteins_clustering"
+TESTS_DIR = Path(__file__).resolve().parents[1]
+CLUSTER_DIR = TESTS_DIR / "files" / "proteins_clustering"
 
 
 # -----------------------
@@ -58,8 +59,8 @@ def proteins_from_paths(cluster_files):
 
 
 @pytest.fixture
-def protein_objects(cluster_files):
-  return [Protein(str(p)) for p in cluster_files]
+def structure_objects(cluster_files):
+  return [parse_pdb(str(p), return_type="ensemble") for p in cluster_files]
 
 
 # -----------------------
@@ -75,7 +76,7 @@ def test_clusterprot_with_paths_umap_1d(has_umap, has_sklearn, proteins_from_pat
 
   res = ClusterProt(
     proteins=proteins_from_paths,  # file paths
-    model=0,
+    model=1,
     chain=None,
     umap_n_neighbors=0,  # auto
     proj_1d_algo="umap",  # 1D: UMAP
@@ -85,11 +86,11 @@ def test_clusterprot_with_paths_umap_1d(has_umap, has_sklearn, proteins_from_pat
   )
   n = len(proteins_from_paths)
   # keys present
-  for k in ["proteins", "projection_1d", "projection_2d", "cluster_labels"]:
+  for k in ["structures", "titles", "projection_1d", "projection_2d", "cluster_labels", "model_id"]:
     assert k in res
   # types & lengths
-  assert len(res["proteins"]) == n
-  assert all(isinstance(p, Protein) for p in res["proteins"])
+  assert len(res["structures"]) == n
+  assert len(res["titles"]) == n
   assert len(res["projection_1d"]) == n
   assert len(res["projection_2d"]) == n
   assert len(res["cluster_labels"]) == n
@@ -104,18 +105,19 @@ def test_clusterprot_with_paths_umap_1d(has_umap, has_sklearn, proteins_from_pat
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_clusterprot_with_objects_pca_1d(has_umap, has_sklearn, protein_objects):
+def test_clusterprot_with_objects_pca_1d(has_umap, has_sklearn, structure_objects):
   if not (has_umap and has_sklearn):
     pytest.skip("Requires umap-learn and scikit-learn")
 
   res = ClusterProt(
-    proteins=protein_objects,  # Protein instances
+    proteins=structure_objects,  # pre-parsed structure containers
     proj_1d_algo="pca",  # 1D: PCA
     dbscan_eps=0,  # auto
     dbscan_min_samples=0,  # auto
     eps_scale_factor=0.05,
   )
-  n = len(protein_objects)
+  n = len(structure_objects)
+  assert all(isinstance(s, StructureEnsemble) for s in res["structures"])
   p1 = np.asarray(res["projection_1d"])
   assert p1.shape == (n, 1)
 
@@ -153,7 +155,7 @@ def test_animate_results_monkeypatched(tmp_path, proteins_from_paths, has_umap, 
   # Patch rendering + animation to avoid heavy work
   import neurosnap.algos.clusterprot as cpmod
 
-  def fake_render_protein_pseudo3D(prot, **kwargs):
+  def fake_render_protein_pseudo3D(structure, **kwargs):
     return np.zeros((4, 4, 3), dtype=np.uint8)
 
   def fake_animate_frames(frames, output_fpath, **kwargs):

@@ -21,9 +21,8 @@ from neurosnap.msa import (
 
 # ---------- Paths & fixtures ----------
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent if HERE.name == "unit" else HERE
-DATA = ROOT  # your current artifacts are already under ./tests/
+TESTS_DIR = Path(__file__).resolve().parents[1]
+DATA = TESTS_DIR  # test artifacts already live under ./tests/
 FASTA_DB = DATA / "test.fasta"  # existing in your repo
 
 

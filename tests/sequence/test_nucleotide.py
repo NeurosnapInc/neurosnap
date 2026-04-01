@@ -49,7 +49,7 @@ def _normalize_interleaved_headers(lines):
 
 
 def test_split_interleaved_fastq_transcript_assembly(tmp_path):
-  src_path = Path(__file__).resolve().parent / "files" / "transcript_assembly.fastq"
+  src_path = Path(__file__).resolve().parents[1] / "files" / "transcript_assembly.fastq"
   lines = src_path.read_text().splitlines()
   assert len(lines) % 4 == 0
 
@@ -101,7 +101,7 @@ def test_split_interleaved_fastq_uneven_reads_raises(tmp_path):
 
 @pytest.mark.parametrize("suffix", [".fastq.gz", ".fq.gz"])
 def test_split_interleaved_fastq_gz_support(tmp_path, suffix):
-  src_path = Path(__file__).resolve().parent / "files" / "transcript_assembly.fastq"
+  src_path = Path(__file__).resolve().parents[1] / "files" / "transcript_assembly.fastq"
   lines = src_path.read_text().splitlines()
   assert len(lines) % 4 == 0
 

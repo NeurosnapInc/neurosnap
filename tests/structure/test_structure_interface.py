@@ -10,7 +10,7 @@ from neurosnap.structure import (
   find_non_interface_hydrophobic_patches,
 )
 
-from ._structure_test_utils import PDB_DIMER, PDB_WITH_H, make_structure, parse_single_model
+from tests._structure_test_utils import PDB_DIMER, PDB_WITH_H, make_structure, parse_single_model
 
 
 def test_find_interface_contacts_hydrogen_filtering():

@@ -9,10 +9,10 @@ from neurosnap.algos.pdockq import (
   _chain_cb_or_gly_ca,
   calculate_pDockQ,
 )
-from neurosnap.protein import Protein
+from tests._structure_test_utils import parse_single_model
 
-HERE = Path(__file__).resolve().parent
-FILES = HERE / "files"
+TESTS_DIR = Path(__file__).resolve().parents[1]
+FILES = TESTS_DIR / "files"
 
 
 # -------------------------
@@ -21,8 +21,8 @@ FILES = HERE / "files"
 
 
 def test__chain_cb_or_gly_ca_returns_coords_and_plddt():
-  prot = Protein(str(FILES / "1BTL.pdb"))  # single-chain protein (A)
-  coords, plddt = _chain_cb_or_gly_ca(prot, "A")
+  structure = parse_single_model(FILES / "1BTL.pdb")  # single-chain protein (A)
+  coords, plddt = _chain_cb_or_gly_ca(structure, "A")
   assert isinstance(coords, np.ndarray) and coords.ndim == 2 and coords.shape[1] == 3
   assert isinstance(plddt, np.ndarray) and plddt.ndim == 1
   assert len(coords) == len(plddt)
@@ -62,21 +62,20 @@ def test__calc_pdockq_from_arrays_no_contacts_returns_zero():
 
 def test_calculate_pdockq_autodetect_two_chains_and_ranges():
   prot_path = FILES / "dimer_af2.pdb"  # has exactly two chains
-  prot = Protein(str(prot_path))
 
-  pd, ppv = calculate_pDockQ(prot)  # auto-detect A/B
+  pd, ppv = calculate_pDockQ(str(prot_path))  # auto-detect A/B
   assert 0.0 <= pd <= 1.0
   # PPV table spans ~0.56..0.98; allow 0 if no contacts in this model
   assert 0.0 <= ppv <= 0.99
 
   # If we make the threshold tiny, likely no contacts -> (0, 0)
-  pd0, ppv0 = calculate_pDockQ(prot, dist_thresh=0.1)
+  pd0, ppv0 = calculate_pDockQ(str(prot_path), dist_thresh=0.1)
   assert pd0 == 0.0 and ppv0 == 0.0
 
 
 def test_calculate_pdockq_requires_two_chains_or_explicit_ids():
   # Single chain structure: should raise when chain IDs omitted
-  single = Protein(str(FILES / "1BTL.pdb"))
+  single = parse_single_model(FILES / "1BTL.pdb")
   with pytest.raises(ValueError):
     _ = calculate_pDockQ(single)
 

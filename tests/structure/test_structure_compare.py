@@ -5,7 +5,7 @@ import pytest
 
 from neurosnap.structure import align, calculate_rmsd, get_backbone
 
-from ._structure_test_utils import (
+from tests._structure_test_utils import (
   AF2_RANK1,
   AF2_RANK2,
   DNA_BACKBONE_ATOMS,

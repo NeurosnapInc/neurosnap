@@ -12,7 +12,7 @@ from neurosnap.structure import (
   select_residues,
 )
 
-from ._structure_test_utils import PDB_DIMER, PDB_MONO, PDB_NO_H, parse_ensemble, parse_single_model
+from tests._structure_test_utils import PDB_DIMER, PDB_MONO, PDB_NO_H, parse_ensemble, parse_single_model
 
 
 def test_parse_local_pdb_and_dataframe():

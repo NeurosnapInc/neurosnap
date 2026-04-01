@@ -1,6 +1,3 @@
-# tests/test_kluster.py
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -14,9 +11,6 @@ from neurosnap.algos.kluster import (
   visualize_projection,
   visualize_projection_interactive,
 )
-
-HERE = Path(__file__).resolve().parent
-
 
 # -----------------------
 # Dependency checks
@@ -223,7 +217,7 @@ def test_cluster_projection_errors_and_defaults():
   labels = cluster_projection(pts, eps=None, min_samples=None, scaling_factor=0.2)
   assert labels.shape == (4,)
   # DBSCAN produces -1 for noise or 0/1 for clusters; we just check type/size
-  assert all(isinstance(int(l), int) for l in labels)
+  assert all(isinstance(int(label), int) for label in labels)
 
 
 # -----------------------

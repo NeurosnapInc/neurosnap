@@ -69,8 +69,20 @@ def calculate_bsa(
     raise ValueError("Chain groups must cover all chains.")
 
   sasa_complex = calculate_surface_area(structure_model, level=level)
-  group1_structure = _substructure_by_chains(structure_model, keep_chains=set(chain_group_1))
-  group2_structure = _substructure_by_chains(structure_model, keep_chains=set(chain_group_2))
+  group_structures = []
+  for keep_chains in (set(chain_group_1), set(chain_group_2)):
+    group_structure = Structure(remove_annotations=False)
+    group_structure._dtype_atoms = structure_model._dtype_atoms
+    group_structure._dtype_atom_annotations = structure_model._dtype_atom_annotations
+    group_structure._dtype_bond = structure_model._dtype_bond
+    group_structure.atoms = structure_model.atoms.copy()
+    group_structure.atom_annotations = structure_model.atom_annotations.copy()
+    group_structure.bonds = structure_model.bonds.copy()
+    group_structure.metadata = copy.deepcopy(structure_model.metadata)
+    filter_structure_atoms(group_structure, np.isin(group_structure.atom_annotations["chain_id"], list(keep_chains)))
+    group_structures.append(group_structure)
+
+  group1_structure, group2_structure = group_structures
   sasa_group1 = calculate_surface_area(group1_structure, level=level)
   sasa_group2 = calculate_surface_area(group2_structure, level=level)
   return float((sasa_group1 + sasa_group2) - sasa_complex)
@@ -87,7 +99,11 @@ def find_interface_contacts(
 ) -> List[Tuple[Atom, Atom]]:
   """Identify atom-atom contacts between two chains using a distance cutoff."""
   structure_model = resolve_model(structure, model=model)
-  _validate_chain_pair(structure_model, chain1, chain2)
+  available_chains = {chain.chain_id for chain in structure_model.chains()}
+  if chain1 not in available_chains:
+    raise ValueError(f"Chain {chain1} was not found.")
+  if chain2 not in available_chains:
+    raise ValueError(f"Chain {chain2} was not found.")
 
   chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
   atoms1 = [atom for residue in chain_lookup[chain1].residues() for atom in residue.atoms() if hydrogens or atom.element != "H"]
@@ -106,11 +122,15 @@ def find_interface_residues(
 ) -> List[Tuple[Residue, Residue]]:
   """Identify unique residue-residue contacts between two chains."""
   structure_model = resolve_model(structure, model=model)
-  _validate_chain_pair(structure_model, chain1, chain2)
+  available_chains = {chain.chain_id for chain in structure_model.chains()}
+  if chain1 not in available_chains:
+    raise ValueError(f"Chain {chain1} was not found.")
+  if chain2 not in available_chains:
+    raise ValueError(f"Chain {chain2} was not found.")
 
   chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
-  residue_lookup1 = _residue_lookup(chain_lookup[chain1])
-  residue_lookup2 = _residue_lookup(chain_lookup[chain2])
+  residue_lookup1 = {(residue.chain_id, residue.res_id, residue.ins_code): residue for residue in chain_lookup[chain1].residues()}
+  residue_lookup2 = {(residue.chain_id, residue.res_id, residue.ins_code): residue for residue in chain_lookup[chain2].residues()}
 
   residue_pairs = []
   seen = set()
@@ -181,7 +201,7 @@ def find_non_interface_hydrophobic_patches(
         continue
       if residue_sasa.get(key, 0.0) <= 0.01:
         continue
-      ca_atom = _atom_by_name(residue, "CA")
+      ca_atom = next((atom for atom in residue.atoms() if atom.atom_name.strip().upper() == "CA"), None)
       if ca_atom is None:
         continue
       hydrophobic_residues.append(residue)
@@ -222,47 +242,3 @@ def find_non_interface_hydrophobic_patches(
       patches.append({hydrophobic_residues[index] for index in component})
 
   return patches
-
-
-def _validate_chain_pair(structure_model, chain1: str, chain2: str):
-  """Validate that both chains are present in a selected model."""
-  available_chains = set(available_chain_ids(structure_model))
-  if chain1 not in available_chains:
-    raise ValueError(f"Chain {chain1} was not found.")
-  if chain2 not in available_chains:
-    raise ValueError(f"Chain {chain2} was not found.")
-
-
-def _residue_lookup(chain) -> dict[tuple[str, int, str], Residue]:
-  """Return residue lookup for a chain keyed by chain ID, residue ID, and insertion code."""
-  return {(residue.chain_id, residue.res_id, residue.ins_code): residue for residue in chain.residues()}
-
-
-def _atom_by_name(residue: Residue, atom_name: str) -> Optional[Atom]:
-  """Return an atom from a residue by atom name."""
-  atom_name = atom_name.strip().upper()
-  for atom in residue.atoms():
-    if atom.atom_name.strip().upper() == atom_name:
-      return atom
-  return None
-
-
-def _substructure_by_chains(structure_model: Structure, keep_chains: Set[str]) -> Structure:
-  """Return a copied structure containing only the requested chains."""
-  copied_structure = _copy_structure(structure_model)
-  keep_mask = np.isin(copied_structure.atom_annotations["chain_id"], list(keep_chains))
-  filter_structure_atoms(copied_structure, keep_mask)
-  return copied_structure
-
-
-def _copy_structure(structure_model: Structure) -> Structure:
-  """Return a deep copied Structure instance."""
-  copied_structure = Structure(remove_annotations=False)
-  copied_structure._dtype_atoms = structure_model._dtype_atoms
-  copied_structure._dtype_atom_annotations = structure_model._dtype_atom_annotations
-  copied_structure._dtype_bond = structure_model._dtype_bond
-  copied_structure.atoms = structure_model.atoms.copy()
-  copied_structure.atom_annotations = structure_model.atom_annotations.copy()
-  copied_structure.bonds = structure_model.bonds.copy()
-  copied_structure.metadata = copy.deepcopy(structure_model.metadata)
-  return copied_structure

@@ -1,6 +1,6 @@
 """Pairwise comparison and alignment functions for Neurosnap structures."""
 
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Optional, Sequence
 
 import numpy as np
 
@@ -57,8 +57,25 @@ def align(
     reference_chain_specs = [(chain_id, chain_id) for chain_id in chains1]
     mobile_chain_specs = [(chain_id, chain_id) for chain_id in chains2]
 
-  reference_atom_map = _backbone_atom_map(reference_model, reference_chain_specs)
-  mobile_atom_map = _backbone_atom_map(mobile_model, mobile_chain_specs)
+  def backbone_atom_map(structure_model, chain_specs):
+    chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
+    atom_map = {}
+    for map_key, chain_id in chain_specs:
+      chain = chain_lookup.get(chain_id)
+      if chain is None:
+        continue
+      for residue in chain.residues():
+        atom_order = backbone_atom_order(residue, include_nucleotides=True)
+        if not atom_order:
+          continue
+        residue_atoms = {atom.atom_name.strip().upper(): atom.coord for atom in residue.atoms()}
+        for atom_name in atom_order:
+          if atom_name in residue_atoms:
+            atom_map[(map_key, residue.res_id, residue.ins_code, atom_name)] = residue_atoms[atom_name]
+    return atom_map
+
+  reference_atom_map = backbone_atom_map(reference_model, reference_chain_specs)
+  mobile_atom_map = backbone_atom_map(mobile_model, mobile_chain_specs)
   if not reference_atom_map:
     raise ValueError("Reference structure does not contain any backbone atoms to align.")
   if not mobile_atom_map:
@@ -72,10 +89,20 @@ def align(
 
   reference_coords = np.asarray([reference_atom_map[key] for key in common_keys], dtype=np.float32)
   mobile_coords = np.asarray([mobile_atom_map[key] for key in common_keys], dtype=np.float32)
-  rotation, translation = _kabsch_transform(reference_coords, mobile_coords)
+  reference_center = reference_coords.mean(axis=0)
+  mobile_center = mobile_coords.mean(axis=0)
+  centered_reference = reference_coords - reference_center
+  centered_mobile = mobile_coords - mobile_center
+  covariance = centered_mobile.T @ centered_reference
+  u_matrix, _, vt_matrix = np.linalg.svd(covariance)
+  rotation = u_matrix @ vt_matrix
+  if np.linalg.det(rotation) < 0:
+    u_matrix[:, -1] *= -1
+    rotation = u_matrix @ vt_matrix
+  translation = reference_center - (mobile_center @ rotation)
 
   all_mobile_coords = coord_matrix(mobile_model)
-  aligned_coords = all_mobile_coords @ rotation + translation
+  aligned_coords = all_mobile_coords @ rotation.astype(np.float32) + translation.astype(np.float32)
   set_model_coordinates(mobile, aligned_coords, model=resolve_model_id(mobile, model=model2))
 
 
@@ -101,41 +128,3 @@ def calculate_rmsd(
 
   diff = reference_coords - mobile_coords
   return float(np.sqrt(np.sum(diff**2) / reference_coords.shape[0]))
-
-
-def _backbone_atom_map(structure_model, chain_specs: Iterable[Tuple[object, str]]) -> dict[tuple[object, int, str, str], np.ndarray]:
-  """Return a backbone-atom lookup keyed by chain mapping and residue identity."""
-  chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
-  atom_map = {}
-  for map_key, chain_id in chain_specs:
-    chain = chain_lookup.get(chain_id)
-    if chain is None:
-      continue
-    for residue in chain.residues():
-      atom_order = backbone_atom_order(residue, include_nucleotides=True)
-      if not atom_order:
-        continue
-      residue_atoms = {atom.atom_name.strip().upper(): atom.coord for atom in residue.atoms()}
-      residue_key = (map_key, residue.res_id, residue.ins_code)
-      for atom_name in atom_order:
-        if atom_name in residue_atoms:
-          atom_map[(residue_key[0], residue_key[1], residue_key[2], atom_name)] = residue_atoms[atom_name]
-  return atom_map
-
-
-def _kabsch_transform(reference_coords: np.ndarray, mobile_coords: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-  """Return the optimal rotation and translation for mobile-to-reference alignment."""
-  reference_center = reference_coords.mean(axis=0)
-  mobile_center = mobile_coords.mean(axis=0)
-  centered_reference = reference_coords - reference_center
-  centered_mobile = mobile_coords - mobile_center
-
-  covariance = centered_mobile.T @ centered_reference
-  u_matrix, _, vt_matrix = np.linalg.svd(covariance)
-  rotation = u_matrix @ vt_matrix
-  if np.linalg.det(rotation) < 0:
-    u_matrix[:, -1] *= -1
-    rotation = u_matrix @ vt_matrix
-
-  translation = reference_center - (mobile_center @ rotation)
-  return rotation.astype(np.float32), translation.astype(np.float32)

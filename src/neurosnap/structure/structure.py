@@ -729,13 +729,43 @@ class Chain:
           f'Chain "{self.chain_id}" contains "{residue_polymer_type}" residues, which are incompatible with polymer_type="{polymer_type}".'
         )
 
-      residue_token = _sequence_token_for_residue(
-        residue,
-        residue_polymer_type,
-        include_modifications=include_modifications,
-        modification_mode=modification_mode,
-        on_unknown_modified=on_unknown_modified,
-      )
+      residue_name = residue.res_name.strip().upper()
+      if residue_polymer_type == "protein":
+        residue_record = AA_RECORDS[residue_name]
+        if residue_record.code is not None:
+          residue_token = residue_record.code
+        elif not include_modifications:
+          residue_token = None
+        elif modification_mode == "inline":
+          residue_token = f"({residue_record.abr})"
+        else:
+          residue_token = None
+          if residue_record.standard_equiv_abr is not None:
+            parent_record = AA_RECORDS.get(residue_record.standard_equiv_abr)
+            if parent_record is not None:
+              residue_token = parent_record.code
+          if residue_token is None:
+            if on_unknown_modified == "unknown":
+              residue_token = "X"
+            else:
+              raise ValueError(f'Could not infer a parent sequence code for modified residue "{residue_name}".')
+      else:
+        if residue_name in NUC_RNA_CODES:
+          residue_token = residue_name
+        elif residue_name in NUC_DNA_CODES:
+          residue_token = residue_name[1]
+        elif not include_modifications:
+          residue_token = None
+        elif modification_mode == "inline":
+          residue_token = f"({residue_name})"
+        else:
+          allowed_codes = {"A", "C", "G", "T"} if residue_polymer_type == "dna" else {"A", "C", "G", "U"}
+          residue_token = next((char for char in reversed(residue_name) if char in allowed_codes), None)
+          if residue_token is None:
+            if on_unknown_modified == "unknown":
+              residue_token = "X"
+            else:
+              raise ValueError(f'Could not infer a parent sequence code for modified residue "{residue_name}".')
       if residue_token is not None:
         sequence_parts.append(residue_token)
 
@@ -775,27 +805,9 @@ def _validate_structure_model(model: Structure):
     raise ValueError('Structure atoms dtype must contain the coordinate fields "x", "y", and "z".')
 
 
-def _display_chain_id(chain_id: str) -> str:
-  """Return a printable chain identifier."""
-  return chain_id if chain_id else "<blank>"
-
-
 def _structure_chain_ids(structure: Structure) -> List[str]:
   """Return chain identifiers from a structure in hierarchy order."""
-  return [_display_chain_id(chain.chain_id) for chain in structure.chains()]
-
-
-def _models_chain_ids(models: List[Structure]) -> List[str]:
-  """Return unique chain identifiers across models in first-seen order."""
-  seen = set()
-  chain_ids: List[str] = []
-  for model in models:
-    for chain_id in _structure_chain_ids(model):
-      if chain_id in seen:
-        continue
-      seen.add(chain_id)
-      chain_ids.append(chain_id)
-  return chain_ids
+  return [chain.chain_id if chain.chain_id else "<blank>" for chain in structure.chains()]
 
 
 def _model_position_from_id(model_ids: List[int], model_id: int) -> int:
@@ -838,113 +850,6 @@ def _classify_polymer_residue(residue: Residue) -> Optional[str]:
   return None
 
 
-def _sequence_token_for_residue(
-  residue: Residue,
-  polymer_type: str,
-  *,
-  include_modifications: bool,
-  modification_mode: str,
-  on_unknown_modified: str,
-) -> Optional[str]:
-  """Return the sequence token for a residue or ``None`` if it should be skipped."""
-  residue_name = residue.res_name.strip().upper()
-  if polymer_type == "protein":
-    return _protein_sequence_token(
-      residue_name,
-      include_modifications=include_modifications,
-      modification_mode=modification_mode,
-      on_unknown_modified=on_unknown_modified,
-    )
-  return _nucleotide_sequence_token(
-    residue_name,
-    polymer_type=polymer_type,
-    include_modifications=include_modifications,
-    modification_mode=modification_mode,
-    on_unknown_modified=on_unknown_modified,
-  )
-
-
-def _protein_sequence_token(
-  residue_name: str,
-  *,
-  include_modifications: bool,
-  modification_mode: str,
-  on_unknown_modified: str,
-) -> Optional[str]:
-  """Return the sequence token for a protein residue."""
-  residue_record = AA_RECORDS[residue_name]
-  if residue_record.code is not None:
-    return residue_record.code
-  if not include_modifications:
-    return None
-  if modification_mode == "inline":
-    return f"({residue_record.abr})"
-
-  parent_code = _protein_parent_code(residue_record)
-  if parent_code is not None:
-    return parent_code
-  if on_unknown_modified == "unknown":
-    return "X"
-  raise ValueError(f'Could not infer a parent sequence code for modified residue "{residue_name}".')
-
-
-def _protein_parent_code(residue_record) -> Optional[str]:
-  """Return the parent one-letter code for a modified amino acid."""
-  if residue_record.standard_equiv_abr is None:
-    return None
-  parent_record = AA_RECORDS.get(residue_record.standard_equiv_abr)
-  if parent_record is None:
-    return None
-  return parent_record.code
-
-
-def _nucleotide_sequence_token(
-  residue_name: str,
-  *,
-  polymer_type: str,
-  include_modifications: bool,
-  modification_mode: str,
-  on_unknown_modified: str,
-) -> Optional[str]:
-  """Return the sequence token for a nucleotide residue."""
-  canonical_code = _canonical_nucleotide_code(residue_name)
-  if canonical_code is not None:
-    return canonical_code
-  if not include_modifications:
-    return None
-  if modification_mode == "inline":
-    return f"({residue_name})"
-
-  parent_code = _infer_nucleotide_parent_code(residue_name, polymer_type)
-  if parent_code is not None:
-    return parent_code
-  if on_unknown_modified == "unknown":
-    return "X"
-  raise ValueError(f'Could not infer a parent sequence code for modified residue "{residue_name}".')
-
-
-def _canonical_nucleotide_code(residue_name: str) -> Optional[str]:
-  """Return the canonical one-letter nucleotide code when available."""
-  if residue_name in NUC_RNA_CODES:
-    return residue_name
-  if residue_name in NUC_DNA_CODES:
-    return residue_name[1]
-  return None
-
-
-def _infer_nucleotide_parent_code(residue_name: str, polymer_type: str) -> Optional[str]:
-  """Infer a parent one-letter code for a modified nucleotide residue."""
-  canonical_code = _canonical_nucleotide_code(residue_name)
-  if canonical_code is not None:
-    return canonical_code
-
-  allowed_codes = {"A", "C", "G", "T"} if polymer_type == "dna" else {"A", "C", "G", "U"}
-  for char in reversed(residue_name):
-    if char in allowed_codes:
-      return char
-  return None
-
-
 class StructureEnsemble:
   """Ordered collection of independent ``Structure`` models.
 
@@ -983,7 +888,14 @@ class StructureEnsemble:
 
   def __repr__(self) -> str:
     """Return a compact string summary of the ensemble."""
-    chain_ids = _models_chain_ids(self._models)
+    seen = set()
+    chain_ids = []
+    for model in self._models:
+      for chain_id in _structure_chain_ids(model):
+        if chain_id in seen:
+          continue
+        seen.add(chain_id)
+        chain_ids.append(chain_id)
     atom_count = sum(len(model) for model in self._models)
     return f"<Structure Ensemble: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
 

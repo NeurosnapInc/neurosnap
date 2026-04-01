@@ -38,7 +38,27 @@ def select_residues(structure, selectors: str, invert: bool = False, model: Opti
     residue_ids_by_chain[chain.chain_id] = {residue.res_id for residue in chain.residues()}
 
   for selector in selectors.split(","):
-    chain_id, residue_spec = _parse_selector(selector, chain_ids)
+    if selector in chain_ids:
+      chain_id, residue_spec = selector, None
+    elif ":" in selector:
+      chain_id, residue_spec = selector.split(":", maxsplit=1)
+      if not residue_spec:
+        raise ValueError(f'Invalid selector "{selector}".')
+      if chain_id not in chain_ids:
+        raise ValueError(f'Chain "{chain_id}" in selector "{selector}" does not exist in the specified structure.')
+      if not re.fullmatch(r"\d+|\d+-\d+", residue_spec):
+        raise ValueError(f'Invalid selector "{selector}".')
+    else:
+      chain_id = None
+      residue_spec = None
+      for candidate_chain_id in sorted(chain_ids, key=len, reverse=True):
+        if selector.startswith(candidate_chain_id):
+          chain_id = candidate_chain_id
+          residue_spec = selector[len(candidate_chain_id) :]
+          break
+      if chain_id is None or not residue_spec or not re.fullmatch(r"\d+|\d+-\d+", residue_spec):
+        raise ValueError(f'Invalid selector "{selector}".')
+
     if chain_id not in residue_ids_by_chain:
       raise ValueError(f'Chain "{chain_id}" in selector "{selector}" does not exist in the specified structure.')
 
@@ -73,35 +93,3 @@ def select_residues(structure, selectors: str, invert: bool = False, model: Opti
     if inverted_ids:
       inverted_output[chain_id] = inverted_ids
   return inverted_output
-
-
-def _parse_selector(selector: str, chain_ids: List[str]) -> tuple[str, Optional[str]]:
-  """Parse a selector token into ``(chain_id, residue_spec)``."""
-  if selector in chain_ids:
-    return selector, None
-
-  if ":" in selector:
-    chain_id, residue_spec = selector.split(":", maxsplit=1)
-    if not residue_spec:
-      raise ValueError(f'Invalid selector "{selector}".')
-    if chain_id not in chain_ids:
-      raise ValueError(f'Chain "{chain_id}" in selector "{selector}" does not exist in the specified structure.')
-    _validate_residue_spec(selector, residue_spec)
-    return chain_id, residue_spec
-
-  for chain_id in sorted(chain_ids, key=len, reverse=True):
-    if selector.startswith(chain_id):
-      residue_spec = selector[len(chain_id) :]
-      if residue_spec:
-        _validate_residue_spec(selector, residue_spec)
-        return chain_id, residue_spec
-  raise ValueError(f'Invalid selector "{selector}".')
-
-
-def _validate_residue_spec(selector: str, residue_spec: str):
-  """Validate the residue portion of a selector token."""
-  if re.fullmatch(r"\d+", residue_spec):
-    return
-  if re.fullmatch(r"\d+-\d+", residue_spec):
-    return
-  raise ValueError(f'Invalid selector "{selector}".')

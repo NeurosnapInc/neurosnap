@@ -19,16 +19,9 @@ _DNA_BACKBONE_ATOMS = ("P", "O1P", "O2P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4
 _RNA_BACKBONE_ATOMS = ("P", "O1P", "O2P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4'", "C1'", "C2'", "O2'", "C3'", "O3'")
 
 
-def available_model_ids(structure: StructureLike) -> List[int]:
-  """Return the model identifiers present in a structure-like object."""
-  if isinstance(structure, Structure):
-    return [int(structure.metadata.get("model_id", 1))]
-  return list(structure.model_ids)
-
-
 def resolve_model_id(structure: StructureLike, model: Optional[int] = None) -> int:
   """Resolve an optional model selector to a concrete model ID."""
-  model_ids = available_model_ids(structure)
+  model_ids = [int(structure.metadata.get("model_id", 1))] if isinstance(structure, Structure) else list(structure.model_ids)
   if not model_ids:
     raise ValueError("Structure does not contain any models.")
 
@@ -39,15 +32,6 @@ def resolve_model_id(structure: StructureLike, model: Optional[int] = None) -> i
   if model_id not in model_ids:
     raise ValueError(f"Model ID {model_id} was not found. Available models: {model_ids}.")
   return model_id
-
-
-def model_position(structure: StructureLike, model_id: int) -> int:
-  """Return the positional index for a model identifier."""
-  model_ids = available_model_ids(structure)
-  try:
-    return model_ids.index(int(model_id))
-  except ValueError:
-    raise ValueError(f"Model ID {model_id} was not found. Available models: {model_ids}.")
 
 
 def resolve_model(structure: StructureLike, model: Optional[int] = None) -> Structure:
@@ -82,7 +66,10 @@ def set_model_coordinates(structure: StructureLike, coord: np.ndarray, model: Op
     target.atoms["z"] = coord[:, 2]
     return
 
-  position = model_position(structure, model_id)
+  try:
+    position = structure.model_ids.index(model_id)
+  except ValueError:
+    raise ValueError(f"Model ID {model_id} was not found. Available models: {list(structure.model_ids)}.")
   if structure.atom_count != len(coord):
     raise ValueError("Coordinate matrix does not match the selected model atom count.")
   structure.coord[position] = coord
@@ -103,18 +90,6 @@ def available_chain_ids(structure: Structure) -> List[str]:
 def residue_key(residue: Residue) -> ResidueKey:
   """Return a stable residue identifier tuple."""
   return (residue.chain_id, residue.res_id, residue.ins_code, residue.res_name, residue.hetero)
-
-
-def residue_key_from_atom_table(structure: Structure, atom_index: int) -> ResidueKey:
-  """Return the residue key for an atom-table row."""
-  annotations = structure.atom_annotations
-  return (
-    str(annotations["chain_id"][atom_index]),
-    int(annotations["res_id"][atom_index]),
-    str(annotations["ins_code"][atom_index]),
-    str(annotations["res_name"][atom_index]),
-    bool(annotations["hetero"][atom_index]),
-  )
 
 
 def classify_polymer_residue(residue: Residue) -> Optional[PolymerType]:
@@ -199,7 +174,14 @@ def filter_stack_atoms(stack: StructureStack, keep_mask: np.ndarray):
 def residue_index_groups(structure: Structure) -> Dict[ResidueKey, List[int]]:
   """Return atom indices grouped by residue key."""
   groups: Dict[ResidueKey, List[int]] = {}
+  annotations = structure.atom_annotations
   for atom_index in range(len(structure)):
-    key = residue_key_from_atom_table(structure, atom_index)
+    key = (
+      str(annotations["chain_id"][atom_index]),
+      int(annotations["res_id"][atom_index]),
+      str(annotations["ins_code"][atom_index]),
+      str(annotations["res_name"][atom_index]),
+      bool(annotations["hetero"][atom_index]),
+    )
     groups.setdefault(key, []).append(atom_index)
   return groups

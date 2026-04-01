@@ -666,6 +666,21 @@ class Chain:
     """Return all residues in this chain."""
     return list(self._residues)
 
+  def missing_residue_ids(self) -> List[int]:
+    """Return missing residue numbers inferred from gaps in the chain.
+
+    Hetero residues are ignored so ligand or solvent numbering does not create
+    artificial gaps in the polymer residue sequence.
+    """
+    residue_ids = sorted({residue.res_id for residue in self._residues if not residue.hetero})
+    missing_ids = []
+    for index in range(len(residue_ids) - 1):
+      current_residue_id = residue_ids[index]
+      next_residue_id = residue_ids[index + 1]
+      if next_residue_id > current_residue_id + 1:
+        missing_ids.extend(range(current_residue_id + 1, next_residue_id))
+    return missing_ids
+
 
 def _validate_structure_model(model: Structure):
   """Validate that an object is a structurally consistent ``Structure``.

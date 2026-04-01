@@ -185,9 +185,8 @@ def parse_pdb(
   """Parse a PDB file into Neurosnap structure containers.
 
   Parsing follows the fixed-width PDB record layout used by BioPython's parser
-  but builds Neurosnap :class:`Structure` objects instead of BioPython SMCRA
-  entities. Parsed models are first collected into a
-  :class:`StructureEnsemble` and are optionally converted into a
+  but builds Neurosnap :class:`Structure` entities.Parsed models are first
+  collected into a :class:`StructureEnsemble` and are optionally converted into a
   :class:`StructureStack` at the end.
 
   HETATM records and ``CONECT`` records are parsed directly so ligands and

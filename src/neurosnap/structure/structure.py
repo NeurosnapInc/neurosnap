@@ -13,8 +13,9 @@ from types import MappingProxyType
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 
-from neurosnap.constants import AA_RECORDS, AA_MASS_PROTEIN_AVG
+from neurosnap.constants import AA_MASS_PROTEIN_AVG, AA_RECORDS, STANDARD_NUCLEOTIDES
 
 ### IMPORTANT NOTES
 # Universal unit is Å.
@@ -22,6 +23,26 @@ from neurosnap.constants import AA_RECORDS, AA_MASS_PROTEIN_AVG
 # Hetatoms are stored with proper bond information
 # In PDB files repeated bonds will correspond to bonds being interpreted at a higher order. For instance if atom i and j have two records for bonds in a PDB file this will be interpreted as them having a double bond.
 # Each structure corresponds to a single model ONLY, the StructureEnsemble object should be used instead for an ordered collection of models (OR optional later: StructureStack = shared-annotation multi-model fast path, only when all models have identical atoms/bonds)
+
+_STRUCTURE_DATAFRAME_COLUMNS = (
+  "chain",
+  "res_id",
+  "ins_code",
+  "res_name",
+  "hetero",
+  "res_type",
+  "atom",
+  "atom_name",
+  "element",
+  "bfactor",
+  "occupancy",
+  "charge",
+  "sym_id",
+  "x",
+  "y",
+  "z",
+  "mass",
+)
 
 class Structure:
   """Single-model molecular structure container.
@@ -112,6 +133,34 @@ class Structure:
     """Return a compact string summary of the structure."""
     chain_ids = _structure_chain_ids(self)
     return f"<Structure: Models=1 Chains=[{', '.join(chain_ids)}] Atoms={len(self)}>"
+
+  def to_dataframe(self) -> pd.DataFrame:
+    """Export the structure as a pandas dataframe.
+
+    This dataframe is derived on demand from the current atom table and is
+    never cached on the structure.
+    """
+    atom_count = len(self)
+    data = {
+      "chain": self._annotation_export("chain_id"),
+      "res_id": self._annotation_export("res_id"),
+      "ins_code": self._annotation_export("ins_code"),
+      "res_name": self._annotation_export("res_name"),
+      "hetero": self._annotation_export("hetero"),
+      "res_type": self._residue_types(),
+      "atom": self._annotation_export("atom_id"),
+      "atom_name": self._annotation_export("atom_name"),
+      "element": self._annotation_export("element"),
+      "bfactor": self._annotation_export("b_factor"),
+      "occupancy": self._annotation_export("occupancy"),
+      "charge": self._annotation_export("charge"),
+      "sym_id": self._annotation_export("sym_id"),
+      "x": self.atoms["x"].copy() if atom_count else np.zeros(0, dtype=np.float32),
+      "y": self.atoms["y"].copy() if atom_count else np.zeros(0, dtype=np.float32),
+      "z": self.atoms["z"].copy() if atom_count else np.zeros(0, dtype=np.float32),
+      "mass": self._atom_masses(),
+    }
+    return pd.DataFrame(data, columns=_STRUCTURE_DATAFRAME_COLUMNS)
 
   def chains(self) -> List["Chain"]:
     """Return all chains in the structure as immutable hierarchy views.
@@ -442,6 +491,32 @@ class Structure:
       return value.item()
     return value
 
+  def _annotation_export(self, name: str) -> np.ndarray:
+    """Return an annotation column or a default-filled export column."""
+    if name in self._dtype_atom_annotations.names:
+      return self.atom_annotations[name].copy()
+
+    default_value = self._ANNOTATION_DEFAULTS[name]
+    return np.full(len(self), default_value)
+
+  def _residue_types(self) -> np.ndarray:
+    """Return per-atom residue-type labels for dataframe export."""
+    residue_types = np.full(len(self), "HETEROGEN", dtype="U12")
+    if len(self) == 0:
+      return residue_types
+
+    hetero = self._annotation_export("hetero")
+    res_name = self._annotation_export("res_name")
+    for atom_index in range(len(self)):
+      if bool(hetero[atom_index]):
+        continue
+      residue_name = str(res_name[atom_index])
+      if residue_name in STANDARD_NUCLEOTIDES:
+        residue_types[atom_index] = "NUCLEOTIDE"
+      elif residue_name in AA_RECORDS:
+        residue_types[atom_index] = "AMINO_ACID"
+    return residue_types
+
   def _available_chain_ids(self) -> List[str]:
     """Return chain identifiers present in the structure in first-seen order."""
     chain_ids = []
@@ -687,6 +762,22 @@ class StructureEnsemble:
     atom_count = sum(len(model) for model in self._models)
     return f"<Structure Ensemble: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
 
+  def to_dataframe(self) -> pd.DataFrame:
+    """Export the ensemble as a pandas dataframe with a ``model`` column.
+
+    This dataframe is derived on demand from the current models and is never
+    cached on the ensemble.
+    """
+    frames = []
+    for model_id, model in zip(self.model_ids, self._models):
+      frame = model.to_dataframe()
+      frame.insert(0, "model", model_id)
+      frames.append(frame)
+
+    if not frames:
+      return pd.DataFrame(columns=("model",) + _STRUCTURE_DATAFRAME_COLUMNS)
+    return pd.concat(frames, ignore_index=True)
+
   def __iter__(self) -> Iterator[Structure]:
     """Iterate over the stored models in order."""
     return iter(self._models)
@@ -716,8 +807,36 @@ class StructureEnsemble:
         model ID starting at ``1``.
     """
     _validate_structure_model(model)
+    assigned_model_id = len(self.model_ids) + 1 if model_id is None else int(model_id)
     self._models.append(model)
-    self.model_ids.append(len(self.model_ids) + 1 if model_id is None else int(model_id))
+    self.model_ids.append(assigned_model_id)
+    model.metadata["model_id"] = assigned_model_id
+
+  def remove_model(self, model_id: int) -> Structure:
+    """Remove and return a model by model ID.
+
+    Parameters:
+      model_id: Model identifier to remove.
+
+    Returns:
+      The removed :class:`Structure`.
+
+    Raises:
+      KeyError: If the requested model ID is not present.
+    """
+    model_position = _model_position_from_id(self.model_ids, model_id)
+    self.model_ids.pop(model_position)
+    return self._models.pop(model_position)
+
+  def renumber(self, start: int = 1):
+    """Renumber model identifiers in-place.
+
+    Parameters:
+      start: Starting model ID. Defaults to ``1``.
+    """
+    self.model_ids = list(range(int(start), int(start) + len(self)))
+    for model_id, model in zip(self.model_ids, self._models):
+      model.metadata["model_id"] = model_id
 
   def models(self) -> List[Structure]:
     """Return the models as a shallow copied list."""
@@ -783,6 +902,22 @@ class StructureStack:
     atom_count = len(self) * self.atom_count
     return f"<Structure Stack: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
 
+  def to_dataframe(self) -> pd.DataFrame:
+    """Export the stack as a pandas dataframe with a ``model`` column.
+
+    This dataframe is derived on demand from the current stack contents and is
+    never cached on the stack.
+    """
+    frames = []
+    for model_index, model_id in enumerate(self.model_ids):
+      frame = self._model_to_structure(model_index).to_dataframe()
+      frame.insert(0, "model", model_id)
+      frames.append(frame)
+
+    if not frames:
+      return pd.DataFrame(columns=("model",) + _STRUCTURE_DATAFRAME_COLUMNS)
+    return pd.concat(frames, ignore_index=True)
+
   def __iter__(self) -> Iterator[Structure]:
     """Iterate over the stack as materialized ``Structure`` models."""
     for model_index in range(len(self)):
@@ -844,6 +979,32 @@ class StructureStack:
       self.coord = np.concatenate((self.coord, coord[np.newaxis, ...]), axis=0)
 
     self.model_ids.append(len(self.model_ids) + 1 if model_id is None else int(model_id))
+
+  def remove_model(self, model_id: int) -> Structure:
+    """Remove and return a model by model ID.
+
+    Parameters:
+      model_id: Model identifier to remove.
+
+    Returns:
+      The removed :class:`Structure`.
+
+    Raises:
+      KeyError: If the requested model ID is not present.
+    """
+    model_position = _model_position_from_id(self.model_ids, model_id)
+    removed_model = self._model_to_structure(model_position)
+    self.coord = np.delete(self.coord, model_position, axis=0)
+    self.model_ids.pop(model_position)
+    return removed_model
+
+  def renumber(self, start: int = 1):
+    """Renumber model identifiers in-place.
+
+    Parameters:
+      start: Starting model ID. Defaults to ``1``.
+    """
+    self.model_ids = list(range(int(start), int(start) + len(self)))
 
   def models(self) -> List[Structure]:
     """Materialize and return all models in the stack."""

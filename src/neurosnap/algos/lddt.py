@@ -13,7 +13,8 @@ from neurosnap.constants import (
   BACKBONE_ATOMS_RNA,
   STANDARD_NUCLEOTIDES,
 )
-from neurosnap.protein import Protein
+from neurosnap.structure import Atom, Residue, Structure, StructureEnsemble, StructureStack
+from neurosnap.structure._common import resolve_model
 
 _PROTEIN_BACKBONE_FALLBACK = tuple(atom for atom in ("CA", "N", "C") if atom in BACKBONE_ATOMS_AA)
 _PROTEIN_ATOM_PRIORITY = ("CB",) + _PROTEIN_BACKBONE_FALLBACK
@@ -106,18 +107,20 @@ def _is_nucleotide(resname: str) -> bool:
   return resname in STANDARD_NUCLEOTIDES
 
 
-def _get_atom(res, name: str):
+def _get_atom(residue: Residue, name: str) -> Optional[Atom]:
   """Fetch an atom by name, handling historical prime markers (* vs ')."""
-  if name in res:
-    return res[name]
-  alt = name.replace("'", "*") if "'" in name else name.replace("*", "'")
-  if alt != name and alt in res:
-    return res[alt]
+  atom_lookup = {atom.atom_name.strip().upper(): atom for atom in residue.atoms()}
+  normalized = name.strip().upper()
+  if normalized in atom_lookup:
+    return atom_lookup[normalized]
+  alt = normalized.replace("'", "*") if "'" in normalized else normalized.replace("*", "'")
+  if alt != normalized and alt in atom_lookup:
+    return atom_lookup[alt]
   return None
 
 
-def _extract_cb_coords_from_protein(
-  prot: Protein,
+def _extract_cb_coords_from_structure(
+  structure: Union[Structure, StructureEnsemble, StructureStack],
   *,
   model: Optional[int] = None,
   chains: Optional[List[str]] = None,
@@ -128,26 +131,18 @@ def _extract_cb_coords_from_protein(
   Returns:
     dict keyed by (chain_id, res_id) -> (x,y,z)
   """
-  if model is None:
-    model = prot.models()[0]
-  assert model in prot.models(), f"Model {model} not found in protein {prot.title}"
-
+  structure_model = resolve_model(structure, model=model)
   coords: Dict[Tuple[str, int], Tuple[float, float, float]] = {}
-  model_obj = prot.structure[model]
-
-  # Decide which chains to traverse
-  chain_ids = [c.id for c in model_obj] if not chains else chains
+  chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
+  chain_ids = [chain.chain_id for chain in structure_model.chains()] if not chains else list(chains)
   for cid in chain_ids:
-    if cid not in prot.chains(model):
-      # Skip silently if a requested chain isn't present
+    chain = chain_lookup.get(cid)
+    if chain is None:
       continue
-    chain = model_obj[cid]
-    for res in chain:
-      if res.id[0] != " ":
+    for residue in chain.residues():
+      if residue.hetero:
         continue
-      if getattr(res, "resname", None) is None:
-        continue
-      resname = res.resname
+      resname = residue.res_name
 
       is_amino = resname in AA_RECORDS
       is_nucleotide = _is_nucleotide(resname)
@@ -164,16 +159,16 @@ def _extract_cb_coords_from_protein(
       atom = None
       if is_amino:
         if resname != "GLY":
-          atom = _get_atom(res, "CB")
+          atom = _get_atom(residue, "CB")
         if atom is None:
           for atom_name in _PROTEIN_BACKBONE_FALLBACK:
-            atom = _get_atom(res, atom_name)
+            atom = _get_atom(residue, atom_name)
             if atom is not None:
               break
       else:
         for atom_names in _NUCLEOTIDE_ATOM_PRIORITY:
           for atom_name in atom_names:
-            atom = _get_atom(res, atom_name)
+            atom = _get_atom(residue, atom_name)
             if atom is not None:
               break
           if atom is not None:
@@ -182,7 +177,7 @@ def _extract_cb_coords_from_protein(
       if atom is None:
         continue
 
-      key = (cid, res.id[1])  # (chain, residue sequence number)
+      key = (cid, residue.res_id)  # (chain, residue sequence number)
       coords[key] = (float(atom.coord[0]), float(atom.coord[1]), float(atom.coord[2]))
   return coords
 
@@ -250,8 +245,8 @@ def _calc_lddt_from_maps(
 
 
 def calc_lddt(
-  reference: Union[np.ndarray, Protein],
-  prediction: Union[np.ndarray, Protein],
+  reference: Union[np.ndarray, Structure, StructureEnsemble, StructureStack],
+  prediction: Union[np.ndarray, Structure, StructureEnsemble, StructureStack],
   *,
   model_ref: Optional[int] = None,
   model_pred: Optional[int] = None,
@@ -262,15 +257,15 @@ def calc_lddt(
   T_set: Sequence[float] = (0.5, 1.0, 2.0, 4.0),
   require_standard_aa: bool = True,
 ) -> float:
-  """Compute lDDT from distance maps or Protein structures.
+  """Compute lDDT from distance maps or Neurosnap structure containers.
 
   Args:
-    reference: Distance map or Protein used as the ground truth.
-    prediction: Distance map or Protein to compare against the reference.
-    model_ref: Model index to select when `reference` is a Protein.
-    model_pred: Model index to select when `prediction` is a Protein.
-    chains_ref: Chain identifiers to include when `reference` is a Protein.
-    chains_pred: Chain identifiers to include when `prediction` is a Protein.
+    reference: Distance map or structure used as the ground truth.
+    prediction: Distance map or structure to compare against the reference.
+    model_ref: Optional model ID to select when `reference` is multi-model.
+    model_pred: Optional model ID to select when `prediction` is multi-model.
+    chains_ref: Chain identifiers to include when `reference` is a structure.
+    chains_pred: Chain identifiers to include when `prediction` is a structure.
     R: Maximum reference distance to consider when defining the L set.
     sep_thresh: Minimum sequence separation between residue pairs.
     T_set: Error thresholds used to compute preserved distance fractions.
@@ -285,22 +280,22 @@ def calc_lddt(
 
   Raises:
     ValueError: If distance maps do not share the same shape.
-    TypeError: If the inputs are not both arrays or both Protein instances.
+    TypeError: If the inputs are not both arrays or both structure containers.
   """
   is_ref_array = isinstance(reference, np.ndarray)
   is_pred_array = isinstance(prediction, np.ndarray)
-  is_ref_protein = isinstance(reference, Protein)
-  is_pred_protein = isinstance(prediction, Protein)
+  structure_types = (Structure, StructureEnsemble, StructureStack)
+  is_ref_structure = isinstance(reference, structure_types)
+  is_pred_structure = isinstance(prediction, structure_types)
 
   if is_ref_array and is_pred_array:
     if reference.shape != prediction.shape:
       raise ValueError("Distance maps must share the same shape to compute lDDT.")
     return _calc_lddt_from_maps(reference, prediction, R=R, sep_thresh=sep_thresh, T_set=T_set)
 
-  if is_ref_protein and is_pred_protein:
-    # Extract per-residue coordinates for both proteins
-    ref_cb = _extract_cb_coords_from_protein(reference, model=model_ref, chains=chains_ref, require_standard_aa=require_standard_aa)
-    pred_cb = _extract_cb_coords_from_protein(prediction, model=model_pred, chains=chains_pred, require_standard_aa=require_standard_aa)
+  if is_ref_structure and is_pred_structure:
+    ref_cb = _extract_cb_coords_from_structure(reference, model=model_ref, chains=chains_ref, require_standard_aa=require_standard_aa)
+    pred_cb = _extract_cb_coords_from_structure(prediction, model=model_pred, chains=chains_pred, require_standard_aa=require_standard_aa)
 
     # Intersect keys to ensure 1:1 residue correspondence
     common_keys = sorted(set(ref_cb.keys()).intersection(pred_cb.keys()), key=lambda x: (x[0], x[1]))
@@ -312,4 +307,4 @@ def calc_lddt(
     pred_map = _coords_to_distmat(common_keys, pred_cb)
     return _calc_lddt_from_maps(true_map, pred_map, R=R, sep_thresh=sep_thresh, T_set=T_set)
 
-  raise TypeError("calc_lddt expects both inputs to be either numpy.ndarray distance maps or Protein objects.")
+  raise TypeError("calc_lddt expects both inputs to be either numpy.ndarray distance maps or Neurosnap structure containers.")

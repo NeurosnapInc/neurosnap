@@ -37,8 +37,10 @@ from typing import List, Sequence, Tuple
 import numpy as np
 from scipy.stats import pearsonr
 
+from neurosnap.io.pdb import save_pdb
 from neurosnap.log import logger
-from neurosnap.protein import Protein
+from neurosnap.structure import Structure, StructureEnsemble, StructureStack, find_interface_contacts
+from neurosnap.structure._common import filter_structure_atoms, resolve_model
 
 _METRIC_DEFINITIONS_LOGGED = False
 
@@ -57,17 +59,18 @@ def parse_chain_pairs(spec: str) -> List[Tuple[str, str]]:
   return pairs
 
 
-def write_single_chain_pdb(structure, chain_id: str, outfile: Path) -> None:
+def write_single_chain_pdb(structure: Structure, chain_id: str, outfile: Path) -> None:
   """Write only *chain_id* to PDB."""
-  from Bio.PDB import PDBIO, Select
-
-  class ChainSelect(Select):
-    def accept_chain(self, chain):  # noqa: D401  (Biopython naming)
-      return chain.id == chain_id
-
-  io = PDBIO()
-  io.set_structure(structure)
-  io.save(str(outfile), ChainSelect())  # Path → str avoids .tell() bug
+  single_chain = Structure(remove_annotations=False)
+  single_chain._dtype_atoms = structure._dtype_atoms
+  single_chain._dtype_atom_annotations = structure._dtype_atom_annotations
+  single_chain._dtype_bond = structure._dtype_bond
+  single_chain.atoms = structure.atoms.copy()
+  single_chain.atom_annotations = structure.atom_annotations.copy()
+  single_chain.bonds = structure.bonds.copy()
+  single_chain.metadata = dict(structure.metadata)
+  filter_structure_atoms(single_chain, np.asarray(single_chain.atom_annotations["chain_id"] == chain_id, dtype=bool))
+  save_pdb(single_chain, outfile)
 
 
 # ---------------------------------------------------------------------
@@ -269,7 +272,7 @@ quit
 #  Section 5 – Per-pair EC computation
 # ---------------------------------------------------------------------
 def compute_ec(
-  protein: Protein,
+  structure: Structure | StructureEnsemble | StructureStack,
   chain1: str,
   chain2: str,
   *,
@@ -281,12 +284,12 @@ def compute_ec(
 ) -> Tuple[float, float, float]:
   """
   Compute electrostatic complementarity (EC) and Pearson correlations (r_b, r_t)
-  for an order-invariant interface chain pair in a Protein.
+  for an order-invariant interface chain pair in a Neurosnap structure container.
 
   Parameters
   ----------
-  protein
-    Protein containing the interface chains.
+  structure
+    Structure container containing the interface chains.
   chain1
     Chain identifier for the first interface chain.
   chain2
@@ -307,9 +310,22 @@ def compute_ec(
   tuple[float, float, float]
     (ec, r_b, r_t), or (nan, nan, nan) when insufficient interface samples.
   """
-  contacts = protein.find_interface_contacts(chain1, chain2, cutoff=cutoff, hydrogens=False)
-  ib_atoms = list({a for a, _ in contacts})
-  it_atoms = list({b for _, b in contacts})
+  structure_model = resolve_model(structure)
+  contacts = find_interface_contacts(structure_model, chain1, chain2, cutoff=cutoff, hydrogens=False)
+
+  ib_atoms = []
+  ib_seen = set()
+  it_atoms = []
+  it_seen = set()
+  for atom1, atom2 in contacts:
+    atom1_key = (atom1.chain_id, atom1.res_id, atom1.ins_code, atom1.res_name, atom1.atom_name)
+    atom2_key = (atom2.chain_id, atom2.res_id, atom2.ins_code, atom2.res_name, atom2.atom_name)
+    if atom1_key not in ib_seen:
+      ib_seen.add(atom1_key)
+      ib_atoms.append(atom1)
+    if atom2_key not in it_seen:
+      it_seen.add(atom2_key)
+      it_atoms.append(atom2)
   if not ib_atoms or not it_atoms:
     logger.warning(f"No inter-chain contacts for {chain1}:{chain2}, skipping.")
     return np.nan, np.nan, np.nan
@@ -327,8 +343,8 @@ def compute_ec(
     workdir = Path(td)
     chain1_pdb = workdir / f"chain1_{chain1}.pdb"
     chain2_pdb = workdir / f"chain2_{chain2}.pdb"
-    write_single_chain_pdb(protein.structure, chain1, chain1_pdb)
-    write_single_chain_pdb(protein.structure, chain2, chain2_pdb)
+    write_single_chain_pdb(structure_model, chain1, chain1_pdb)
+    write_single_chain_pdb(structure_model, chain2, chain2_pdb)
 
     chain1_pqr = chain1_pdb.with_suffix(".pqr")
     chain2_pqr = chain2_pdb.with_suffix(".pqr")

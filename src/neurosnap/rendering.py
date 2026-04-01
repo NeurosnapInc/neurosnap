@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from neurosnap.constants import VDW_RADII_BONDI
 from neurosnap.log import logger
-from neurosnap.protein import Protein
+from neurosnap.structure._common import resolve_model
 
 
 def render_pseudo3D(
@@ -324,8 +324,9 @@ def render_pseudo3D(
 
 
 def render_protein_pseudo3D(
-  protein: Protein,
+  structure,
   *,
+  model: Optional[int] = None,
   style: str = "residue_id",
   use_radii: bool = False,
   image_size: Tuple[int, int] = (576, 432),
@@ -334,10 +335,11 @@ def render_protein_pseudo3D(
   upsample: int = 2,
   chainbreak: int = 5,
 ) -> Image.Image:
-  """Render a protein using the pseudo-3D Pillow renderer.
+  """Render a structure model using the pseudo-3D Pillow renderer.
 
   Parameters:
-    protein: Protein to render
+    structure: Structure, ensemble, or stack to render.
+    model: Optional model ID when selecting from an ensemble or stack.
     style: Coloring mode (residue_id, chain_id, b-factor, pLDDT, residue_type)
     use_radii: If True, apply van der Waals radii as per-atom sizes
     image_size: Output image size (width, height)
@@ -350,7 +352,7 @@ def render_protein_pseudo3D(
     Pillow Image containing the rendering
 
   """
-  df = protein.df
+  df = resolve_model(structure, model=model).to_dataframe()
   xyz = df[["x", "y", "z"]].to_numpy(dtype=np.float32, copy=False)
   chains = df["chain"].to_numpy()
   unique_chains = pd.unique(chains)

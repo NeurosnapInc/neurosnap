@@ -3,14 +3,16 @@ Implementation of the ClusterProt algorithm from https://neurosnap.ai/service/Cl
 ClusterProt is an algorithm for clustering proteins by their structure similarity.
 """
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from tqdm import tqdm
 
+from neurosnap.io.pdb import parse_pdb
 from neurosnap.log import logger
-from neurosnap.protein import Protein
 from neurosnap.rendering import animate_frames, render_protein_pseudo3D
+from neurosnap.structure import Structure, StructureEnsemble, StructureStack, align, calculate_distance_matrix
 
 try:
   from sklearn.cluster import DBSCAN
@@ -24,8 +26,8 @@ except Exception as e:
 
 
 def ClusterProt(
-  proteins: List[Union["Protein", str]],
-  model: int = 0,
+  proteins: List[Union[Structure, StructureEnsemble, StructureStack, str, Path]],
+  model: Optional[int] = None,
   chain: Optional[str] = None,
   umap_n_neighbors: int = 0,
   proj_1d_algo: str = "umap",
@@ -47,8 +49,8 @@ def ClusterProt(
     7. Create the 1D projection using either UMAP or PCA (optional but useful for organizing proteins 1-dimensionally)
 
   Parameters:
-    proteins: List of proteins to cluster, can be either neurosnap Protein objects of filepaths to proteins that will get loaded as Protein objects
-    model: Model ID to for ClusterProt to use (must be consistent across all structures)
+    proteins: List of structures to cluster, as Neurosnap structure containers or PDB filepaths.
+    model: Model ID for ClusterProt to use (must be consistent across all structures). Defaults to the first available model in each input.
     chain: Chain ID to for ClusterProt to use (must be consistent across all structures), if not provided calculates for all chains
     umap_n_neighbors: The ``n_neighbors`` value to provide to UMAP for the main projection. Leave as 0 to automatically calculate optimal value. Prior to the 2024-06-14 update this values was left as ``7``.
     proj_1d_algo: Algorithm to use for the 1D projection. Can be either ``"umap"`` or ``"pca"``
@@ -59,32 +61,37 @@ def ClusterProt(
   Returns:
     A dictionary containing the results from the algorithm:
 
-      - proteins (list<Protein>): Sorted list of all the neurosnap Proteins aligned by the reference protein.
-      - projection_2d (list<list<float>>): Generated 2D projection of all the proteins.
-      - cluster_labels (list<float>): List of the labels for each of the proteins.
+      - structures (list): Sorted list of all the Neurosnap structures aligned by the reference structure.
+      - titles (list<str>): Display labels for each structure.
+      - projection_2d (list<list<float>>): Generated 2D projection of all the structures.
+      - cluster_labels (list<float>): List of the labels for each of the structures.
 
   """
-  # ensure input data is valid
-  logger.debug(f"Loading {len(proteins)} for clustering")
-  for i, protein in enumerate(proteins):
-    if isinstance(protein, Protein):
-      pass
+  structures = []
+  titles = []
+  logger.debug(f"Loading {len(proteins)} structures for clustering")
+  for index, structure in enumerate(proteins, start=1):
+    if isinstance(structure, (Structure, StructureEnsemble, StructureStack)):
+      structures.append(structure)
+      titles.append(str(structure.metadata.get("title", f"structure_{index}")))
     else:
-      proteins[i] = Protein(protein)
+      structure_path = Path(structure)
+      structures.append(parse_pdb(structure_path, return_type="ensemble"))
+      titles.append(structure_path.stem)
 
   proteins_vects = []
-  logger.debug(f"Clustering {len(proteins)} proteins")
+  logger.debug(f"Clustering {len(structures)} structures")
 
-  assert len(proteins) >= 5, "ClusterProt requires at least 5 proteins in order to work."
+  assert len(structures) >= 5, "ClusterProt requires at least 5 structures in order to work."
 
   # compute distance matrices
   logger.debug("Computing distance matrices")
-  prot_ref = proteins[0]
-  protein_length = len(prot_ref.calculate_distance_matrix(model=model, chain=chain))
-  for prot in proteins:
-    dm = prot.calculate_distance_matrix()  # compute protein distance matrix
+  prot_ref = structures[0]
+  protein_length = len(calculate_distance_matrix(prot_ref, model=model, chain=chain))
+  for index, prot in enumerate(structures):
+    dm = calculate_distance_matrix(prot, model=model, chain=chain)
     assert len(dm) == protein_length, (
-      f"All proteins need to have the same number of residues. Proteins {proteins[0].title} and {prot.title} have different lengths."
+      f"All structures need to have the same number of residues. Structures {titles[0]} and {titles[index]} have different lengths."
     )
     # get the upper triangle without the diagonal as a flattened vector
     triu_vect = dm[np.triu_indices(len(dm), k=1)]
@@ -93,13 +100,13 @@ def ClusterProt(
   proteins_vects = np.array(proteins_vects)
 
   # align all proteins
-  logger.debug("Aligning all proteins")
-  for prot in proteins:
-    prot_ref.align(prot, model1=model, model2=model)
+  logger.debug("Aligning all structures")
+  for prot in structures:
+    align(prot_ref, prot, model1=model, model2=model)
 
   # 2D projection and cluster it using DBSCAN
   if umap_n_neighbors == 0:
-    umap_n_neighbors = min(15, max(5, round(len(proteins) * 0.01)))
+    umap_n_neighbors = min(15, max(5, round(len(structures) * 0.01)))
   logger.debug(f"Creating 2D projection using UMAP (n_neighbors={umap_n_neighbors})")
   proj_2d = UMAP(n_components=2, n_neighbors=umap_n_neighbors, min_dist=0.04).fit_transform(proteins_vects)
 
@@ -113,7 +120,7 @@ def ClusterProt(
     dbscan_eps = max(dbscan_eps, 1e-4)  # clip value to ensure it doesn't get too small
 
   if dbscan_min_samples <= 0:
-    dbscan_min_samples = int(np.log(len(proteins))) + 1
+    dbscan_min_samples = int(np.log(len(structures))) + 1
 
   # calculate DBSCAN labels
   cluster_labels = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples).fit_predict(proj_2d)
@@ -130,7 +137,9 @@ def ClusterProt(
 
   # return results
   return {
-    "proteins": proteins,
+    "structures": structures,
+    "titles": titles,
+    "model_id": model,
     "projection_1d": proj_1d.tolist(),
     "projection_2d": proj_2d.tolist(),
     "cluster_labels": cluster_labels.tolist(),
@@ -145,15 +154,17 @@ def animate_results(cp_results: Dict, animation_fpath: str = "cluster_prot.gif")
     animation_fpath: Output filepath for the animation of all the proteins
 
   """
-  proteins = cp_results["proteins"]
+  structures = cp_results["structures"]
+  titles = cp_results.get("titles", [f"structure_{index + 1}" for index in range(len(structures))])
+  model_id = cp_results.get("model_id")
   projection_1d = np.squeeze(np.asarray(cp_results["projection_1d"], dtype=float))
   order = np.argsort(projection_1d)
   frames = []
   subtitles = []
   total = len(order)
   for i, idx in enumerate(tqdm(order, desc="Rendering frames", unit="frame"), start=1):
-    frames.append(render_protein_pseudo3D(proteins[idx], image_size=(800, 580)))
-    subtitles.append(f"{proteins[idx].title} ({i}/{total})")
+    frames.append(render_protein_pseudo3D(structures[idx], model=model_id, image_size=(800, 580)))
+    subtitles.append(f"{titles[idx]} ({i}/{total})")
   animate_frames(frames, animation_fpath, title="ClusterProt Animation", subtitles=subtitles, interval=150, repeat=True)
 
 
@@ -174,7 +185,7 @@ def create_figure_plotly(cp_results: Dict):
     )
     raise e
 
-  titles = [prot.title for prot in cp_results["proteins"]]
+  titles = cp_results.get("titles", [f"structure_{index + 1}" for index in range(len(cp_results["structures"]))])
   fig = px.scatter(
     cp_results["projection_2d"],
     x=0,

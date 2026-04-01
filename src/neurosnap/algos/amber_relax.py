@@ -47,8 +47,9 @@ from openmm import LangevinIntegrator, Platform, unit
 from openmm.app import ForceField, HBonds, Modeller, NoCutoff, PDBFile, Simulation
 from pdbfixer import PDBFixer
 
+from neurosnap.io.pdb import parse_pdb, save_pdb
 from neurosnap.log import logger
-from neurosnap.protein import Protein
+from neurosnap.structure import remove_non_biopolymers, remove_waters
 
 
 def _load_bfactors_from_pdb(pdb_path):
@@ -150,11 +151,11 @@ def minimize(
   tolerance = max(0.1, min(10.0, tolerance))  # Clamp between 0.1 and 10.0 Kcal/mol
   tolerance_kj = tolerance * 4.184  # Convert Kcal/mol to kJ/mol
 
-  # Extract & remove non-biopolymers
-  prot = Protein(pdb_file)
-  prot.remove_waters()
-  prot.remove_non_biopolymers()
-  prot.save(pdb_file)
+  # Clean the input down to the biopolymer model before PDBFixer rebuilds atoms.
+  structure = parse_pdb(pdb_file, return_type="ensemble")
+  remove_waters(structure)
+  remove_non_biopolymers(structure)
+  save_pdb(structure, pdb_file)
 
   # snapshot B-factors from the cleaned input
   input_bfactor_map = _load_bfactors_from_pdb(pdb_file)

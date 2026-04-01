@@ -16,7 +16,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from neurosnap.constants import STANDARD_NUCLEOTIDES
-from neurosnap.protein import Protein
+from neurosnap.structure import Atom, Residue, Structure, StructureEnsemble, StructureStack
+from neurosnap.structure._common import resolve_model, resolve_model_id
 
 
 def ptm_func(x: np.ndarray | float, d0: float) -> np.ndarray | float:
@@ -71,7 +72,7 @@ def init_pairdict_set(chains: np.ndarray) -> Dict[str, Dict[str, set]]:
   return {c1: {c2: set() for c2 in uniq if c2 != c1} for c1 in uniq}
 
 
-# ------------------ derive residue-level arrays from Protein ------------------
+# ------------------ derive residue-level arrays from structure containers ------------------
 
 AA_SET = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"}
 NA_SET = STANDARD_NUCLEOTIDES  # canonical DNA/RNA residue names
@@ -82,33 +83,34 @@ NA_SET = STANDARD_NUCLEOTIDES  # canonical DNA/RNA residue names
 NA_PRIORITIES = (("C3'", "C3*"), ("C1'", "C1*"), ("P",))
 
 
-def _pick_atom_coord(res, is_protein: bool) -> Optional[np.ndarray]:
+def _pick_atom_coord(residue: Residue, is_protein: bool) -> Optional[np.ndarray]:
+  atom_lookup = {atom.atom_name.strip().upper(): atom for atom in residue.atoms()}
   if is_protein:
-    if "CB" in res:
-      return res["CB"].coord
-    if res.get_resname() == "GLY" and "CA" in res:
-      return res["CA"].coord
-    if "CA" in res:
-      return res["CA"].coord
+    if "CB" in atom_lookup:
+      return atom_lookup["CB"].coord
+    if residue.res_name == "GLY" and "CA" in atom_lookup:
+      return atom_lookup["CA"].coord
+    if "CA" in atom_lookup:
+      return atom_lookup["CA"].coord
     return None
   # nucleic acids
   for tier in NA_PRIORITIES:
     for name in tier:
-      if name in res:
-        return res[name].coord
+      key = name.strip().upper()
+      if key in atom_lookup:
+        return atom_lookup[key].coord
   return None
 
 
-def _is_hydrogen_atom(atom) -> bool:
-  el = getattr(atom, "element", None)
-  if el is not None and str(el).strip().upper() == "H":
+def _is_hydrogen_atom(atom: Atom) -> bool:
+  if str(atom.element).strip().upper() == "H":
     return True
-  name = atom.get_name().strip().upper()
+  name = atom.atom_name.strip().upper()
   return name.startswith("H")
 
 
-def _protein_to_residue_arrays(
-  protein,
+def _structure_to_residue_arrays(
+  structure: Structure | StructureEnsemble | StructureStack,
   model: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
   """
@@ -116,10 +118,7 @@ def _protein_to_residue_arrays(
     residue_names (N,), chains (N,), residue_numbers (N,), cb_like_coords (N,3)
   Only biopolymer residues (standard AAs or nucleotides) with a valid proxy atom are included.
   """
-  if model is None:
-    model = protein.models()[0]
-  assert model in protein.models(), f"Model {model} not present."
-
+  structure_model = resolve_model(structure, model=model)
   residue_names: List[str] = []
   chains: List[str] = []
   residue_numbers: List[int] = []
@@ -128,15 +127,13 @@ def _protein_to_residue_arrays(
 
   polymer_counter = 0
 
-  mdl = protein.structure[model]
-  # iterate in structure order to keep stable alignment
-  for chain in mdl:
-    ch_id = chain.id
-    for res in chain:
-      resname = res.get_resname()
-      if res.id[0] != " ":
+  for chain in structure_model.chains():
+    ch_id = chain.chain_id
+    for residue in chain.residues():
+      if residue.hetero:
         continue
-      resseq = int(res.id[1])
+      resname = residue.res_name
+      resseq = int(residue.res_id)
       idx = polymer_counter
       polymer_counter += 1
 
@@ -144,7 +141,7 @@ def _protein_to_residue_arrays(
       is_na = resname in NA_SET
       if not (is_aa or is_na):
         continue
-      coord = _pick_atom_coord(res, is_protein=is_aa)
+      coord = _pick_atom_coord(residue, is_protein=is_aa)
       if coord is None:
         continue  # skip residues without a good representative atom
       residue_names.append(resname)
@@ -167,7 +164,7 @@ def _protein_to_residue_arrays(
 
 
 def _protein_to_site_arrays_with_nonstandard_atoms(
-  protein,
+  structure: Structure | StructureEnsemble | StructureStack,
   model: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
   """
@@ -178,28 +175,24 @@ def _protein_to_site_arrays_with_nonstandard_atoms(
   Non-standard polymer residues (e.g., PTMs, ligands in polymer chains) contribute one
   site per non-hydrogen atom in atom order.
   """
-  if model is None:
-    model = protein.models()[0]
-  assert model in protein.models(), f"Model {model} not present."
-
+  structure_model = resolve_model(structure, model=model)
   residue_names: List[str] = []
   chains: List[str] = []
   residue_numbers: List[int] = []
   coords: List[np.ndarray] = []
 
-  mdl = protein.structure[model]
-  for chain in mdl:
-    ch_id = chain.id
-    for res in chain:
-      if res.id[0] != " ":
+  for chain in structure_model.chains():
+    ch_id = chain.chain_id
+    for residue in chain.residues():
+      if residue.hetero:
         continue
-      resname = res.get_resname()
-      resseq = int(res.id[1])
+      resname = residue.res_name
+      resseq = int(residue.res_id)
 
       is_aa = resname in AA_SET
       is_na = resname in NA_SET
       if is_aa or is_na:
-        coord = _pick_atom_coord(res, is_protein=is_aa)
+        coord = _pick_atom_coord(residue, is_protein=is_aa)
         if coord is None:
           continue
         residue_names.append(resname)
@@ -209,7 +202,7 @@ def _protein_to_site_arrays_with_nonstandard_atoms(
         continue
 
       # Non-standard residues: keep all heavy atoms as separate sites.
-      for atom in res.get_atoms():
+      for atom in residue.atoms():
         if _is_hydrogen_atom(atom):
           continue
         residue_names.append(resname)
@@ -240,7 +233,7 @@ def _classify_chains(chains: np.ndarray, residue_names: np.ndarray) -> Dict[str,
 
 
 def calculate_ipSAE(
-  protein: "Protein",
+  structure: Structure | StructureEnsemble | StructureStack,
   plddt: np.ndarray,
   pae_matrix: np.ndarray,
   *,
@@ -252,7 +245,7 @@ def calculate_ipSAE(
 ) -> Dict[str, Any]:
   """Compute ipSAE/ipTM and related interface scores for all chain pairs.
 
-  Uses a Neurosnap ``Protein`` to derive an ordered analysis list and evaluates multiple interface
+  Uses a Neurosnap structure container to derive an ordered analysis list and evaluates multiple interface
   confidence metrics between every ordered pair of chains:
   ipSAE (three d0 variants), inter-chain ipTM (d0chn), pDockQ, pDockQ2,
   and LIS. Symmetric summaries include both per-direction asymmetry and
@@ -264,10 +257,10 @@ def calculate_ipSAE(
     residue). If payload shapes do not match, it falls back to a
     token-expanded order where non-standard residues contribute one site per
     heavy atom. ``plddt`` (N,) and ``pae_matrix`` (N, N) must match whichever
-    order is selected.
+  order is selected.
 
   Args:
-    protein: Neurosnap ``Protein`` containing the structure.
+    structure: Neurosnap structure container containing the complex.
     plddt: Per-site pLDDT aligned to the selected analysis order (normalized to [0-100] NOT [0-1]).
     pae_matrix: Site-site PAE (Å) aligned to the same order.
     model: Structure model ID to analyze. Defaults to the first model.
@@ -333,6 +326,7 @@ def calculate_ipSAE(
     - pDockQ neighbors use ``pDockQ_cutoff`` on the representative-atom distances.
     - LIS averages ``(12 - PAE) / 12`` for PAE ≤ 12 Å over inter-chain pairs only.
   """
+  selected_model_id = resolve_model_id(structure, model=model)
   (
     residue_names,
     chains,
@@ -340,7 +334,7 @@ def calculate_ipSAE(
     coords_cb,
     keep_indices,
     total_polymer_residues,
-  ) = _protein_to_residue_arrays(protein, model=model)
+  ) = _structure_to_residue_arrays(structure, model=model)
 
   keep_indices = np.asarray(keep_indices, dtype=int)
   N = len(chains)
@@ -360,7 +354,7 @@ def calculate_ipSAE(
       chains_token,
       residue_nums_token,
       coords_token,
-    ) = _protein_to_site_arrays_with_nonstandard_atoms(protein, model=model)
+    ) = _protein_to_site_arrays_with_nonstandard_atoms(structure, model=model)
     Nt = len(chains_token)
     if plddt.shape == (Nt,) and pae_matrix.shape == (Nt, Nt):
       residue_names = residue_names_token
@@ -789,7 +783,7 @@ def calculate_ipSAE(
       "pae_cutoff": float(pae_cutoff),
       "dist_cutoff": float(dist_cutoff),
       "pDockQ_cutoff": float(pDockQ_cutoff),
-      "model": model if model is not None else protein.models()[0],
+      "model": selected_model_id,
     },
     "pml": pml,
     "residue_order": {

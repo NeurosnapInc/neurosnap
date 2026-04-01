@@ -10,8 +10,8 @@ import numpy as np
 import requests
 from rdkit import Chem
 
+from neurosnap.io.pdb import parse_pdb
 from neurosnap.log import logger
-from neurosnap.protein import Protein
 
 
 ### FUNCTIONS ###
@@ -240,7 +240,8 @@ def move_ligand_to_center(ligand_sdf_path, receptor_pdb_path, output_sdf_path, u
   if mol is None:
     raise ValueError("Could not parse ligand SDF.")
 
-  receptor_center = Protein(receptor_pdb_path).calculate_center_of_mass()
+  receptor = parse_pdb(receptor_pdb_path, return_type="ensemble").models()[0]
+  receptor_center = receptor.calculate_center_of_mass()
   ligand_center = get_mol_center(mol, use_mass=use_mass)
   shift = receptor_center - ligand_center
 

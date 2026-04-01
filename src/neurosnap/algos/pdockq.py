@@ -1,11 +1,14 @@
+from pathlib import Path
 from typing import Tuple, Union
 
 import numpy as np
 
-from neurosnap.protein import Protein
+from neurosnap.io.pdb import parse_pdb
+from neurosnap.structure import Structure, StructureEnsemble, StructureStack
+from neurosnap.structure._common import resolve_model
 
 
-def _chain_cb_or_gly_ca(prot: Protein, chain_id: str) -> Tuple[np.ndarray, np.ndarray]:
+def _chain_cb_or_gly_ca(structure: Structure, chain_id: str) -> Tuple[np.ndarray, np.ndarray]:
   """
   Extract per-residue coordinates and plDDT for a chain using CB atoms,
   or CA for GLY residues (matching the original pDockQ convention).
@@ -14,7 +17,7 @@ def _chain_cb_or_gly_ca(prot: Protein, chain_id: str) -> Tuple[np.ndarray, np.nd
       coords: (N, 3) array
       plddt: (N,) array aligned with coords
   """
-  df = prot.df
+  df = structure.to_dataframe()
   sel = df[(df["chain"] == chain_id) & ((df["atom_name"] == "CB") | ((df["atom_name"] == "CA") & (df["res_name"] == "GLY")))].copy()
 
   # Ensure stable ordering along the sequence
@@ -148,13 +151,18 @@ def _calc_pdockq_from_arrays(chain_coords: dict, chain_plddt: dict, dist_thresh:
   return float(pdockq), float(ppv)
 
 
-def calculate_pDockQ(structure: Union[str, Protein], chain1: str = None, chain2: str = None, dist_thresh: float = 8.0) -> Tuple[float, float]:
+def calculate_pDockQ(
+  structure: Union[str, Path, Structure, StructureEnsemble, StructureStack],
+  chain1: str = None,
+  chain2: str = None,
+  dist_thresh: float = 8.0,
+) -> Tuple[float, float]:
   """
   Calculate the predicted DockQ (pDockQ) score and corresponding PPV
   for a two-chain complex.
 
   Args:
-      structure: Protein object or a path/ID string that can be parsed by neurosnap.protein.Protein
+      structure: Structure container or PDB filepath.
       chain1: Chain ID for the first chain (e.g., "A"). If None, auto-detected if only 2 chains exist.
       chain2: Chain ID for the second chain (e.g., "B"). If None, auto-detected if only 2 chains exist.
       dist_thresh: Distance threshold (Å) for interface contacts, default 8.0
@@ -167,10 +175,10 @@ def calculate_pDockQ(structure: Union[str, Protein], chain1: str = None, chain2:
             the pDockQ score. Represents the minimum expected probability that the
             predicted interface is correct (bounded roughly 0.55-0.98 with higher being better).
   """
-  # Normalize/obtain a Protein object
-  prot = structure if isinstance(structure, Protein) else Protein(structure, format="auto")
-
-  chains = prot.chains(prot.models()[0])
+  if isinstance(structure, (str, Path)):
+    structure = parse_pdb(structure, return_type="ensemble")
+  model_structure = resolve_model(structure)
+  chains = [chain.chain_id for chain in model_structure.chains()]
 
   # Auto-detect if chains are not specified
   if chain1 is None or chain2 is None:
@@ -190,8 +198,8 @@ def calculate_pDockQ(structure: Union[str, Protein], chain1: str = None, chain2:
     raise ValueError("chain_id1 and chain_id2 must be different.")
 
   # Extract chain representatives and plDDT
-  coords1, plddt1 = _chain_cb_or_gly_ca(prot, chain1)
-  coords2, plddt2 = _chain_cb_or_gly_ca(prot, chain2)
+  coords1, plddt1 = _chain_cb_or_gly_ca(model_structure, chain1)
+  coords2, plddt2 = _chain_cb_or_gly_ca(model_structure, chain2)
 
   chain_coords = {chain1: coords1, chain2: coords2}
   chain_plddt = {chain1: plddt1, chain2: plddt2}

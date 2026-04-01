@@ -255,12 +255,12 @@ for abr, rec in AA_RECORDS.items():
   AA_ALIASES[abr] = abr
   AA_ALIASES[rec.name] = abr
 
-## Amino acid molecular weights
+## Amino acid molecular masses
 # Average residue masses (in Daltons) for amino acids *as incorporated into peptides/proteins*.
 # These values already account for the loss of one H2O molecule during peptide bond formation,
 # so they represent the contribution of each amino acid *residue* in a chain.
 # Source: https://proteomicsresource.washington.edu/protocols06/masses.php (Average masses)
-AA_WEIGHTS_PROTEIN_AVG = {
+AA_MASS_PROTEIN_AVG = {
   "A": 71.07790000,  # Alanine
   "R": 156.1856800,  # Arginine
   "N": 114.1026400,  # Asparagine
@@ -289,7 +289,7 @@ AA_WEIGHTS_PROTEIN_AVG = {
 # These use the exact mass of the most abundant isotope of each element (e.g., 12C, 1H, 16O, 14N).
 # Like the average masses above, these are residue contributions (with H2O already removed).
 # Source: https://proteomicsresource.washington.edu/protocols06/masses.php (Monoisotopic masses)
-AA_WEIGHTS_PROTEIN_MONO = {
+AA_MASS_PROTEIN_MONO = {
   "A": 71.0371138050,  # Alanine
   "R": 156.101111050,  # Arginine
   "N": 114.042927470,  # Asparagine
@@ -314,10 +314,10 @@ AA_WEIGHTS_PROTEIN_MONO = {
   "U": 150.953633405,  # selenocysteine
 }
 
-# Average molecular weights (in Daltons) of *free amino acids* (not incorporated into a chain).
+# Average molecular masses (in Daltons) of *free amino acids* (not incorporated into a chain).
 # These values include the full amino acid with terminal H and OH groups, i.e. before peptide bond formation.
 # Often used for small-molecule calculations or educational purposes, but not for intact peptides/proteins.
-AA_WEIGHTS_FREE = {
+AA_MASS_FREE = {
   "A": 89.090,  # Alanine
   "R": 174.20,  # Arginine
   "N": 132.12,  # Asparagine

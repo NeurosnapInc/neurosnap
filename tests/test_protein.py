@@ -511,7 +511,7 @@ def test_getAA_and_sanitize_and_mw_and_charge_and_pi():
     sanitize_aa_seq("ACDZ?", non_standard="reject")
 
   # molecular weight (single AA equals its residue mass)
-  from neurosnap.constants import AA_WEIGHTS_PROTEIN_AVG as AA_W
+  from neurosnap.constants import AA_MASS_PROTEIN_AVG as AA_W
 
   mw_gly = molecular_weight("G")
   assert abs(mw_gly - AA_W["G"]) < 1e-6

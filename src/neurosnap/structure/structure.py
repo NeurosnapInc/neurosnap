@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 
 import numpy as np
 
-from neurosnap.constants import AA_RECORDS, AA_WEIGHTS_PROTEIN_AVG
+from neurosnap.constants import AA_RECORDS, AA_MASS_PROTEIN_AVG
 
 ### IMPORTANT NOTES
 # Universal unit is Å.
@@ -475,7 +475,7 @@ class Structure:
   def _atom_masses(self, atom_mask: Optional[np.ndarray] = None) -> np.ndarray:
     """Return per-atom pseudo-masses derived from amino-acid residue weights.
 
-    Residue weights from :data:`AA_WEIGHTS_PROTEIN_AVG` are distributed evenly
+    Residue weights from :data:`AA_MASS_PROTEIN_AVG` are distributed evenly
     across the atoms present in each amino-acid residue. Non-amino-acid
     residues receive a mass of zero.
     """
@@ -506,7 +506,7 @@ class Structure:
         if residue_code is None and residue_record.standard_equiv_abr is not None:
           residue_code = AA_RECORDS[residue_record.standard_equiv_abr].code
         if residue_code is not None:
-          residue_mass = float(AA_WEIGHTS_PROTEIN_AVG.get(residue_code, 0.0))
+          residue_mass = float(AA_MASS_PROTEIN_AVG.get(residue_code, 0.0))
       residue_masses[residue_key] = residue_mass / atom_count if atom_count else 0.0
 
     for index, atom_index in enumerate(selected_indices):

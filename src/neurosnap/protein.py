@@ -32,7 +32,7 @@ from neurosnap.api import USER_AGENT
 from neurosnap.constants import (
   AA_ALIASES,
   AA_RECORDS,
-  AA_WEIGHTS_PROTEIN_AVG,
+  AA_MASS_PROTEIN_AVG,
   BACKBONE_ATOMS_AA,
   BACKBONE_ATOMS_DNA,
   BACKBONE_ATOMS_RNA,
@@ -1656,13 +1656,13 @@ def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool =
   return new_seq
 
 
-def molecular_weight(sequence: str, aa_mws: Dict[str, float] = AA_WEIGHTS_PROTEIN_AVG) -> float:
+def molecular_weight(sequence: str, aa_mws: Dict[str, float] = AA_MASS_PROTEIN_AVG) -> float:
   """
   Calculate the molecular weight of a protein or peptide sequence.
 
   This function computes the molecular weight by summing the residue
   masses for each amino acid in the input sequence. By default, it uses
-  average amino acid residue masses (`AA_WEIGHTS_PROTEIN_AVG`), but you
+  average amino acid residue masses (`AA_MASS_PROTEIN_AVG`), but you
   can provide a custom mass dictionary (e.g., monoisotopic or free amino
   acid masses).
 
@@ -1673,7 +1673,7 @@ def molecular_weight(sequence: str, aa_mws: Dict[str, float] = AA_WEIGHTS_PROTEI
   Args:
       sequence: Amino acid sequence (one-letter codes).
       aa_mws: Dictionary mapping amino acid one-letter codes to molecular
-          weights. Defaults to `AA_WEIGHTS_PROTEIN_AVG`.
+          weights. Defaults to `AA_MASS_PROTEIN_AVG`.
 
   Returns:
       Estimated molecular weight of the protein or peptide in Daltons (Da).
@@ -1683,12 +1683,12 @@ def molecular_weight(sequence: str, aa_mws: Dict[str, float] = AA_WEIGHTS_PROTEI
       amino acid code.
 
   Notes:
-      - Use `AA_WEIGHTS_PROTEIN_MONO` for monoisotopic mass calculations,
+      - Use `AA_MASS_PROTEIN_MONO` for monoisotopic mass calculations,
         typically used in mass spectrometry.
-      - Use `AA_WEIGHTS_PROTEIN_AVG` (default) for average residue masses,
+      - Use `AA_MASS_PROTEIN_AVG` (default) for average residue masses,
         appropriate for bulk molecular weight estimation.
       - For free amino acids (not incorporated in peptides), use
-        `AA_WEIGHTS_FREE`.
+        `AA_MASS_FREE`.
       - Weight dictionaries are defined in `constants.py`.
   """
   # Remove whitespace and convert to uppercase

@@ -107,6 +107,11 @@ class Structure:
     """Return the number of atoms in the structure."""
     return len(self.atoms)
 
+  def __repr__(self) -> str:
+    """Return a compact string summary of the structure."""
+    chain_ids = _structure_chain_ids(self)
+    return f"<Neurosnap Structure: Models=1 Chains=[{', '.join(chain_ids)}] Atoms={len(self)}>"
+
   def chains(self) -> List["Chain"]:
     """Return all chains in the structure as immutable hierarchy views.
 
@@ -382,6 +387,29 @@ def _validate_structure_model(model: Structure):
     raise ValueError('Structure atoms dtype must contain the coordinate fields "x", "y", and "z".')
 
 
+def _display_chain_id(chain_id: str) -> str:
+  """Return a printable chain identifier."""
+  return chain_id if chain_id else "<blank>"
+
+
+def _structure_chain_ids(structure: Structure) -> List[str]:
+  """Return chain identifiers from a structure in hierarchy order."""
+  return [_display_chain_id(chain.chain_id) for chain in structure.chains()]
+
+
+def _models_chain_ids(models: List[Structure]) -> List[str]:
+  """Return unique chain identifiers across models in first-seen order."""
+  seen = set()
+  chain_ids: List[str] = []
+  for model in models:
+    for chain_id in _structure_chain_ids(model):
+      if chain_id in seen:
+        continue
+      seen.add(chain_id)
+      chain_ids.append(chain_id)
+  return chain_ids
+
+
 class StructureEnsemble:
   """Ordered collection of independent ``Structure`` models.
 
@@ -417,6 +445,12 @@ class StructureEnsemble:
   def __len__(self) -> int:
     """Return the number of models in the ensemble."""
     return len(self._models)
+
+  def __repr__(self) -> str:
+    """Return a compact string summary of the ensemble."""
+    chain_ids = _models_chain_ids(self._models)
+    atom_count = sum(len(model) for model in self._models)
+    return f"<Neurosnap StructureEnsemble: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
 
   def __iter__(self) -> Iterator[Structure]:
     """Iterate over the stored models in order."""
@@ -496,6 +530,12 @@ class StructureStack:
   def __len__(self) -> int:
     """Return the number of models in the stack."""
     return self.coord.shape[0]
+
+  def __repr__(self) -> str:
+    """Return a compact string summary of the stack."""
+    chain_ids = [] if len(self) == 0 else _structure_chain_ids(self[0])
+    atom_count = len(self) * self.atom_count
+    return f"<Neurosnap StructureStack: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
 
   def __iter__(self) -> Iterator[Structure]:
     """Iterate over the stack as materialized ``Structure`` models."""

@@ -323,7 +323,7 @@ def render_pseudo3D(
   return img
 
 
-def render_protein_pseudo3D(
+def render_structure_pseudo3D(
   structure,
   *,
   model: Optional[int] = None,

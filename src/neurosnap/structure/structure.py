@@ -110,7 +110,7 @@ class Structure:
   def __repr__(self) -> str:
     """Return a compact string summary of the structure."""
     chain_ids = _structure_chain_ids(self)
-    return f"<Neurosnap Structure: Models=1 Chains=[{', '.join(chain_ids)}] Atoms={len(self)}>"
+    return f"<Structure: Models=1 Chains=[{', '.join(chain_ids)}] Atoms={len(self)}>"
 
   def chains(self) -> List["Chain"]:
     """Return all chains in the structure as immutable hierarchy views.
@@ -410,6 +410,18 @@ def _models_chain_ids(models: List[Structure]) -> List[str]:
   return chain_ids
 
 
+def _model_position_from_id(model_ids: List[int], model_id: int) -> int:
+  """Return the positional index for a model identifier.
+
+  Raises:
+    KeyError: If the requested model identifier is not present.
+  """
+  try:
+    return model_ids.index(int(model_id))
+  except ValueError:
+    raise KeyError(f"Model ID {model_id} was not found.")
+
+
 class StructureEnsemble:
   """Ordered collection of independent ``Structure`` models.
 
@@ -450,17 +462,27 @@ class StructureEnsemble:
     """Return a compact string summary of the ensemble."""
     chain_ids = _models_chain_ids(self._models)
     atom_count = sum(len(model) for model in self._models)
-    return f"<Neurosnap StructureEnsemble: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
+    return f"<Structure Ensemble: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
 
   def __iter__(self) -> Iterator[Structure]:
     """Iterate over the stored models in order."""
     return iter(self._models)
 
   def __getitem__(self, index):
-    """Return a model or sliced sub-ensemble."""
+    """Return a model by model ID or a sliced sub-ensemble by position.
+
+    Integer access uses ``model_id`` lookup rather than positional indexing, so
+    ``ensemble[5]`` returns the model whose ID is ``5``. Slice access keeps
+    normal positional semantics to preserve standard Python iteration and
+    slicing behavior.
+
+    Raises:
+      KeyError: If an integer model ID is requested but not present.
+    """
     if isinstance(index, slice):
       return StructureEnsemble(self._models[index], model_ids=self.model_ids[index], metadata=self.metadata)
-    return self._models[index]
+    model_position = _model_position_from_id(self.model_ids, index)
+    return self._models[model_position]
 
   def append(self, model: Structure, *, model_id: Optional[int] = None):
     """Append a validated model to the ensemble.
@@ -533,17 +555,25 @@ class StructureStack:
 
   def __repr__(self) -> str:
     """Return a compact string summary of the stack."""
-    chain_ids = [] if len(self) == 0 else _structure_chain_ids(self[0])
+    chain_ids = [] if len(self) == 0 else _structure_chain_ids(self._model_to_structure(0))
     atom_count = len(self) * self.atom_count
-    return f"<Neurosnap StructureStack: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
+    return f"<Structure Stack: Models={len(self)} Chains=[{', '.join(chain_ids)}] Atoms={atom_count}>"
 
   def __iter__(self) -> Iterator[Structure]:
     """Iterate over the stack as materialized ``Structure`` models."""
     for model_index in range(len(self)):
-      yield self[model_index]
+      yield self._model_to_structure(model_index)
 
   def __getitem__(self, index):
-    """Return a materialized model or sliced sub-stack."""
+    """Return a materialized model by model ID or a sliced sub-stack by position.
+
+    Integer access uses ``model_id`` lookup rather than positional indexing, so
+    ``stack[5]`` returns the model whose ID is ``5``. Slice access keeps normal
+    positional semantics to preserve standard Python slicing behavior.
+
+    Raises:
+      KeyError: If an integer model ID is requested but not present.
+    """
     if isinstance(index, slice):
       return StructureStack._from_parts(
         self.coord[index].copy(),
@@ -552,7 +582,8 @@ class StructureStack:
         model_ids=self.model_ids[index],
         metadata=self.metadata,
       )
-    return self._model_to_structure(index)
+    model_position = _model_position_from_id(self.model_ids, index)
+    return self._model_to_structure(model_position)
 
   @property
   def atom_count(self) -> int:
@@ -591,7 +622,7 @@ class StructureStack:
 
   def models(self) -> List[Structure]:
     """Materialize and return all models in the stack."""
-    return [self[index] for index in range(len(self))]
+    return [self._model_to_structure(index) for index in range(len(self))]
 
   def to_ensemble(self) -> StructureEnsemble:
     """Convert the stack into an independent ``StructureEnsemble``."""

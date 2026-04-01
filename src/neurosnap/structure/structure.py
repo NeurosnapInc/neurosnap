@@ -717,6 +717,8 @@ class Chain:
       if residue_polymer_type is None:
         continue
 
+      # Auto-detection locks onto the first polymer family encountered and then
+      # rejects incompatible mixtures later in the chain.
       if detected_polymer_type is None:
         detected_polymer_type = residue_polymer_type
       elif not _polymer_types_compatible(detected_polymer_type, residue_polymer_type):
@@ -731,6 +733,9 @@ class Chain:
 
       residue_name = residue.res_name.strip().upper()
       if residue_polymer_type == "protein":
+        # Standard amino acids map directly to one-letter codes. Modified amino
+        # acids either get skipped, emitted inline as CCD tokens, or mapped to
+        # their declared parent residue when available.
         residue_record = AA_RECORDS[residue_name]
         if residue_record.code is not None:
           residue_token = residue_record.code
@@ -750,6 +755,9 @@ class Chain:
             else:
               raise ValueError(f'Could not infer a parent sequence code for modified residue "{residue_name}".')
       else:
+        # Nucleotide handling mirrors the protein path but uses canonical
+        # one-letter base codes and a simple parent-code inference fallback for
+        # modified residues.
         if residue_name in NUC_RNA_CODES:
           residue_token = residue_name
         elif residue_name in NUC_DNA_CODES:

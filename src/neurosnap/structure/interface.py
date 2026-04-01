@@ -71,6 +71,8 @@ def calculate_bsa(
   sasa_complex = calculate_surface_area(structure_model, level=level)
   group_structures = []
   for keep_chains in (set(chain_group_1), set(chain_group_2)):
+    # BSA is defined against the isolated partners, so each group gets a
+    # filtered copy of the complex with only its chains retained.
     group_structure = Structure(remove_annotations=False)
     group_structure._dtype_atoms = structure_model._dtype_atoms
     group_structure._dtype_atom_annotations = structure_model._dtype_atom_annotations
@@ -97,7 +99,19 @@ def find_interface_contacts(
   cutoff: float = 4.5,
   hydrogens: bool = True,
 ) -> List[Tuple[Atom, Atom]]:
-  """Identify atom-atom contacts between two chains using a distance cutoff."""
+  """Identify atom-atom contacts between two chains using a distance cutoff.
+
+  Parameters:
+    structure: Input structure container.
+    chain1: First chain ID.
+    chain2: Second chain ID.
+    model: Optional model ID when selecting from an ensemble or stack.
+    cutoff: Contact cutoff distance in Å.
+    hydrogens: Whether hydrogen atoms should be included.
+
+  Returns:
+    List of contacting ``(atom1, atom2)`` pairs.
+  """
   structure_model = resolve_model(structure, model=model)
   available_chains = {chain.chain_id for chain in structure_model.chains()}
   if chain1 not in available_chains:
@@ -120,7 +134,11 @@ def find_interface_residues(
   cutoff: float = 4.5,
   hydrogens: bool = True,
 ) -> List[Tuple[Residue, Residue]]:
-  """Identify unique residue-residue contacts between two chains."""
+  """Identify unique residue-residue contacts between two chains.
+
+  Multiple atom-atom contacts between the same residue pair are collapsed into
+  one output pair.
+  """
   structure_model = resolve_model(structure, model=model)
   available_chains = {chain.chain_id for chain in structure_model.chains()}
   if chain1 not in available_chains:
@@ -157,7 +175,12 @@ def find_non_interface_hydrophobic_patches(
   patch_cutoff: float = 6.0,
   min_patch_area: float = 40.0,
 ) -> List[Set[Residue]]:
-  """Identify solvent-exposed hydrophobic patches outside specified interfaces."""
+  """Identify solvent-exposed hydrophobic patches outside specified interfaces.
+
+  Hydrophobic residues are first filtered to remove interface residues and
+  buried residues, then clustered by CA-CA proximity into connected
+  components.
+  """
   structure_model = resolve_model(structure, model=model)
   chain_pairs = [(chain1.strip(), chain2.strip()) for chain1, chain2 in chain_pairs]
   available_chains = set(available_chain_ids(structure_model))
@@ -224,6 +247,7 @@ def find_non_interface_hydrophobic_patches(
   for atom_index in range(len(coord)):
     if visited[atom_index]:
       continue
+    # Simple depth-first search over the residue-contact graph.
     stack = [atom_index]
     component = []
     while stack:

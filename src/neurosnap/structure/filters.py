@@ -34,8 +34,14 @@ def remove_non_biopolymers(structure, model: Optional[int] = None, chain: Option
 
 
 def _remove_residues(structure, predicate: Callable, model: Optional[int], chain: Optional[str]):
-  """Remove residues that satisfy a predicate from a structure-like object."""
+  """Remove residues that satisfy a predicate from a structure-like object.
+
+  For stacks, residue removal is driven by the selected model but applied to
+  the shared atom table because every model in a stack shares the same
+  annotations and bond topology.
+  """
   def residue_keep_mask(model_structure: Structure) -> np.ndarray:
+    """Build an atom keep-mask by evaluating the predicate residue-by-residue."""
     keep_mask = np.ones(len(model_structure), dtype=bool)
     residue_groups = residue_index_groups(model_structure)
 

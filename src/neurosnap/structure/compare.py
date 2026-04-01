@@ -20,6 +20,15 @@ def align(
 
   When both ``chains1`` and ``chains2`` are provided, they are interpreted as
   explicit pairwise chain mappings in matching order.
+
+  Parameters:
+    reference: Reference :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    mobile: Mobile structure container to transform in-place.
+    chains1: Optional reference chain IDs to include in the alignment.
+    chains2: Optional mobile chain IDs to include in the alignment.
+    model1: Optional reference model ID.
+    model2: Optional mobile model ID.
   """
   reference_model = resolve_model(reference, model=model1)
   mobile_model = resolve_model(mobile, model=model2)
@@ -54,10 +63,13 @@ def align(
     reference_chain_specs = [(pair_index, chain_id) for pair_index, chain_id in enumerate(chains1)]
     mobile_chain_specs = [(pair_index, chain_id) for pair_index, chain_id in enumerate(chains2)]
   else:
+    # In the default mode, chains must line up by their identifiers in both
+    # structures so the residue/atom keys can be matched directly.
     reference_chain_specs = [(chain_id, chain_id) for chain_id in chains1]
     mobile_chain_specs = [(chain_id, chain_id) for chain_id in chains2]
 
   def backbone_atom_map(structure_model, chain_specs):
+    """Build a residue-aware backbone lookup for one selected model."""
     chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
     atom_map = {}
     for map_key, chain_id in chain_specs:
@@ -89,6 +101,7 @@ def align(
 
   reference_coords = np.asarray([reference_atom_map[key] for key in common_keys], dtype=np.float32)
   mobile_coords = np.asarray([mobile_atom_map[key] for key in common_keys], dtype=np.float32)
+  # Standard Kabsch alignment on the matched backbone coordinates.
   reference_center = reference_coords.mean(axis=0)
   mobile_center = mobile_coords.mean(axis=0)
   centered_reference = reference_coords - reference_center
@@ -115,7 +128,21 @@ def calculate_rmsd(
   model2: Optional[int] = None,
   align_structures: bool = True,
 ) -> float:
-  """Calculate backbone RMSD between two structures."""
+  """Calculate backbone RMSD between two structures.
+
+  Parameters:
+    reference: Reference structure container.
+    mobile: Mobile structure container.
+    chains1: Optional reference chain IDs to include.
+    chains2: Optional mobile chain IDs to include.
+    model1: Optional reference model ID.
+    model2: Optional mobile model ID.
+    align_structures: If ``True``, align the mobile structure before computing
+      RMSD.
+
+  Returns:
+    Backbone RMSD in Å.
+  """
   if align_structures:
     align(reference, mobile, chains1=chains1, chains2=chains2, model1=model1, model2=model2)
 

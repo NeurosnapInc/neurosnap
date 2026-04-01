@@ -39,8 +39,10 @@ def select_residues(structure, selectors: str, invert: bool = False, model: Opti
 
   for selector in selectors.split(","):
     if selector in chain_ids:
+      # Whole-chain selector such as "A" or "AB".
       chain_id, residue_spec = selector, None
     elif ":" in selector:
+      # Explicit multi-character chain selector such as "AB:10-20".
       chain_id, residue_spec = selector.split(":", maxsplit=1)
       if not residue_spec:
         raise ValueError(f'Invalid selector "{selector}".')
@@ -49,6 +51,8 @@ def select_residues(structure, selectors: str, invert: bool = False, model: Opti
       if not re.fullmatch(r"\d+|\d+-\d+", residue_spec):
         raise ValueError(f'Invalid selector "{selector}".')
     else:
+      # Compact selectors such as "A10-20" are resolved by preferring the
+      # longest matching chain ID prefix.
       chain_id = None
       residue_spec = None
       for candidate_chain_id in sorted(chain_ids, key=len, reverse=True):

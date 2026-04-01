@@ -16,7 +16,12 @@ import numpy as np
 from neurosnap.log import logger
 from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
 
+__all__ = ["parse_pdb"]
+
 ReturnType = Literal["ensemble", "stack", "auto"]
+AtomKey = Tuple[str, int, str, str, bool, str]
+AltlocSite = Tuple[int, AtomKey]
+ConectRecord = Tuple[int, List[int], int]
 
 
 @dataclass(slots=True)
@@ -38,7 +43,7 @@ class _AtomRecord:
   occupancy: float
   charge: int
   altloc: str
-  atom_key: Tuple[str, int, str, str, bool, str]
+  atom_key: AtomKey
 
 
 @dataclass(slots=True)
@@ -64,12 +69,16 @@ class _ModelAccumulator:
     }
   )
   serial_to_index: Dict[int, int] = field(default_factory=dict)
-  _atom_key_to_index: Dict[Tuple[str, int, str, str, bool, str], int] = field(default_factory=dict)
-  _selected_altloc: Dict[Tuple[str, int, str, str, bool, str], Tuple[float, str, int]] = field(default_factory=dict)
-  directed_bonds: Counter = field(default_factory=Counter)
+  _atom_key_to_index: Dict[AtomKey, int] = field(default_factory=dict)
+  _selected_altloc: Dict[AtomKey, Tuple[float, str, int]] = field(default_factory=dict)
+  directed_bonds: Counter[Tuple[int, int]] = field(default_factory=Counter)
 
   def add_atom(self, atom: _AtomRecord):
-    """Add or replace a selected atom record in the current model."""
+    """Add or replace a selected atom record in the current model.
+
+    Alternate locations collapse onto the same ``atom_key`` so the model keeps
+    only one conformer per atom site.
+    """
     atom_index = self._atom_key_to_index.get(atom.atom_key)
     if atom_index is None:
       atom_index = len(self.atoms)
@@ -140,6 +149,8 @@ class _ModelAccumulator:
     bond_rows = []
     undirected_bonds: Dict[Tuple[int, int], int] = {}
     for (atom_i, atom_j), count in self.directed_bonds.items():
+      # PDB ``CONECT`` records may appear in both directions, so bond order is
+      # determined from the strongest directed count for each undirected pair.
       pair = (min(atom_i, atom_j), max(atom_i, atom_j))
       undirected_bonds[pair] = max(undirected_bonds.get(pair, 0), count)
 
@@ -212,11 +223,13 @@ def parse_pdb(
   if format not in {"auto", "pdb"}:
     raise ValueError('format must be either "auto" or "pdb".')
 
+  # ``auto`` is accepted to match the higher-level Protein API even though
+  # this parser only supports PDB input.
   lines = _read_lines(pdb)
   if not lines:
     raise ValueError("Empty file.")
 
-  altloc_sites: set[Tuple[int, Tuple[str, int, str, str, bool, str]]] = set()
+  altloc_sites: set[AltlocSite] = set()
   ensemble = _parse_pdb_models(lines, altloc_sites)
   ensemble.metadata["source_format"] = "pdb"
 
@@ -239,20 +252,23 @@ def parse_pdb(
 
 def _parse_pdb_models(
   lines: Iterable[str],
-  altloc_sites: set[Tuple[int, Tuple[str, int, str, str, bool, str]]],
+  altloc_sites: set[AltlocSite],
 ) -> StructureEnsemble:
-  """Parse atomic records into a :class:`StructureEnsemble`."""
-  pending_conect: List[Tuple[int, List[int], int]] = []
+  """Parse PDB coordinate records into a :class:`StructureEnsemble`.
+
+  The parser accumulates each model independently and applies ``CONECT``
+  records only after all atoms are known so serial-number lookups are complete.
+  """
+  pending_conect: List[ConectRecord] = []
   models: List[_ModelAccumulator] = []
   current_model: Optional[_ModelAccumulator] = None
   implicit_model_id = 0
 
   for line_number, raw_line in enumerate(lines, start=1):
-    line = raw_line.rstrip("\n")
-    if not line.strip():
+    if not raw_line.strip():
       continue
 
-    padded_line = line.ljust(80)
+    padded_line = raw_line.ljust(80)
     record_type = padded_line[0:6]
 
     if record_type == "MODEL ":
@@ -274,6 +290,8 @@ def _parse_pdb_models(
 
       atom = _parse_atom_record(padded_line, record_type, line_number)
       if atom.altloc:
+        # Altlocs are dropped later inside ``add_atom()``, but the parser keeps
+        # track of affected sites so it can emit one summary warning.
         altloc_sites.add((current_model.model_id, atom.atom_key))
       current_model.add_atom(atom)
       continue
@@ -297,7 +315,7 @@ def _parse_pdb_models(
   return ensemble
 
 
-def _apply_conect_records(models: List[_ModelAccumulator], pending_conect: List[Tuple[int, List[int], int]]):
+def _apply_conect_records(models: List[_ModelAccumulator], pending_conect: List[ConectRecord]):
   """Apply stored ``CONECT`` records to all models that contain the referenced serials."""
   for source_serial, target_serials, line_number in pending_conect:
     found_match = False
@@ -323,7 +341,11 @@ def _parse_model_id(line: str, line_number: int) -> int:
 
 
 def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRecord:
-  """Parse a single ``ATOM`` or ``HETATM`` record."""
+  """Parse a single ``ATOM`` or ``HETATM`` record.
+
+  The parser is intentionally strict about required fields such as residue
+  names and element assignments so ambiguous files fail early.
+  """
   try:
     atom_id = int(line[6:11].strip())
     atom_name = line[12:16].strip()
@@ -350,6 +372,8 @@ def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRe
 
   charge = _parse_charge(line[78:80], line_number)
   hetero = record_type == "HETATM"
+  # Altloc is excluded from the identity key so alternate conformers collapse
+  # onto a single atom site during model accumulation.
   atom_key = (chain_id, res_id, ins_code, res_name, hetero, atom_name)
   return _AtomRecord(
     x=x,
@@ -419,7 +443,11 @@ def _parse_charge(field: str, line_number: int) -> int:
 
 
 def _read_lines(file: Union[str, pathlib.Path, io.IOBase]) -> List[str]:
-  """Read all lines from a filepath or file handle."""
+  """Read all lines from a filepath or file handle.
+
+  Text and binary file handles are both accepted to match the existing
+  ``Protein`` loader conventions.
+  """
   if isinstance(file, (str, pathlib.Path)):
     with open(file, "rt", encoding="utf-8") as handle:
       return handle.read().splitlines()

@@ -1,13 +1,13 @@
 """Physical property calculations for Neurosnap structures."""
 
 from math import pi
-from typing import Dict, Optional
+from typing import Optional
 
 import numpy as np
 
 from neurosnap.constants import VDW_RADII_BONDI
 
-from ._common import classify_polymer_residue, coord_matrix, resolve_model, residue_key
+from ._common import classify_polymer_residue, coord_matrix, resolve_model
 
 
 def calculate_surface_area(

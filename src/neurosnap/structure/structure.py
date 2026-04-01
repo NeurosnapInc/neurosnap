@@ -489,11 +489,12 @@ class StructureEnsemble:
 
     Parameters:
       model: Model to append.
-      model_id: Optional model identifier. Defaults to the next sequential index.
+      model_id: Optional model identifier. Defaults to the next sequential
+        model ID starting at ``1``.
     """
     _validate_structure_model(model)
     self._models.append(model)
-    self.model_ids.append(len(self.model_ids) if model_id is None else int(model_id))
+    self.model_ids.append(len(self.model_ids) + 1 if model_id is None else int(model_id))
 
   def models(self) -> List[Structure]:
     """Return the models as a shallow copied list."""
@@ -595,7 +596,8 @@ class StructureStack:
 
     Parameters:
       model: Model to append.
-      model_id: Optional model identifier. Defaults to the next sequential index.
+      model_id: Optional model identifier. Defaults to the next sequential
+        model ID starting at ``1``.
 
     Raises:
       ValueError: If the candidate model is not compatible with the existing
@@ -618,7 +620,7 @@ class StructureStack:
       self._ensure_stack_compatible(reference, model)
       self.coord = np.concatenate((self.coord, coord[np.newaxis, ...]), axis=0)
 
-    self.model_ids.append(len(self.model_ids) if model_id is None else int(model_id))
+    self.model_ids.append(len(self.model_ids) + 1 if model_id is None else int(model_id))
 
   def models(self) -> List[Structure]:
     """Materialize and return all models in the stack."""
@@ -656,7 +658,7 @@ class StructureStack:
     stack.atom_annotations = np.array(atom_annotations, dtype=atom_annotations.dtype, copy=True)
     stack._dtype_bond = bonds.dtype
     stack.bonds = np.array(bonds, dtype=bonds.dtype, copy=True)
-    stack.model_ids = list(range(coord.shape[0])) if model_ids is None else [int(x) for x in model_ids]
+    stack.model_ids = list(range(1, coord.shape[0] + 1)) if model_ids is None else [int(x) for x in model_ids]
     if len(stack.model_ids) != coord.shape[0]:
       raise ValueError("model_ids must match the number of models in coord.")
     return stack

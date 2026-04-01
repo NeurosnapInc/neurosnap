@@ -261,7 +261,7 @@ def _parse_pdb_models(
   pending_conect: List[ConectRecord] = []
   models: List[_ModelAccumulator] = []
   current_model: Optional[_ModelAccumulator] = None
-  implicit_model_id = 0
+  implicit_model_id = 1
 
   for line_number, raw_line in enumerate(lines, start=1):
     if not raw_line.strip():

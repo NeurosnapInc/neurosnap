@@ -2,7 +2,6 @@ import re
 from collections import Counter
 from types import Dict
 
-from neurosnap.api import USER_AGENT
 from neurosnap.constants import (
   AA_ALIASES,
   AA_MASS_PROTEIN_AVG,

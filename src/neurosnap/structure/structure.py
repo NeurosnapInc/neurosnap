@@ -8,7 +8,7 @@ Universal unit is Å.
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 
 import numpy as np
 
@@ -303,3 +303,216 @@ class Chain:
 
   def residues(self) -> List[Residue]:
     return list(self._residues)
+
+
+def _validate_structure_model(model: Structure):
+  if not isinstance(model, Structure):
+    raise TypeError(f"Expected a Structure instance, found {type(model).__name__}.")
+  if len(model.atoms) != len(model.atom_annotations):
+    raise ValueError("Structure atoms and atom_annotations must have the same length.")
+  if model.atoms.dtype.names != ("x", "y", "z"):
+    raise ValueError('Structure atoms dtype must contain the coordinate fields "x", "y", and "z".')
+
+
+class StructureEnsemble:
+  """Ordered collection of independent Structure models."""
+
+  def __init__(
+    self,
+    models: Optional[List[Structure]] = None,
+    *,
+    model_ids: Optional[List[int]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+  ):
+    self.metadata: Dict[str, Any] = dict(metadata or {})
+    self._models: List[Structure] = []
+    self.model_ids: List[int] = []
+
+    models = models or []
+    if model_ids is not None and len(model_ids) != len(models):
+      raise ValueError("model_ids must have the same length as models.")
+
+    for index, model in enumerate(models):
+      model_id = None if model_ids is None else model_ids[index]
+      self.append(model, model_id=model_id)
+
+  def __len__(self) -> int:
+    return len(self._models)
+
+  def __iter__(self) -> Iterator[Structure]:
+    return iter(self._models)
+
+  def __getitem__(self, index):
+    if isinstance(index, slice):
+      return StructureEnsemble(self._models[index], model_ids=self.model_ids[index], metadata=self.metadata)
+    return self._models[index]
+
+  def append(self, model: Structure, *, model_id: Optional[int] = None):
+    _validate_structure_model(model)
+    self._models.append(model)
+    self.model_ids.append(len(self.model_ids) if model_id is None else int(model_id))
+
+  def models(self) -> List[Structure]:
+    return list(self._models)
+
+  def to_stack(self) -> "StructureStack":
+    return StructureStack(self._models, model_ids=self.model_ids, metadata=self.metadata)
+
+
+class StructureStack:
+  """Shared-annotation, shared-bond multi-model fast path."""
+
+  def __init__(
+    self,
+    models: Optional[List[Structure]] = None,
+    *,
+    model_ids: Optional[List[int]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+  ):
+    self.metadata: Dict[str, Any] = dict(metadata or {})
+    self.model_ids: List[int] = []
+
+    template = Structure(remove_annotations=False)
+    self._dtype_atoms = template._dtype_atoms
+    self._dtype_atom_annotations = template._dtype_atom_annotations
+    self._dtype_bond = template._dtype_bond
+    self.coord = np.zeros((0, 0, 3), dtype=np.float32)
+    self.atom_annotations = np.zeros(0, dtype=self._dtype_atom_annotations)
+    self.bonds = np.zeros(0, dtype=self._dtype_bond)
+
+    models = models or []
+    if model_ids is not None and len(model_ids) != len(models):
+      raise ValueError("model_ids must have the same length as models.")
+
+    for index, model in enumerate(models):
+      model_id = None if model_ids is None else model_ids[index]
+      self.append(model, model_id=model_id)
+
+  def __len__(self) -> int:
+    return self.coord.shape[0]
+
+  def __iter__(self) -> Iterator[Structure]:
+    for model_index in range(len(self)):
+      yield self[model_index]
+
+  def __getitem__(self, index):
+    if isinstance(index, slice):
+      return StructureStack._from_parts(
+        self.coord[index].copy(),
+        self.atom_annotations.copy(),
+        self.bonds.copy(),
+        model_ids=self.model_ids[index],
+        metadata=self.metadata,
+      )
+    return self._model_to_structure(index)
+
+  @property
+  def atom_count(self) -> int:
+    return self.coord.shape[1]
+
+  def append(self, model: Structure, *, model_id: Optional[int] = None):
+    _validate_structure_model(model)
+    coord = self._coord_matrix_from_structure(model)
+
+    if len(self) == 0:
+      self._dtype_atoms = model._dtype_atoms
+      self._dtype_atom_annotations = model._dtype_atom_annotations
+      self._dtype_bond = model._dtype_bond
+      self.coord = coord[np.newaxis, ...]
+      self.atom_annotations = np.array(model.atom_annotations, dtype=model.atom_annotations.dtype, copy=True)
+      self.bonds = np.array(model.bonds, dtype=model.bonds.dtype, copy=True)
+    else:
+      reference = self._model_to_structure(0)
+      self._ensure_stack_compatible(reference, model)
+      self.coord = np.concatenate((self.coord, coord[np.newaxis, ...]), axis=0)
+
+    self.model_ids.append(len(self.model_ids) if model_id is None else int(model_id))
+
+  def models(self) -> List[Structure]:
+    return [self[index] for index in range(len(self))]
+
+  def to_ensemble(self) -> StructureEnsemble:
+    return StructureEnsemble(self.models(), model_ids=self.model_ids, metadata=self.metadata)
+
+  @classmethod
+  def from_ensemble(cls, ensemble: StructureEnsemble) -> "StructureStack":
+    return cls(ensemble.models(), model_ids=ensemble.model_ids, metadata=ensemble.metadata)
+
+  @classmethod
+  def _from_parts(
+    cls,
+    coord: np.ndarray,
+    atom_annotations: np.ndarray,
+    bonds: np.ndarray,
+    *,
+    model_ids: Optional[List[int]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+  ) -> "StructureStack":
+    coord = np.asarray(coord, dtype=np.float32)
+    if coord.ndim != 3 or coord.shape[2] != 3:
+      raise ValueError("StructureStack coordinates must have shape (n_models, n_atoms, 3).")
+    if len(atom_annotations) != coord.shape[1]:
+      raise ValueError("Shared atom annotations must match the atom dimension of coord.")
+
+    stack = cls(metadata=metadata)
+    stack.coord = coord.copy()
+    stack._dtype_atom_annotations = atom_annotations.dtype
+    stack.atom_annotations = np.array(atom_annotations, dtype=atom_annotations.dtype, copy=True)
+    stack._dtype_bond = bonds.dtype
+    stack.bonds = np.array(bonds, dtype=bonds.dtype, copy=True)
+    stack.model_ids = list(range(coord.shape[0])) if model_ids is None else [int(x) for x in model_ids]
+    if len(stack.model_ids) != coord.shape[0]:
+      raise ValueError("model_ids must match the number of models in coord.")
+    return stack
+
+  def _model_to_structure(self, model_index: int) -> Structure:
+    atoms = self._atoms_from_coord_matrix(self.coord[model_index], self._dtype_atoms)
+    metadata = dict(self.metadata)
+    metadata["model_id"] = self.model_ids[model_index]
+    return self._structure_from_parts(atoms, self.atom_annotations, self.bonds, metadata=metadata)
+
+  @staticmethod
+  def _coord_matrix_from_structure(model: Structure) -> np.ndarray:
+    if len(model.atoms) == 0:
+      return np.zeros((0, 3), dtype=np.float32)
+    return np.column_stack((model.atoms["x"], model.atoms["y"], model.atoms["z"])).astype(np.float32, copy=False)
+
+  @staticmethod
+  def _atoms_from_coord_matrix(coord: np.ndarray, dtype: np.dtype) -> np.ndarray:
+    coord = np.asarray(coord, dtype=np.float32)
+    if coord.ndim != 2 or coord.shape[1] != 3:
+      raise ValueError("Coordinate matrix must have shape (n_atoms, 3).")
+
+    atoms = np.empty(coord.shape[0], dtype=dtype)
+    atoms["x"] = coord[:, 0]
+    atoms["y"] = coord[:, 1]
+    atoms["z"] = coord[:, 2]
+    return atoms
+
+  @staticmethod
+  def _structure_from_parts(
+    atoms: np.ndarray,
+    atom_annotations: np.ndarray,
+    bonds: np.ndarray,
+    metadata: Optional[Mapping[str, Any]] = None,
+  ) -> Structure:
+    model = Structure(remove_annotations=False)
+    model._dtype_atoms = atoms.dtype
+    model._dtype_atom_annotations = atom_annotations.dtype
+    model._dtype_bond = bonds.dtype
+    model.atoms = np.array(atoms, dtype=atoms.dtype, copy=True)
+    model.atom_annotations = np.array(atom_annotations, dtype=atom_annotations.dtype, copy=True)
+    model.bonds = np.array(bonds, dtype=bonds.dtype, copy=True)
+    model.metadata = dict(metadata or {})
+    return model
+
+  @staticmethod
+  def _ensure_stack_compatible(reference: Structure, candidate: Structure):
+    if len(reference) != len(candidate):
+      raise ValueError("StructureStack requires each model to have the same number of atoms.")
+    if reference._dtype_atom_annotations != candidate._dtype_atom_annotations:
+      raise ValueError("StructureStack requires identical annotation schemas across all models.")
+    if not np.array_equal(reference.atom_annotations, candidate.atom_annotations):
+      raise ValueError("StructureStack requires identical atom annotations across all models.")
+    if reference.bonds.dtype != candidate.bonds.dtype or not np.array_equal(reference.bonds, candidate.bonds):
+      raise ValueError("StructureStack requires identical bonds across all models.")

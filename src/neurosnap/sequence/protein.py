@@ -1,6 +1,6 @@
 import re
 from collections import Counter
-from types import Dict
+from typing import Dict
 
 from neurosnap.constants import (
   AA_ALIASES,

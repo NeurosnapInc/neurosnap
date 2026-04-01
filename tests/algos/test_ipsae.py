@@ -215,7 +215,7 @@ def test_calculate_ipsae_accepts_nucleic_acids():
   pdbio.save(handle)
   handle.seek(0)
 
-  structure = parse_pdb(handle, format="pdb", return_type="ensemble")
+  structure = parse_pdb(handle, return_type="ensemble")
 
   plddt = np.full(4, 90.0, dtype=float)
   pae = np.full((4, 4), 5.0, dtype=float)
@@ -265,7 +265,7 @@ def test_calculate_ipsae_prunes_nonstandard_residues():
   pdbio.save(handle)
   handle.seek(0)
 
-  structure = parse_pdb(handle, format="pdb", return_type="ensemble")
+  structure = parse_pdb(handle, return_type="ensemble")
 
   # pLDDT/PAE include the non-standard residue; ipSAE should prune it automatically
   plddt = np.array([50.0, 90.0, 80.0], dtype=float)
@@ -312,7 +312,7 @@ def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
   pdbio.set_structure(structure)
   pdbio.save(handle)
   handle.seek(0)
-  structure = parse_pdb(handle, format="pdb", return_type="ensemble")
+  structure = parse_pdb(handle, return_type="ensemble")
 
   # Token-expanded payload:
   #   ALA(1) -> 1 representative token

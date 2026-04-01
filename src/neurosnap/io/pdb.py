@@ -181,7 +181,6 @@ class _ModelAccumulator:
 
 def parse_pdb(
   pdb: Union[str, pathlib.Path, io.IOBase],
-  format: str = "auto",
   return_type: ReturnType = "auto",
 ) -> Union[StructureEnsemble, StructureStack]:
   """Parse a PDB file into Neurosnap structure containers.
@@ -208,8 +207,6 @@ def parse_pdb(
 
   Parameters:
     pdb: PDB filepath or open file handle.
-    format: Input format. ``"auto"`` and ``"pdb"`` are accepted. Since this
-      parser only supports PDB files, ``"auto"`` resolves to ``"pdb"``.
     return_type: Output container type. ``"ensemble"`` always returns a
       :class:`StructureEnsemble`, ``"stack"`` requires stack-compatible models,
       and ``"auto"`` returns a :class:`StructureStack` when possible or falls
@@ -221,11 +218,6 @@ def parse_pdb(
   """
   if return_type not in {"ensemble", "stack", "auto"}:
     raise ValueError('return_type must be one of "ensemble", "stack", or "auto".')
-  if format not in {"auto", "pdb"}:
-    raise ValueError('format must be either "auto" or "pdb".')
-
-  # ``auto`` is accepted for loader consistency even though this parser only
-  # supports PDB input.
   lines = _read_lines(pdb)
   if not lines:
     raise ValueError("Empty file.")

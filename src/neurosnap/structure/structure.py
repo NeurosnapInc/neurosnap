@@ -21,6 +21,41 @@ import numpy as np
 # In PDB files repeated bonds will correspond to bonds being interpreted at a higher order. For instance if atom i and j have two records for bonds in a PDB file this will be interpreted as them having a double bond.
 # Each structure corresponds to a single model ONLY, the StructureEnsemble object should be used instead for an ordered collection of models (OR optional later: StructureStack = shared-annotation multi-model fast path, only when all models have identical atoms/bonds)
 
+# Average atomic masses (Da) for common elements found in biopolymer and
+# small-molecule structures. These are used for center-of-mass calculations.
+_ATOMIC_MASSES = {
+  "H": 1.008,
+  "B": 10.81,
+  "C": 12.011,
+  "N": 14.007,
+  "O": 15.999,
+  "F": 18.998403163,
+  "NA": 22.98976928,
+  "MG": 24.305,
+  "AL": 26.9815385,
+  "SI": 28.085,
+  "P": 30.973761998,
+  "S": 32.06,
+  "CL": 35.45,
+  "K": 39.0983,
+  "CA": 40.078,
+  "MN": 54.938044,
+  "FE": 55.845,
+  "CO": 58.933194,
+  "NI": 58.6934,
+  "CU": 63.546,
+  "ZN": 65.38,
+  "SE": 78.971,
+  "BR": 79.904,
+  "MO": 95.95,
+  "AG": 107.8682,
+  "CD": 112.414,
+  "SN": 118.710,
+  "I": 126.90447,
+  "HG": 200.592,
+  "PB": 207.2,
+}
+
 
 class Structure:
   """Single-model molecular structure container.
@@ -154,6 +189,149 @@ class Structure:
         )
       chains.append(Chain(chain_id=chain_id, _residues=tuple(residues)))
     return chains
+
+  def renumber(self, chain: Optional[str] = None, start: int = 1):
+    """Renumber residues in-place.
+
+    Parameters:
+      chain: Chain ID to renumber. If ``None``, all chains are renumbered in
+        chain order using one continuous counter.
+      start: Starting residue number.
+    """
+    if chain is not None and chain not in self._available_chain_ids():
+      raise ValueError(f'Chain "{chain}" was not found in the structure.')
+
+    residue_number = int(start)
+    residue_map: Dict[Tuple[str, int, str, str, bool], int] = {}
+    for chain_view in self.chains():
+      if chain is not None and chain_view.chain_id != chain:
+        continue
+      for residue in chain_view.residues():
+        residue_key = (residue.chain_id, residue.res_id, residue.ins_code, residue.res_name, residue.hetero)
+        residue_map[residue_key] = residue_number
+        residue_number += 1
+
+    if not residue_map:
+      return
+
+    for atom_index in range(len(self)):
+      residue_key = (
+        self._annotation_value("chain_id", atom_index),
+        self._annotation_value("res_id", atom_index),
+        self._annotation_value("ins_code", atom_index),
+        self._annotation_value("res_name", atom_index),
+        self._annotation_value("hetero", atom_index),
+      )
+      if residue_key in residue_map:
+        self.atom_annotations["res_id"][atom_index] = residue_map[residue_key]
+
+  def translate(
+    self,
+    x: float = 0.0,
+    y: float = 0.0,
+    z: float = 0.0,
+    chains: Optional[List[str]] = None,
+  ):
+    """Translate selected atoms in-place by a fixed vector.
+
+    Parameters:
+      x: Translation along the x-axis.
+      y: Translation along the y-axis.
+      z: Translation along the z-axis.
+      chains: Optional chain IDs to translate. If ``None``, all atoms are
+        translated.
+    """
+    atom_mask = self._atom_mask(chains=chains)
+    self.atoms["x"][atom_mask] += float(x)
+    self.atoms["y"][atom_mask] += float(y)
+    self.atoms["z"][atom_mask] += float(z)
+
+  def center_at(
+    self,
+    x: float = 0.0,
+    y: float = 0.0,
+    z: float = 0.0,
+    chains: Optional[List[str]] = None,
+  ):
+    """Translate selected atoms so their center of mass matches a target point.
+
+    Parameters:
+      x: Target x-coordinate for the center of mass.
+      y: Target y-coordinate for the center of mass.
+      z: Target z-coordinate for the center of mass.
+      chains: Optional chain IDs to center. If ``None``, all atoms are used.
+    """
+    target = np.array([x, y, z], dtype=np.float32)
+    center_of_mass = self.calculate_center_of_mass(chains=chains)
+    translation = target - center_of_mass
+    self.translate(x=float(translation[0]), y=float(translation[1]), z=float(translation[2]), chains=chains)
+
+  def calculate_center_of_mass(self, chains: Optional[List[str]] = None) -> np.ndarray:
+    """Calculate the center of mass for the selected atoms.
+
+    Parameters:
+      chains: Optional chain IDs to include. If ``None``, all atoms are used.
+
+    Returns:
+      A length-3 NumPy array containing the center of mass in Å.
+
+    Raises:
+      ValueError: If no selected atoms have a known atomic mass.
+    """
+    atom_mask = self._atom_mask(chains=chains)
+    if not np.any(atom_mask):
+      raise ValueError("No atoms were found in the selected structure.")
+
+    coord = self._coord_matrix(atom_mask=atom_mask)
+    masses = self._atom_masses(atom_mask=atom_mask)
+    known_mass_mask = masses > 0.0
+    if not np.any(known_mass_mask):
+      raise ValueError("No atoms with known masses were found in the selected structure.")
+
+    return np.average(coord[known_mass_mask], axis=0, weights=masses[known_mass_mask])
+
+  def distances_from(self, point: np.ndarray, chains: Optional[List[str]] = None) -> np.ndarray:
+    """Calculate distances from a point for the selected atoms.
+
+    Parameters:
+      point: Reference point as an array-like object with shape ``(3,)``.
+      chains: Optional chain IDs to include. If ``None``, all atoms are used.
+
+    Returns:
+      A 1D NumPy array containing Euclidean distances in atom-table order.
+    """
+    point = np.asarray(point, dtype=np.float32)
+    if point.shape != (3,):
+      raise ValueError("Point must be an array-like object with shape (3,).")
+
+    atom_mask = self._atom_mask(chains=chains)
+    coord = self._coord_matrix(atom_mask=atom_mask)
+    if coord.size == 0:
+      return np.zeros(0, dtype=np.float32)
+
+    return np.linalg.norm(coord - point, axis=1)
+
+  def calculate_rog(self, chains: Optional[List[str]] = None, center: Optional[np.ndarray] = None) -> float:
+    """Calculate the radius of gyration for the selected atoms.
+
+    Parameters:
+      chains: Optional chain IDs to include. If ``None``, all atoms are used.
+      center: Optional reference point. If ``None``, the center of mass is used.
+
+    Returns:
+      Radius of gyration in Å.
+    """
+    atom_mask = self._atom_mask(chains=chains)
+    if not np.any(atom_mask):
+      return 0.0
+
+    if center is None:
+      center = self.calculate_center_of_mass(chains=chains)
+    distances = self.distances_from(center, chains=chains)
+    if distances.size == 0:
+      return 0.0
+
+    return float(np.sqrt(np.mean(distances**2)))
 
   def add_annotation(
     self,
@@ -297,6 +475,46 @@ class Structure:
     if isinstance(value, np.generic):
       return value.item()
     return value
+
+  def _available_chain_ids(self) -> List[str]:
+    """Return chain identifiers present in the structure in first-seen order."""
+    chain_ids = []
+    seen = set()
+    for chain_id in self.atom_annotations["chain_id"]:
+      chain_id = str(chain_id)
+      if chain_id in seen:
+        continue
+      seen.add(chain_id)
+      chain_ids.append(chain_id)
+    return chain_ids
+
+  def _atom_mask(self, chains: Optional[List[str]] = None) -> np.ndarray:
+    """Return a boolean mask for atoms in the selected chains."""
+    if chains is None:
+      return np.ones(len(self), dtype=bool)
+
+    selected_chains = [str(chain_id) for chain_id in chains]
+    missing_chains = sorted(set(selected_chains) - set(self._available_chain_ids()))
+    if missing_chains:
+      raise ValueError(f'Chain(s) {", ".join(missing_chains)} were not found in the structure.')
+
+    return np.isin(self.atom_annotations["chain_id"], selected_chains)
+
+  def _coord_matrix(self, atom_mask: Optional[np.ndarray] = None) -> np.ndarray:
+    """Return atom coordinates as an ``(n_atoms, 3)`` matrix."""
+    if atom_mask is None:
+      atom_mask = np.ones(len(self), dtype=bool)
+    return np.column_stack((self.atoms["x"][atom_mask], self.atoms["y"][atom_mask], self.atoms["z"][atom_mask])).astype(np.float32, copy=False)
+
+  def _atom_masses(self, atom_mask: Optional[np.ndarray] = None) -> np.ndarray:
+    """Return per-atom masses derived from the element annotation."""
+    if atom_mask is None:
+      atom_mask = np.ones(len(self), dtype=bool)
+
+    masses = np.zeros(int(np.count_nonzero(atom_mask)), dtype=np.float32)
+    for index, element in enumerate(self.atom_annotations["element"][atom_mask]):
+      masses[index] = _ATOMIC_MASSES.get(str(element).strip().upper(), 0.0)
+    return masses
 
   def _atom_view(self, atom_index: int) -> "Atom":
     """Create an immutable :class:`Atom` view for one atom index."""

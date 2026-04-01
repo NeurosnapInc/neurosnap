@@ -14,48 +14,14 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 
 import numpy as np
 
+from neurosnap.constants import AA_RECORDS, AA_WEIGHTS_PROTEIN_AVG
+
 ### IMPORTANT NOTES
 # Universal unit is Å.
 # This new Structure object does not care about altlocs and will automatically drop them
 # Hetatoms are stored with proper bond information
 # In PDB files repeated bonds will correspond to bonds being interpreted at a higher order. For instance if atom i and j have two records for bonds in a PDB file this will be interpreted as them having a double bond.
 # Each structure corresponds to a single model ONLY, the StructureEnsemble object should be used instead for an ordered collection of models (OR optional later: StructureStack = shared-annotation multi-model fast path, only when all models have identical atoms/bonds)
-
-# Average atomic masses (Da) for common elements found in biopolymer and
-# small-molecule structures. These are used for center-of-mass calculations.
-_ATOMIC_MASSES = {
-  "H": 1.008,
-  "B": 10.81,
-  "C": 12.011,
-  "N": 14.007,
-  "O": 15.999,
-  "F": 18.998403163,
-  "NA": 22.98976928,
-  "MG": 24.305,
-  "AL": 26.9815385,
-  "SI": 28.085,
-  "P": 30.973761998,
-  "S": 32.06,
-  "CL": 35.45,
-  "K": 39.0983,
-  "CA": 40.078,
-  "MN": 54.938044,
-  "FE": 55.845,
-  "CO": 58.933194,
-  "NI": 58.6934,
-  "CU": 63.546,
-  "ZN": 65.38,
-  "SE": 78.971,
-  "BR": 79.904,
-  "MO": 95.95,
-  "AG": 107.8682,
-  "CD": 112.414,
-  "SN": 118.710,
-  "I": 126.90447,
-  "HG": 200.592,
-  "PB": 207.2,
-}
-
 
 class Structure:
   """Single-model molecular structure container.
@@ -276,7 +242,7 @@ class Structure:
       A length-3 NumPy array containing the center of mass in Å.
 
     Raises:
-      ValueError: If no selected atoms have a known atomic mass.
+      ValueError: If no selected atoms have a known amino-acid residue mass.
     """
     atom_mask = self._atom_mask(chains=chains)
     if not np.any(atom_mask):
@@ -286,7 +252,7 @@ class Structure:
     masses = self._atom_masses(atom_mask=atom_mask)
     known_mass_mask = masses > 0.0
     if not np.any(known_mass_mask):
-      raise ValueError("No atoms with known masses were found in the selected structure.")
+      raise ValueError("No atoms with known amino-acid residue masses were found in the selected structure.")
 
     return np.average(coord[known_mass_mask], axis=0, weights=masses[known_mass_mask])
 
@@ -507,13 +473,52 @@ class Structure:
     return np.column_stack((self.atoms["x"][atom_mask], self.atoms["y"][atom_mask], self.atoms["z"][atom_mask])).astype(np.float32, copy=False)
 
   def _atom_masses(self, atom_mask: Optional[np.ndarray] = None) -> np.ndarray:
-    """Return per-atom masses derived from the element annotation."""
+    """Return per-atom pseudo-masses derived from amino-acid residue weights.
+
+    Residue weights from :data:`AA_WEIGHTS_PROTEIN_AVG` are distributed evenly
+    across the atoms present in each amino-acid residue. Non-amino-acid
+    residues receive a mass of zero.
+    """
     if atom_mask is None:
       atom_mask = np.ones(len(self), dtype=bool)
 
-    masses = np.zeros(int(np.count_nonzero(atom_mask)), dtype=np.float32)
-    for index, element in enumerate(self.atom_annotations["element"][atom_mask]):
-      masses[index] = _ATOMIC_MASSES.get(str(element).strip().upper(), 0.0)
+    selected_indices = np.flatnonzero(atom_mask)
+    masses = np.zeros(len(selected_indices), dtype=np.float32)
+    residue_counts: Dict[Tuple[str, int, str, str, bool], int] = {}
+    residue_masses: Dict[Tuple[str, int, str, str, bool], float] = {}
+
+    for atom_index in selected_indices:
+      residue_key = (
+        self._annotation_value("chain_id", atom_index),
+        self._annotation_value("res_id", atom_index),
+        self._annotation_value("ins_code", atom_index),
+        self._annotation_value("res_name", atom_index),
+        self._annotation_value("hetero", atom_index),
+      )
+      residue_counts[residue_key] = residue_counts.get(residue_key, 0) + 1
+
+    for residue_key, atom_count in residue_counts.items():
+      residue_name = residue_key[3]
+      residue_record = AA_RECORDS.get(residue_name)
+      residue_mass = 0.0
+      if residue_record is not None:
+        residue_code = residue_record.code
+        if residue_code is None and residue_record.standard_equiv_abr is not None:
+          residue_code = AA_RECORDS[residue_record.standard_equiv_abr].code
+        if residue_code is not None:
+          residue_mass = float(AA_WEIGHTS_PROTEIN_AVG.get(residue_code, 0.0))
+      residue_masses[residue_key] = residue_mass / atom_count if atom_count else 0.0
+
+    for index, atom_index in enumerate(selected_indices):
+      residue_key = (
+        self._annotation_value("chain_id", atom_index),
+        self._annotation_value("res_id", atom_index),
+        self._annotation_value("ins_code", atom_index),
+        self._annotation_value("res_name", atom_index),
+        self._annotation_value("hetero", atom_index),
+      )
+      masses[index] = residue_masses[residue_key]
+
     return masses
 
   def _atom_view(self, atom_index: int) -> "Atom":

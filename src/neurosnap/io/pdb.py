@@ -224,8 +224,8 @@ def parse_pdb(
   if format not in {"auto", "pdb"}:
     raise ValueError('format must be either "auto" or "pdb".')
 
-  # ``auto`` is accepted to match the higher-level Protein API even though
-  # this parser only supports PDB input.
+  # ``auto`` is accepted for loader consistency even though this parser only
+  # supports PDB input.
   lines = _read_lines(pdb)
   if not lines:
     raise ValueError("Empty file.")
@@ -677,8 +677,8 @@ def _parse_charge(field: str, line_number: int) -> int:
 def _read_lines(file: Union[str, pathlib.Path, io.IOBase]) -> List[str]:
   """Read all lines from a filepath or file handle.
 
-  Text and binary file handles are both accepted to match the existing
-  ``Protein`` loader conventions.
+  Text and binary file handles are both accepted so the parser works with
+  the same broad range of inputs as the rest of the I/O layer.
   """
   if isinstance(file, (str, pathlib.Path)):
     with open(file, "rt", encoding="utf-8") as handle:

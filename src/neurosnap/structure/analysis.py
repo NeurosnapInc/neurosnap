@@ -1,13 +1,19 @@
 """General analysis helpers & physical property calculations for Neurosnap structures."""
 
+import os
+import shutil
+import tempfile
 from math import pi
-from typing import Optional
+from typing import Dict, Optional
 
 import numpy as np
+from rdkit import Chem
 
-from neurosnap.constants import VDW_RADII_BONDI
+from neurosnap.constants import AA_RECORDS, STANDARD_NUCLEOTIDES, VDW_RADII_BONDI
+from neurosnap.log import logger
 
-from ._common import classify_polymer_residue, coord_matrix, resolve_model
+from ._common import classify_polymer_residue, coord_matrix, filter_structure_atoms, residue_key, resolve_model
+from .structure import Structure
 
 
 def calculate_distance_matrix(structure, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
@@ -82,6 +88,23 @@ def calculate_protein_volume(structure, model: Optional[int] = None, chain: Opti
   return float(volume)
 
 
+def _residue_surface_area_map(structure_model, probe_radius: float = 1.4, n_sphere_points: int = 96) -> Dict[tuple, float]:
+  """Return per-residue solvent-accessible surface areas for one model."""
+  atom_areas = _atom_surface_areas(structure_model, probe_radius=probe_radius, n_sphere_points=n_sphere_points)
+  residue_areas: Dict[tuple, float] = {}
+
+  atom_index = 0
+  for chain_view in structure_model.chains():
+    for residue in chain_view.residues():
+      key = residue_key(residue)
+      residue_areas[key] = residue_areas.get(key, 0.0)
+      for _atom in residue.atoms():
+        residue_areas[key] += float(atom_areas[atom_index])
+        atom_index += 1
+
+  return residue_areas
+
+
 def _atom_surface_areas(structure_model, probe_radius: float = 1.4, n_sphere_points: int = 96) -> np.ndarray:
   """Return per-atom solvent-accessible surface areas."""
   coord = coord_matrix(structure_model).astype(np.float32, copy=False)
@@ -134,3 +157,79 @@ def _vdw_radius(element: str) -> float:
     return 1.8
   normalized = element[0].upper() + element[1:].lower()
   return float(VDW_RADII_BONDI.get(normalized, 1.8))
+
+
+def extract_non_biopolymers(structure: Structure, output_dir: str, min_atoms: int = 0):
+  """Extract non-biopolymer fragments from a structure and write them as SDF files.
+
+  Biopolymer residues are removed using the same residue-name logic as the old
+  implementation: any residue present in ``AA_RECORDS`` or
+  ``STANDARD_NUCLEOTIDES`` is treated as part of a protein or nucleotide
+  polymer, except ``UNK`` which is preserved. The remaining atoms are written to
+  a temporary PDB, read into RDKit, split into disconnected fragments, and then
+  exported as individual SDF files.
+
+  Parameters:
+    structure: Input single-model :class:`Structure`.
+    output_dir: Directory where SDF files will be written. Any existing
+      directory at that path is replaced.
+    min_atoms: Minimum fragment atom count required for export.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"extract_non_biopolymers() expects a Structure, found {type(structure).__name__}.")
+
+  biopolymer_keywords = set(AA_RECORDS.keys()).union(STANDARD_NUCLEOTIDES)
+  biopolymer_keywords.discard("UNK")
+
+  if os.path.exists(output_dir):
+    shutil.rmtree(output_dir)
+  os.makedirs(output_dir)
+
+  ligand_structure = Structure(remove_annotations=False)
+  ligand_structure._dtype_atoms = structure._dtype_atoms
+  ligand_structure._dtype_atom_annotations = structure._dtype_atom_annotations
+  ligand_structure._dtype_bond = structure._dtype_bond
+  ligand_structure.atoms = structure.atoms.copy()
+  ligand_structure.atom_annotations = structure.atom_annotations.copy()
+  ligand_structure.bonds = structure.bonds.copy()
+  ligand_structure.metadata = dict(structure.metadata)
+
+  keep_mask = ~np.isin(ligand_structure.atom_annotations["res_name"], list(biopolymer_keywords))
+  filter_structure_atoms(ligand_structure, keep_mask)
+
+  if len(ligand_structure) == 0:
+    logger.info("Extracted 0 non-biopolymer molecules to %s.", output_dir)
+    return
+
+  from neurosnap.io.pdb import save_pdb
+
+  with tempfile.NamedTemporaryFile(suffix=".pdb") as temp_pdb:
+    save_pdb(ligand_structure, temp_pdb.name)
+    molecule = Chem.MolFromPDBFile(temp_pdb.name, removeHs=False, sanitize=False)
+
+  if molecule is None:
+    raise ValueError("Failed to convert structure into an RDKit molecule.")
+
+  fragments = Chem.GetMolFrags(molecule, asMols=True, sanitizeFrags=False)
+  molecule_count = 1
+  for fragment_index, fragment in enumerate(fragments):
+    if fragment is None:
+      logger.warning("Skipping fragment %s due to processing failure (fragment is None).", fragment_index)
+      continue
+
+    try:
+      Chem.SanitizeMol(fragment)
+    except Exception as exc:
+      raise ValueError(f"Failed to sanitize fragment {fragment_index}: {exc}")
+
+    if fragment.GetNumAtoms() < min_atoms:
+      logger.info("Skipping small molecule fragment %s (atom count: %s).", fragment_index, fragment.GetNumAtoms())
+      continue
+
+    sdf_file = os.path.join(output_dir, f"mol_{molecule_count}.sdf")
+    writer = Chem.SDWriter(sdf_file)
+    writer.write(fragment)
+    writer.close()
+    molecule_count += 1
+
+  logger.info("Extracted %s non-biopolymer molecules to %s.", molecule_count - 1, output_dir)

@@ -8,7 +8,7 @@ import numpy as np
 from neurosnap.constants import HYDROPHOBIC_RESIDUES
 
 from ._common import StructureLike, available_chain_ids, filter_structure_atoms, residue_key, resolve_model
-from .properties import _residue_surface_area_map, calculate_surface_area
+from .analysis import _residue_surface_area_map, calculate_surface_area
 from .structure import Atom, Residue, Structure
 
 

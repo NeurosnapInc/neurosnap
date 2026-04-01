@@ -1,7 +1,9 @@
-"""Parser for PDB files.
+"""Parser and writer for PDB files.
 
-This module provides a Neurosnap-native :func:`parse_pdb` function that reads
-PDB files into :class:`~neurosnap.structure.structure.StructureEnsemble` or
+This module provides Neurosnap-native :func:`parse_pdb` and :func:`save_pdb`
+helpers for reading and writing
+:class:`~neurosnap.structure.structure.Structure`,
+:class:`~neurosnap.structure.structure.StructureEnsemble`, and
 :class:`~neurosnap.structure.structure.StructureStack` objects.
 """
 
@@ -16,7 +18,7 @@ import numpy as np
 from neurosnap.log import logger
 from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
 
-__all__ = ["parse_pdb"]
+__all__ = ["parse_pdb", "save_pdb"]
 
 ReturnType = Literal["ensemble", "stack", "auto"]
 AtomKey = Tuple[str, int, str, str, bool, str]
@@ -249,6 +251,48 @@ def parse_pdb(
     return ensemble
 
 
+def save_pdb(structure: Union[Structure, StructureEnsemble, StructureStack], pdb: Union[str, pathlib.Path, io.IOBase]):
+  """Save a Neurosnap structure container as a PDB file.
+
+  Parameters:
+    structure: Structure container to write.
+    pdb: Output filepath or open file handle.
+
+  Notes:
+    Multi-model outputs are written using ``MODEL`` / ``ENDMDL`` records.
+    ``CONECT`` records are written for single-model outputs and for multi-model
+    outputs only when all models share identical bonds and atom serials so the
+    topology can be represented unambiguously in PDB format.
+  """
+  models = _models_for_pdb_output(structure)
+  shared_conect_lines: Optional[List[str]] = None
+  if len(models) > 1:
+    shared_conect_lines = _shared_conect_lines(models)
+
+  lines: List[str] = []
+  for model_position, (model_id, model) in enumerate(models):
+    serials = _atom_serials_for_model(model)
+    if len(models) > 1:
+      lines.append(_format_model_record(model_id))
+
+    lines.extend(_atom_record_lines(model, serials))
+    if len(model) > 0:
+      lines.append("TER")
+
+    if len(models) == 1:
+      lines.extend(_conect_lines_for_model(model, serials))
+    elif shared_conect_lines is None and len(model.bonds) > 0 and model_position == 0:
+      logger.warning("Omitting CONECT records for multi-model PDB output because the models do not share identical bonds and atom serials.")
+
+    if len(models) > 1:
+      lines.append("ENDMDL")
+
+  if shared_conect_lines is not None:
+    lines.extend(shared_conect_lines)
+  lines.append("END")
+  _write_pdb_lines(pdb, lines)
+
+
 def _parse_pdb_models(
   lines: Iterable[str],
   altloc_sites: set[AltlocSite],
@@ -312,6 +356,195 @@ def _parse_pdb_models(
   for model in models:
     ensemble.append(model.to_structure(), model_id=model.model_id)
   return ensemble
+
+
+def _models_for_pdb_output(
+  structure: Union[Structure, StructureEnsemble, StructureStack],
+) -> List[Tuple[int, Structure]]:
+  """Return a normalized list of ``(model_id, model)`` pairs for writing."""
+  if isinstance(structure, Structure):
+    model_id = int(structure.metadata.get("model_id", 1))
+    return [(model_id, structure)]
+  if isinstance(structure, StructureEnsemble):
+    return list(zip(structure.model_ids, structure.models()))
+  if isinstance(structure, StructureStack):
+    return list(zip(structure.model_ids, structure.models()))
+  raise TypeError(f"Unsupported structure type for PDB output: {type(structure).__name__}.")
+
+
+def _shared_conect_lines(models: List[Tuple[int, Structure]]) -> Optional[List[str]]:
+  """Return shared ``CONECT`` lines for compatible multi-model outputs."""
+  if not models:
+    return []
+
+  serial_maps = []
+  for _, model in models:
+    serials = _atom_serials_for_model(model)
+    serial_maps.append(serials)
+
+  reference_model = models[0][1]
+  reference_serials = serial_maps[0]
+  for (_, model), serials in zip(models[1:], serial_maps[1:]):
+    if len(model.bonds) != len(reference_model.bonds):
+      return None
+    if not np.array_equal(model.bonds, reference_model.bonds):
+      return None
+    if not np.array_equal(serials, reference_serials):
+      return None
+
+  return _conect_lines_for_model(reference_model, reference_serials)
+
+
+def _atom_serials_for_model(model: Structure) -> np.ndarray:
+  """Return atom serial numbers for a model, preserving them when possible."""
+  if len(model) > 99999:
+    raise ValueError("PDB output supports at most 99999 atoms per model.")
+
+  if "atom_id" in model.atom_annotations.dtype.names:
+    serials = np.asarray(model.atom_annotations["atom_id"], dtype=np.int32)
+    if serials.size and np.all(serials > 0) and len(np.unique(serials)) == len(serials) and np.max(serials) <= 99999:
+      return serials.copy()
+
+  return np.arange(1, len(model) + 1, dtype=np.int32)
+
+
+def _format_model_record(model_id: int) -> str:
+  """Return a ``MODEL`` record."""
+  if model_id < 1 or model_id > 9999:
+    raise ValueError(f'MODEL serial "{model_id}" is outside the supported PDB range 1-9999.')
+  return f"MODEL     {model_id:4d}"
+
+
+def _atom_record_lines(model: Structure, serials: np.ndarray) -> List[str]:
+  """Return ``ATOM`` / ``HETATM`` lines for a model."""
+  chain_ids = model.atom_annotations["chain_id"]
+  lines = []
+  previous_chain_id = None
+  for atom_index in range(len(model)):
+    chain_id = str(chain_ids[atom_index])
+    if previous_chain_id is not None and chain_id != previous_chain_id:
+      lines.append("TER")
+    lines.append(_format_atom_record(model, atom_index, int(serials[atom_index])))
+    previous_chain_id = chain_id
+  return lines
+
+
+def _format_atom_record(model: Structure, atom_index: int, serial: int) -> str:
+  """Format one ``ATOM`` or ``HETATM`` record."""
+  if serial < 1 or serial > 99999:
+    raise ValueError(f'Atom serial "{serial}" is outside the supported PDB range 1-99999.')
+
+  atom_name = str(model.atom_annotations["atom_name"][atom_index]).strip().upper()
+  residue_name = str(model.atom_annotations["res_name"][atom_index]).strip().upper()
+  chain_id = str(model.atom_annotations["chain_id"][atom_index]).strip()
+  insertion_code = str(model.atom_annotations["ins_code"][atom_index]).strip()
+  element = str(model.atom_annotations["element"][atom_index]).strip().upper()
+  hetero = bool(model.atom_annotations["hetero"][atom_index])
+  residue_id = int(model.atom_annotations["res_id"][atom_index])
+
+  if not atom_name:
+    raise ValueError(f"Atom {atom_index + 1} is missing an atom_name and cannot be written to PDB.")
+  if len(atom_name) > 4:
+    raise ValueError(f'Atom name "{atom_name}" exceeds the 4-character PDB limit.')
+  if not residue_name:
+    raise ValueError(f"Atom {atom_index + 1} is missing a res_name and cannot be written to PDB.")
+  if len(residue_name) > 3:
+    raise ValueError(f'Residue name "{residue_name}" exceeds the 3-character PDB limit.')
+  if len(chain_id) > 1:
+    raise ValueError(f'Chain ID "{chain_id}" exceeds the 1-character PDB limit.')
+  if len(insertion_code) > 1:
+    raise ValueError(f'Insertion code "{insertion_code}" exceeds the 1-character PDB limit.')
+  if not element:
+    raise ValueError(f"Atom {atom_index + 1} is missing an element and cannot be written to PDB.")
+  if len(element) > 2:
+    raise ValueError(f'Element "{element}" exceeds the 2-character PDB limit.')
+
+  if len(f"{residue_id:d}") > 4:
+    raise ValueError(f'Residue ID "{residue_id}" exceeds the 4-character PDB limit.')
+
+  occupancy = _annotation_value_for_pdb(model, "occupancy", atom_index, 1.0)
+  b_factor = _annotation_value_for_pdb(model, "b_factor", atom_index, 0.0)
+  charge = _annotation_value_for_pdb(model, "charge", atom_index, 0)
+
+  atom_name_field = _format_atom_name(atom_name, element)
+  charge_field = _format_charge_field(int(charge))
+  record_name = "HETATM" if hetero else "ATOM  "
+  return (
+    f"{record_name}{serial:5d} {atom_name_field} "
+    f"{residue_name:>3} {chain_id[:1]:1}{residue_id:4d}{insertion_code[:1]:1}   "
+    f"{float(model.atoms['x'][atom_index]):8.3f}"
+    f"{float(model.atoms['y'][atom_index]):8.3f}"
+    f"{float(model.atoms['z'][atom_index]):8.3f}"
+    f"{float(occupancy):6.2f}"
+    f"{float(b_factor):6.2f}"
+    f"          {element:>2}{charge_field:>2}"
+  )
+
+
+def _annotation_value_for_pdb(model: Structure, name: str, atom_index: int, default):
+  """Return an annotation value with a fallback default for PDB output."""
+  if name not in model.atom_annotations.dtype.names:
+    return default
+  value = model.atom_annotations[name][atom_index]
+  if isinstance(value, np.generic):
+    return value.item()
+  return value
+
+
+def _format_atom_name(atom_name: str, element: str) -> str:
+  """Return a 4-character atom name field."""
+  if len(atom_name) == 4:
+    return atom_name
+  if len(element) == 1 and atom_name and atom_name[0].isalpha():
+    return f" {atom_name:<3}"
+  return f"{atom_name:>4}"
+
+
+def _format_charge_field(charge: int) -> str:
+  """Return a 2-character PDB charge field."""
+  if charge == 0:
+    return ""
+  if abs(charge) > 9:
+    raise ValueError(f'Atom charge "{charge}" exceeds the 1-digit PDB charge limit.')
+  sign = "+" if charge > 0 else "-"
+  return f"{abs(charge)}{sign}"
+
+
+def _conect_lines_for_model(model: Structure, serials: np.ndarray) -> List[str]:
+  """Return ``CONECT`` lines for a model."""
+  if len(model.bonds) == 0:
+    return []
+
+  atom_index_to_serial = {atom_index: int(serial) for atom_index, serial in enumerate(serials)}
+  directed_counts: Counter[Tuple[int, int]] = Counter()
+  for bond in model.bonds:
+    atom_i = int(bond["atom_i"])
+    atom_j = int(bond["atom_j"])
+    bond_type = max(1, int(bond["bond_type"]))
+    if atom_i not in atom_index_to_serial or atom_j not in atom_index_to_serial:
+      raise ValueError("Bond table contains atom indices outside the atom table.")
+    directed_counts[(atom_i, atom_j)] += bond_type
+
+  lines = []
+  for (atom_i, atom_j), count in sorted(directed_counts.items()):
+    source_serial = atom_index_to_serial[atom_i]
+    target_serial = atom_index_to_serial[atom_j]
+    lines.extend(_format_conect_records(source_serial, target_serial, count))
+  return lines
+
+
+def _format_conect_records(source_serial: int, target_serial: int, count: int) -> List[str]:
+  """Return one or more ``CONECT`` records for a repeated bond."""
+  if source_serial > 99999 or target_serial > 99999:
+    raise ValueError("CONECT atom serial exceeds the 5-character PDB limit.")
+
+  repeated_targets = [target_serial] * count
+  lines = []
+  for start in range(0, len(repeated_targets), 4):
+    chunk = repeated_targets[start : start + 4]
+    fields = "".join(f"{serial:5d}" for serial in chunk)
+    lines.append(f"CONECT{source_serial:5d}{fields}")
+  return lines
 
 
 def _apply_conect_records(models: List[_ModelAccumulator], pending_conect: List[ConectRecord]):
@@ -455,3 +688,20 @@ def _read_lines(file: Union[str, pathlib.Path, io.IOBase]) -> List[str]:
   if isinstance(content, bytes):
     content = content.decode("utf-8")
   return content.splitlines()
+
+
+def _write_pdb_lines(file: Union[str, pathlib.Path, io.IOBase], lines: List[str]):
+  """Write PDB lines to a filepath or file handle."""
+  content = "\n".join(lines) + "\n"
+  if isinstance(file, (str, pathlib.Path)):
+    with open(file, "wt", encoding="utf-8", newline="\n") as handle:
+      handle.write(content)
+    return
+
+  if isinstance(file, io.TextIOBase):
+    file.write(content)
+    return
+  try:
+    file.write(content)
+  except TypeError:
+    file.write(content.encode("utf-8"))

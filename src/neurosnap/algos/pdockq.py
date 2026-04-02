@@ -3,6 +3,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
+from neurosnap.io.mmcif import parse_mmcif
 from neurosnap.io.pdb import parse_pdb
 from neurosnap.structure import Structure, StructureEnsemble, StructureStack
 from neurosnap.structure._common import resolve_model
@@ -162,7 +163,7 @@ def calculate_pDockQ(
   for a two-chain complex.
 
   Args:
-      structure: Structure container or PDB filepath.
+      structure: Structure container or structure filepath.
       chain1: Chain ID for the first chain (e.g., "A"). If None, auto-detected if only 2 chains exist.
       chain2: Chain ID for the second chain (e.g., "B"). If None, auto-detected if only 2 chains exist.
       dist_thresh: Distance threshold (Å) for interface contacts, default 8.0
@@ -176,7 +177,11 @@ def calculate_pDockQ(
             predicted interface is correct (bounded roughly 0.55-0.98 with higher being better).
   """
   if isinstance(structure, (str, Path)):
-    structure = parse_pdb(structure, return_type="ensemble")
+    structure_path = Path(structure)
+    if structure_path.suffix.lower() in {".cif", ".mmcif"}:
+      structure = parse_mmcif(structure_path, return_type="ensemble")
+    else:
+      structure = parse_pdb(structure_path, return_type="ensemble")
   model_structure = resolve_model(structure)
   chains = [chain.chain_id for chain in model_structure.chains()]
 

@@ -72,6 +72,7 @@ from neurosnap.algos.evoef2_lib.constants import (
   SSBOND_DISTANCE,
 )
 from neurosnap.algos.evoef2_lib.weights import get_weights
+from neurosnap.io.mmcif import parse_mmcif
 from neurosnap.io.pdb import parse_pdb
 from neurosnap.log import logger
 from neurosnap.structure._common import StructureLike, resolve_model
@@ -1480,7 +1481,7 @@ def rebuild_missing_atoms(
   """Rebuild missing heavy atoms and hydrogens using EvoEF2 topology.
 
   Args:
-    structure: Structure container or PDB path.
+    structure: Structure container or structure filepath.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
 
@@ -1488,7 +1489,11 @@ def rebuild_missing_atoms(
     Structure with missing atoms reconstructed where possible.
   """
   if isinstance(structure, (str, Path)):
-    structure = parse_pdb(structure, return_type="ensemble")
+    structure_path = Path(structure)
+    if structure_path.suffix.lower() in {".cif", ".mmcif"}:
+      structure = parse_mmcif(structure_path, return_type="ensemble")
+    else:
+      structure = parse_pdb(structure_path, return_type="ensemble")
   df = resolve_model(structure).to_dataframe()
   # Only merge NA params/topology if the structure contains NA residues.
   has_na = any(_is_nucleic_res_name(name) for name in df["res_name"].unique())

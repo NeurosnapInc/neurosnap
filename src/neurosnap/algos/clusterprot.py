@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 from tqdm import tqdm
 
+from neurosnap.io.mmcif import parse_mmcif
 from neurosnap.io.pdb import parse_pdb
 from neurosnap.log import logger
 from neurosnap.structure import Structure, StructureEnsemble, StructureStack, align, animate_frames, calculate_distance_matrix, render_structure_pseudo3D
@@ -48,7 +49,7 @@ def ClusterProt(
     7. Create the 1D projection using either UMAP or PCA (optional but useful for organizing proteins 1-dimensionally)
 
   Parameters:
-    proteins: List of structures to cluster, as Neurosnap structure containers or PDB filepaths.
+    proteins: List of structures to cluster, as Neurosnap structure containers or structure filepaths.
     model: Model ID for ClusterProt to use (must be consistent across all structures). Defaults to the first available model in each input.
     chain: Chain ID to for ClusterProt to use (must be consistent across all structures), if not provided calculates for all chains
     umap_n_neighbors: The ``n_neighbors`` value to provide to UMAP for the main projection. Leave as 0 to automatically calculate optimal value. Prior to the 2024-06-14 update this values was left as ``7``.
@@ -75,7 +76,10 @@ def ClusterProt(
       titles.append(str(structure.metadata.get("title", f"structure_{index}")))
     else:
       structure_path = Path(structure)
-      structures.append(parse_pdb(structure_path, return_type="ensemble"))
+      if structure_path.suffix.lower() in {".cif", ".mmcif"}:
+        structures.append(parse_mmcif(structure_path, return_type="ensemble"))
+      else:
+        structures.append(parse_pdb(structure_path, return_type="ensemble"))
       titles.append(structure_path.stem)
 
   proteins_vects = []

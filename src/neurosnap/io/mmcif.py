@@ -115,9 +115,7 @@ def parse_mmcif(
   row_count = len(atom_groups)
   for column_name, values in mmcif_dict.items():
     if column_name.startswith("_atom_site.") and len(values) != row_count:
-      raise ValueError(
-        f'MMCIF atom-site column "{column_name}" has {len(values)} values, but "_atom_site.group_PDB" has {row_count}.'
-      )
+      raise ValueError(f'MMCIF atom-site column "{column_name}" has {len(values)} values, but "_atom_site.group_PDB" has {row_count}.')
 
   def column(name: str, default: Optional[str] = None) -> List[str]:
     if name in mmcif_dict:
@@ -196,13 +194,13 @@ def parse_mmcif(
     hetero = group_pdb == "HETATM"
 
     if not chain_id:
-      raise ValueError(f'Missing chain identifier in mmCIF atom row {row_number}.')
+      raise ValueError(f"Missing chain identifier in mmCIF atom row {row_number}.")
     if not res_name:
-      raise ValueError(f'Missing residue name in mmCIF atom row {row_number}.')
+      raise ValueError(f"Missing residue name in mmCIF atom row {row_number}.")
     if not atom_name:
-      raise ValueError(f'Missing atom name in mmCIF atom row {row_number}.')
+      raise ValueError(f"Missing atom name in mmCIF atom row {row_number}.")
     if not element:
-      raise ValueError(f'Missing element in mmCIF atom row {row_number}.')
+      raise ValueError(f"Missing element in mmCIF atom row {row_number}.")
     if len(chain_id) > 4:
       raise ValueError(f'Chain ID "{chain_id}" exceeds the supported 4-character Neurosnap limit.')
     if len(res_name) > 5:

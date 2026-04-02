@@ -1,12 +1,8 @@
-# tests/test_ipsae.py
-import io
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
-from Bio.PDB import PDBIO
-from Bio.PDB.StructureBuilder import StructureBuilder
 
 from neurosnap.algos.ipsae import (
   calc_d0,
@@ -19,8 +15,7 @@ from neurosnap.algos.ipsae import (
   ptm_func,
   ptm_func_vec,
 )
-from neurosnap.io.pdb import parse_pdb
-from tests._structure_test_utils import parse_ensemble
+from tests._structure_test_utils import make_structure, parse_ensemble
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -161,7 +156,7 @@ def test_calculate_ipsae_basic(struct_path: Path, score_path: Path):
 
 
 def test_calculate_ipsae_shape_mismatch_raises():
-  structure = parse_pdb(str(FILES / "dimer_af2.pdb"), return_type="ensemble")
+  structure = parse_ensemble(FILES / "dimer_af2.pdb")
   plddt, pae = _load_plddt_pae(FILES / "dimer_af2.json")
   # break plddt length
   with pytest.raises(ValueError):
@@ -172,7 +167,7 @@ def test_calculate_ipsae_shape_mismatch_raises():
 
 
 def test_calculate_ipsae_reports_pairs_and_counts():
-  structure = parse_pdb(str(FILES / "dimer_af2.pdb"), return_type="ensemble")
+  structure = parse_ensemble(FILES / "dimer_af2.pdb")
   plddt, pae = _load_plddt_pae(FILES / "dimer_af2.json")
   res = calculate_ipSAE(structure, plddt=plddt, pae_matrix=pae, pae_cutoff=10.0, dist_cutoff=10.0)
 
@@ -190,29 +185,16 @@ def test_calculate_ipsae_reports_pairs_and_counts():
 
 
 def test_calculate_ipsae_accepts_nucleic_acids():
-  builder = StructureBuilder()
-  builder.init_structure("NA")
-  builder.init_model(0)
   chain_offsets = {"A": np.array([0.0, 0.0, 0.0]), "B": np.array([8.0, 0.0, 0.0])}
   residues = {"A": [("DA", 1), ("A", 2)], "B": [("DG", 1), ("U", 2)]}
-
+  atom_defs = []
   for chain_id, res_list in residues.items():
-    builder.init_chain(chain_id)
-    builder.init_seg("    ")
     for resname, resseq in res_list:
-      builder.init_residue(resname, " ", resseq, " ")
       base = chain_offsets[chain_id] + np.array([0.0, 0.0, float(resseq)])
-      builder.init_atom("C3'", base, 1.0, 10.0, " ", "C3'", element="C")
-      builder.init_atom("C1'", base + np.array([0.5, 0.5, 0.0]), 1.0, 10.0, " ", "C1'", element="C")
+      atom_defs.append(("C3'", resname, chain_id, resseq, float(base[0]), float(base[1]), float(base[2]), "C"))
+      atom_defs.append(("C1'", resname, chain_id, resseq, float(base[0] + 0.5), float(base[1] + 0.5), float(base[2]), "C"))
 
-  structure = builder.get_structure()
-  handle = io.StringIO()
-  pdbio = PDBIO()
-  pdbio.set_structure(structure)
-  pdbio.save(handle)
-  handle.seek(0)
-
-  structure = parse_pdb(handle, return_type="ensemble")
+  structure = make_structure(atom_defs)
 
   plddt = np.full(4, 90.0, dtype=float)
   pae = np.full((4, 4), 5.0, dtype=float)
@@ -234,35 +216,16 @@ def test_calculate_ipsae_accepts_nucleic_acids():
 
 
 def test_calculate_ipsae_prunes_nonstandard_residues():
-  builder = StructureBuilder()
-  builder.init_structure("PRUNE")
-  builder.init_model(0)
-
-  # Chain A with one non-standard residue (MSE) followed by a standard ALA
-  builder.init_chain("A")
-  builder.init_seg("    ")
-  builder.init_residue("MSE", " ", 1, " ")
-  builder.init_atom("CA", np.array([0.0, 0.0, 0.0]), 1.0, 10.0, " ", "CA", element="C")
-  builder.init_atom("CB", np.array([1.5, 0.0, 0.0]), 1.0, 10.0, " ", "CB", element="C")
-  builder.init_residue("ALA", " ", 2, " ")
-  builder.init_atom("CA", np.array([3.0, 0.0, 0.0]), 1.0, 10.0, " ", "CA", element="C")
-  builder.init_atom("CB", np.array([4.0, 0.0, 0.0]), 1.0, 10.0, " ", "CB", element="C")
-
-  # Chain B with a standard nucleotide
-  builder.init_chain("B")
-  builder.init_seg("    ")
-  builder.init_residue("DG", " ", 1, " ")
-  builder.init_atom("C3'", np.array([0.0, 5.0, 0.0]), 1.0, 10.0, " ", "C3'", element="C")
-  builder.init_atom("C1'", np.array([0.5, 5.5, 0.0]), 1.0, 10.0, " ", "C1'", element="C")
-
-  structure = builder.get_structure()
-  handle = io.StringIO()
-  pdbio = PDBIO()
-  pdbio.set_structure(structure)
-  pdbio.save(handle)
-  handle.seek(0)
-
-  structure = parse_pdb(handle, return_type="ensemble")
+  structure = make_structure(
+    [
+      ("CA", "MSE", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CB", "MSE", "A", 1, 1.5, 0.0, 0.0, "C"),
+      ("CA", "ALA", "A", 2, 3.0, 0.0, 0.0, "C"),
+      ("CB", "ALA", "A", 2, 4.0, 0.0, 0.0, "C"),
+      ("C3'", "DG", "B", 1, 0.0, 5.0, 0.0, "C"),
+      ("C1'", "DG", "B", 1, 0.5, 5.5, 0.0, "C"),
+    ]
+  )
 
   # pLDDT/PAE include the non-standard residue; ipSAE should prune it automatically
   plddt = np.array([50.0, 90.0, 80.0], dtype=float)
@@ -280,36 +243,17 @@ def test_calculate_ipsae_prunes_nonstandard_residues():
 
 
 def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
-  builder = StructureBuilder()
-  builder.init_structure("TOKEN_EXPANDED")
-  builder.init_model(0)
-
-  # Chain A: standard residue, then non-standard residue with 3 heavy atoms.
-  builder.init_chain("A")
-  builder.init_seg("    ")
-  builder.init_residue("ALA", " ", 1, " ")
-  builder.init_atom("CA", np.array([0.0, 0.0, 0.0]), 1.0, 80.0, " ", "CA", element="C")
-  builder.init_atom("CB", np.array([1.0, 0.0, 0.0]), 1.0, 80.0, " ", "CB", element="C")
-
-  builder.init_residue("MSE", " ", 2, " ")
-  builder.init_atom("N", np.array([2.0, 0.0, 0.0]), 1.0, 70.0, " ", "N", element="N")
-  builder.init_atom("CA", np.array([3.0, 0.0, 0.0]), 1.0, 60.0, " ", "CA", element="C")
-  builder.init_atom("SE", np.array([4.0, 0.0, 0.0]), 1.0, 50.0, " ", "SE", element="SE")
-
-  # Chain B: standard residue.
-  builder.init_chain("B")
-  builder.init_seg("    ")
-  builder.init_residue("ALA", " ", 1, " ")
-  builder.init_atom("CA", np.array([0.0, 5.0, 0.0]), 1.0, 90.0, " ", "CA", element="C")
-  builder.init_atom("CB", np.array([1.0, 5.0, 0.0]), 1.0, 90.0, " ", "CB", element="C")
-
-  structure = builder.get_structure()
-  handle = io.StringIO()
-  pdbio = PDBIO()
-  pdbio.set_structure(structure)
-  pdbio.save(handle)
-  handle.seek(0)
-  structure = parse_pdb(handle, return_type="ensemble")
+  structure = make_structure(
+    [
+      ("CA", "ALA", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CB", "ALA", "A", 1, 1.0, 0.0, 0.0, "C"),
+      ("N", "MSE", "A", 2, 2.0, 0.0, 0.0, "N"),
+      ("CA", "MSE", "A", 2, 3.0, 0.0, 0.0, "C"),
+      ("SE", "MSE", "A", 2, 4.0, 0.0, 0.0, "SE"),
+      ("CA", "ALA", "B", 1, 0.0, 5.0, 0.0, "C"),
+      ("CB", "ALA", "B", 1, 1.0, 5.0, 0.0, "C"),
+    ]
+  )
 
   # Token-expanded payload:
   #   ALA(1) -> 1 representative token

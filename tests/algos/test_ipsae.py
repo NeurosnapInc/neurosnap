@@ -20,6 +20,7 @@ from neurosnap.algos.ipsae import (
   ptm_func_vec,
 )
 from neurosnap.io.pdb import parse_pdb
+from tests._structure_test_utils import parse_ensemble
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -104,11 +105,7 @@ def _load_plddt_pae(json_path: Path):
 @pytest.mark.parametrize(
   "struct_path,score_path",
   [
-    pytest.param(
-      FILES / "orf1_boltz1.cif",
-      FILES / "orf1_boltz1.json",
-      marks=pytest.mark.xfail(reason="mmCIF parsing is not migrated to the new structure I/O path."),
-    ),
+    (FILES / "orf1_boltz1.cif", FILES / "orf1_boltz1.json"),
     (FILES / "dimer_af2.pdb", FILES / "dimer_af2.json"),
   ],
 )
@@ -116,7 +113,7 @@ def test_calculate_ipsae_basic(struct_path: Path, score_path: Path):
   assert struct_path.exists(), f"Missing structure fixture: {struct_path}"
   assert score_path.exists(), f"Missing score fixture: {score_path}"
 
-  structure = parse_pdb(str(struct_path), return_type="ensemble")
+  structure = parse_ensemble(struct_path)
   plddt, pae = _load_plddt_pae(score_path)
 
   # Should succeed and return the full result dict
@@ -336,8 +333,7 @@ def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
 
 
 def test_calculate_ipsae_min_metric_with_ptm_fixture():
-  pytest.xfail("mmCIF parsing is not migrated to the new structure I/O path.")
-  prot = parse_pdb(str(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif"), return_type="ensemble")
+  prot = parse_ensemble(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
   plddt, pae = _load_plddt_pae(FILES / "chai1_dimer_ptm_protein_with_nanobody.json")
   res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae)
 

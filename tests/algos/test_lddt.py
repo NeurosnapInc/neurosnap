@@ -26,12 +26,12 @@ def rank2_protein():
 
 @pytest.fixture(scope="module")
 def rna_model_one():
-  pytest.xfail("mmCIF parsing is not migrated to the new structure I/O path.")
+  return parse_single_model(FILES / "rna_monomer_1.cif")
 
 
 @pytest.fixture(scope="module")
 def rna_model_two():
-  pytest.xfail("mmCIF parsing is not migrated to the new structure I/O path.")
+  return parse_single_model(FILES / "rna_monomer_2.cif")
 
 
 def test_calc_lddt_identical_proteins_returns_one(rank1_protein):

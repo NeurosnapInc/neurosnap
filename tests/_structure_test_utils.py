@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
+from neurosnap.io.mmcif import parse_mmcif
 from neurosnap.io.pdb import parse_pdb
 from neurosnap.structure import Structure
 
@@ -75,12 +76,15 @@ def make_structure(atom_defs):
 
 def parse_single_model(path):
   """Parse a single-model structure file and return the first model."""
-  ensemble = parse_pdb(path, return_type="ensemble")
+  ensemble = parse_ensemble(path)
   return ensemble[ensemble.model_ids[0]]
 
 
 def parse_ensemble(path):
   """Parse a structure file into a StructureEnsemble."""
+  suffix = Path(path).suffix.lower()
+  if suffix in {".cif", ".mmcif"}:
+    return parse_mmcif(path, return_type="ensemble")
   return parse_pdb(path, return_type="ensemble")
 
 

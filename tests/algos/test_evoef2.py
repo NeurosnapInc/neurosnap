@@ -235,7 +235,6 @@ def test_interface_and_binding_have_expected_keys():
 
 
 def test_ptm_binding_smoke():
-  pytest.xfail("mmCIF parsing is not migrated to the new structure I/O path.")
   cif_path = str(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
   interface = calculate_interface_energy(cif_path, split1=["A"], split2=["B"])
   binding = calculate_binding(cif_path, split1=["A"], split2=["B"])
@@ -288,14 +287,12 @@ def test_na_binding_protein_dna_smoke():
 
 
 def test_rna_stability_smoke():
-  pytest.xfail("mmCIF parsing is not migrated to the new structure I/O path.")
   data = calculate_stability(str(FILES / "rna_monomer_1.cif"))
   assert "total" in data
   assert np.isfinite(data["total"])
 
 
 def test_ptm_stability_smoke():
-  pytest.xfail("mmCIF parsing is not migrated to the new structure I/O path.")
   data = calculate_stability(str(FILES / "lrrk2_8fo2_with_ptm_truncated.cif"))
   assert "total" in data
   assert np.isfinite(data["total"])

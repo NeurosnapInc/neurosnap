@@ -106,7 +106,6 @@ def test_align_backbone_nucleotide_only():
   assert np.allclose(expected, after, atol=1e-3)
 
 
-@pytest.mark.xfail(reason="mmCIF parsing is not implemented in the structure layer yet.", strict=True)
 def test_align_backbone_rna_only_real_structures():
   reference = parse_single_model(RNA_CIF_1)
   mobile = parse_single_model(RNA_CIF_2)

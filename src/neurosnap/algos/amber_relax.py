@@ -152,7 +152,7 @@ def minimize(
   tolerance_kj = tolerance * 4.184  # Convert Kcal/mol to kJ/mol
 
   # Clean the input down to the biopolymer model before PDBFixer rebuilds atoms.
-  structure = parse_pdb(pdb_file, return_type="ensemble")
+  structure = parse_pdb(pdb_file, return_type="ensemble").first()
   remove_waters(structure)
   remove_non_biopolymers(structure)
   save_pdb(structure, pdb_file)

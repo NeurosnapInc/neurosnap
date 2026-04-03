@@ -138,6 +138,18 @@ def find_interface_residues(
 
   Multiple atom-atom contacts between the same residue pair are collapsed into
   one output pair.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chain1: First chain ID.
+    chain2: Second chain ID.
+    model: Optional model ID when selecting from an ensemble or stack.
+    cutoff: Contact cutoff distance in Å.
+    hydrogens: Whether hydrogen atoms should be included in the contact search.
+
+  Returns:
+    List of unique contacting ``(residue1, residue2)`` pairs.
   """
   structure_model = resolve_model(structure, model=model)
   available_chains = {chain.chain_id for chain in structure_model.chains()}
@@ -180,6 +192,25 @@ def find_non_interface_hydrophobic_patches(
   Hydrophobic residues are first filtered to remove interface residues and
   buried residues, then clustered by CA-CA proximity into connected
   components.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chain_pairs: Iterable of chain-ID pairs whose interfaces should be excluded
+      from patch detection.
+    target_chains: Optional chain IDs to search for patches. If ``None``, all
+      chains are considered.
+    model: Optional model ID when selecting from an ensemble or stack.
+    cutoff_interface: Distance cutoff in Å used to classify interface contacts.
+    hydrogens: Whether hydrogen atoms should be included in the interface
+      contact search.
+    patch_cutoff: CA-CA distance cutoff in Å used to connect hydrophobic
+      residues into the same patch.
+    min_patch_area: Minimum summed SASA in Å² required for a connected
+      component to be returned.
+
+  Returns:
+    List of residue sets, where each set represents one hydrophobic patch.
   """
   structure_model = resolve_model(structure, model=model)
   chain_pairs = [(chain1.strip(), chain2.strip()) for chain1, chain2 in chain_pairs]

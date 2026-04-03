@@ -29,6 +29,9 @@ def align(
     chains2: Optional mobile chain IDs to include in the alignment.
     model1: Optional reference model ID.
     model2: Optional mobile model ID.
+
+  Returns:
+    ``None``. The selected mobile model is transformed in-place.
   """
   reference_model = resolve_model(reference, model=model1)
   mobile_model = resolve_model(mobile, model=model2)

@@ -13,7 +13,19 @@ from .structure import Atom, Residue
 def find_disulfide_bonds(
   structure, chain: Optional[str] = None, model: Optional[int] = None, threshold: float = 2.05
 ) -> List[Tuple[Residue, Residue]]:
-  """Find disulfide bonds between cysteine residues using SG-SG distance."""
+  """Find disulfide bonds between cysteine residues using SG-SG distance.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chain: Optional chain ID to restrict the search to.
+    model: Optional model ID when selecting from an ensemble or stack.
+    threshold: Maximum SG-SG distance in Å used to classify a disulfide bond.
+
+  Returns:
+    List of ``(residue1, residue2)`` cysteine pairs that satisfy the distance
+    cutoff.
+  """
   structure_model = resolve_model(structure, model=model)
   disulfide_pairs = []
 
@@ -36,7 +48,19 @@ def find_disulfide_bonds(
 
 
 def find_salt_bridges(structure, chain: Optional[str] = None, model: Optional[int] = None, cutoff: float = 4.0) -> List[Tuple[Residue, Residue]]:
-  """Identify salt bridges using CA-CA distance as a simple proxy."""
+  """Identify salt bridges using CA-CA distance as a simple proxy.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chain: Optional chain ID to restrict the search to.
+    model: Optional model ID when selecting from an ensemble or stack.
+    cutoff: Maximum CA-CA distance in Å used to classify a salt bridge.
+
+  Returns:
+    List of ``(positive_residue, negative_residue)`` pairs that satisfy the
+    distance cutoff.
+  """
   structure_model = resolve_model(structure, model=model)
   positive_residues = {"LYS", "ARG"}
   negative_residues = {"ASP", "GLU"}
@@ -62,7 +86,18 @@ def find_salt_bridges(structure, chain: Optional[str] = None, model: Optional[in
 
 
 def find_hydrophobic_residues(structure, chain: Optional[str] = None, model: Optional[int] = None) -> List[Tuple[str, Residue]]:
-  """Return hydrophobic residues from a selected model."""
+  """Return hydrophobic residues from a selected model.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chain: Optional chain ID to restrict the search to.
+    model: Optional model ID when selecting from an ensemble or stack.
+
+  Returns:
+    List of ``(chain_id, residue)`` tuples for residues classified as
+    hydrophobic.
+  """
   structure_model = resolve_model(structure, model=model)
   hydrophobic = []
 
@@ -85,7 +120,20 @@ def calculate_hydrogen_bonds(
   donor_acceptor_cutoff: float = 3.5,
   angle_cutoff: float = 120.0,
 ) -> int:
-  """Count hydrogen bonds using explicit hydrogens and simple geometric cutoffs."""
+  """Count hydrogen bonds using explicit hydrogens and simple geometric cutoffs.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chain: Optional donor-chain ID. When omitted, all chains are searched.
+    chain_other: Optional acceptor-chain ID for inter-chain counting.
+    model: Optional model ID when selecting from an ensemble or stack.
+    donor_acceptor_cutoff: Maximum donor-acceptor distance in Å.
+    angle_cutoff: Minimum donor-H-acceptor angle in degrees.
+
+  Returns:
+    Total number of hydrogen bonds that satisfy the geometric cutoffs.
+  """
   structure_model = resolve_model(structure, model=model)
   _validate_hydrogen_bond_inputs(structure_model, chain=chain, chain_other=chain_other)
 
@@ -136,7 +184,21 @@ def calculate_interface_hydrogen_bonding_residues(
   donor_acceptor_cutoff: float = 3.5,
   angle_cutoff: float = 120.0,
 ) -> int:
-  """Count unique residues that participate in inter- or intra-chain hydrogen bonds."""
+  """Count unique residues that participate in inter- or intra-chain hydrogen bonds.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    chain: Optional donor-chain ID. When omitted, all chains are searched.
+    chain_other: Optional acceptor-chain ID for inter-chain counting.
+    model: Optional model ID when selecting from an ensemble or stack.
+    donor_acceptor_cutoff: Maximum donor-acceptor distance in Å.
+    angle_cutoff: Minimum donor-H-acceptor angle in degrees.
+
+  Returns:
+    Number of unique residues that participate in at least one qualifying
+    hydrogen bond.
+  """
   structure_model = resolve_model(structure, model=model)
   _validate_hydrogen_bond_inputs(structure_model, chain=chain, chain_other=chain_other)
 

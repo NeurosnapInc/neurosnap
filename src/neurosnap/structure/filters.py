@@ -19,17 +19,46 @@ def remove_waters(structure, model: Optional[int] = None, chain: Optional[str] =
 
   For :class:`StructureStack`, atom removal is applied across all models because
   atom annotations are shared by the stack.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    model: Optional model ID when selecting from an ensemble or stack.
+    chain: Optional chain ID to restrict residue removal to.
+
+  Returns:
+    ``None``. The selected structure object is modified in-place.
   """
   _remove_residues(structure, lambda residue: residue.res_name.strip().upper() in {"WAT", "HOH"}, model=model, chain=chain)
 
 
 def remove_nucleotides(structure, model: Optional[int] = None, chain: Optional[str] = None):
-  """Remove DNA and RNA residues from a structure-like object in-place."""
+  """Remove DNA and RNA residues from a structure-like object in-place.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    model: Optional model ID when selecting from an ensemble or stack.
+    chain: Optional chain ID to restrict residue removal to.
+
+  Returns:
+    ``None``. The selected structure object is modified in-place.
+  """
   _remove_residues(structure, lambda residue: classify_polymer_residue(residue) in {"dna", "rna"}, model=model, chain=chain)
 
 
 def remove_non_biopolymers(structure, model: Optional[int] = None, chain: Optional[str] = None):
-  """Remove non-protein and non-nucleotide residues from a structure-like object in-place."""
+  """Remove non-protein and non-nucleotide residues from a structure-like object in-place.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    model: Optional model ID when selecting from an ensemble or stack.
+    chain: Optional chain ID to restrict residue removal to.
+
+  Returns:
+    ``None``. The selected structure object is modified in-place.
+  """
   _remove_residues(structure, lambda residue: classify_polymer_residue(residue) is None, model=model, chain=chain)
 
 

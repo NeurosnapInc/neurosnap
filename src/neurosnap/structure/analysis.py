@@ -94,7 +94,17 @@ def calculate_distance_matrix(structure, model: Optional[int] = None, chain: Opt
 
 
 def ca_distance_matrix(structure, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
-  """Alias for :func:`calculate_distance_matrix`."""
+  """Alias for :func:`calculate_distance_matrix`.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    model: Optional model ID when selecting from an ensemble or stack.
+    chain: Optional chain ID to restrict the calculation to.
+
+  Returns:
+    A square NumPy array of pairwise CA distances in Å.
+  """
   return calculate_distance_matrix(structure, model=model, chain=chain)
 
 
@@ -109,6 +119,21 @@ def calculate_surface_area(
 
   The returned total SASA is the same regardless of ``level``; the parameter is
   kept for compatibility with the public surface-area API.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    model: Optional model ID when selecting from an ensemble or stack.
+    level: Compatibility flag matching the historical public API. The returned
+      total SASA is always a structure-level scalar, regardless of this value.
+      Must be one of ``"A"``, ``"R"``, ``"C"``, ``"M"``, or ``"S"``.
+    probe_radius: Solvent probe radius in Å used to inflate atom radii during
+      the accessibility calculation.
+    n_sphere_points: Number of surface points sampled per atom for the
+      Shrake-Rupley approximation.
+
+  Returns:
+    Estimated solvent-accessible surface area in Å².
   """
   if level not in {"A", "R", "C", "M", "S"}:
     raise ValueError('level must be one of "A", "R", "C", "M", or "S".')
@@ -118,7 +143,21 @@ def calculate_surface_area(
 
 
 def calculate_protein_volume(structure, model: Optional[int] = None, chain: Optional[str] = None) -> float:
-  """Estimate protein volume from atom van der Waals spheres."""
+  """Estimate protein volume from atom van der Waals spheres.
+
+  The calculation sums the volumes of van der Waals spheres for atoms belonging
+  to residues classified as protein. It is therefore a simple geometric
+  estimate rather than an excluded-volume or solvent-corrected measurement.
+
+  Parameters:
+    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
+      :class:`StructureStack`.
+    model: Optional model ID when selecting from an ensemble or stack.
+    chain: Optional chain ID to restrict the calculation to.
+
+  Returns:
+    Estimated protein volume in Å³.
+  """
   structure_model = resolve_model(structure, model=model)
   volume = 0.0
 
@@ -221,6 +260,10 @@ def extract_non_biopolymers(structure: Structure, output_dir: str, min_atoms: in
     output_dir: Directory where SDF files will be written. Any existing
       directory at that path is replaced.
     min_atoms: Minimum fragment atom count required for export.
+
+  Returns:
+    ``None``. Matching fragments are written to ``output_dir`` as ``.sdf``
+    files.
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"extract_non_biopolymers() expects a Structure, found {type(structure).__name__}.")

@@ -1,7 +1,8 @@
-"""Parser for mmCIF coordinate files.
+"""Parser and writer for mmCIF coordinate files.
 
-This module provides a Neurosnap-native :func:`parse_mmcif` helper for reading
-mmCIF files into :class:`~neurosnap.structure.structure.Structure`,
+This module provides Neurosnap-native :func:`parse_mmcif` and
+:func:`save_cif` helpers for reading and writing
+:class:`~neurosnap.structure.structure.Structure`,
 :class:`~neurosnap.structure.structure.StructureEnsemble`, and
 :class:`~neurosnap.structure.structure.StructureStack` objects.
 
@@ -12,7 +13,7 @@ Biotite-like array-oriented form.
 
 import io
 import pathlib
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
@@ -20,7 +21,7 @@ from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from neurosnap.log import logger
 from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
 
-__all__ = ["parse_mmcif"]
+__all__ = ["parse_mmcif", "save_cif"]
 
 ReturnType = Literal["ensemble", "stack", "auto"]
 
@@ -325,3 +326,155 @@ def parse_mmcif(
     return StructureStack.from_ensemble(ensemble)
   except ValueError:
     return ensemble
+
+
+def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif: Union[str, pathlib.Path, io.IOBase]):
+  """Save a Neurosnap structure container as an mmCIF file.
+
+  Parameters:
+    structure: Structure container to write.
+    cif: Output filepath or open file handle.
+
+  Notes:
+    The writer emits a compact ``_atom_site`` loop that round-trips through
+    :func:`parse_mmcif`. Multi-model outputs are represented using the
+    ``_atom_site.pdbx_PDB_model_num`` column. This initial writer does not yet
+    export bond tables such as ``_struct_conn``.
+  """
+  models = _models_for_cif_output(structure)
+  if not models:
+    raise ValueError("No models are available for mmCIF output.")
+
+  lines = [
+    "data_neurosnap",
+    "#",
+    "loop_",
+    "_atom_site.group_PDB",
+    "_atom_site.id",
+    "_atom_site.type_symbol",
+    "_atom_site.label_atom_id",
+    "_atom_site.label_alt_id",
+    "_atom_site.label_comp_id",
+    "_atom_site.label_seq_id",
+    "_atom_site.auth_seq_id",
+    "_atom_site.pdbx_PDB_ins_code",
+    "_atom_site.label_asym_id",
+    "_atom_site.Cartn_x",
+    "_atom_site.Cartn_y",
+    "_atom_site.Cartn_z",
+    "_atom_site.occupancy",
+    "_atom_site.label_entity_id",
+    "_atom_site.auth_asym_id",
+    "_atom_site.auth_comp_id",
+    "_atom_site.B_iso_or_equiv",
+    "_atom_site.pdbx_PDB_model_num",
+    "_atom_site.pdbx_formal_charge",
+  ]
+
+  entity_ids: Dict[str, int] = {}
+  next_entity_id = 1
+  for _model_id, model in models:
+    for chain_id in model.atom_annotations["chain_id"]:
+      chain_id = str(chain_id)
+      if chain_id not in entity_ids:
+        entity_ids[chain_id] = next_entity_id
+        next_entity_id += 1
+
+  for model_id, model in models:
+    atom_ids = _atom_ids_for_model(model)
+    for atom_index in range(len(model)):
+      chain_id = str(model.atom_annotations["chain_id"][atom_index])
+      res_id = int(model.atom_annotations["res_id"][atom_index])
+      ins_code = _annotation_value_for_cif(model, "ins_code", atom_index, "")
+      res_name = _annotation_value_for_cif(model, "res_name", atom_index, "")
+      atom_name = _annotation_value_for_cif(model, "atom_name", atom_index, "")
+      element = str(_annotation_value_for_cif(model, "element", atom_index, "")).upper()
+      occupancy = float(_annotation_value_for_cif(model, "occupancy", atom_index, 1.0))
+      b_factor = float(_annotation_value_for_cif(model, "b_factor", atom_index, 0.0))
+      charge = _annotation_value_for_cif(model, "charge", atom_index, None)
+      hetero = bool(model.atom_annotations["hetero"][atom_index])
+
+      lines.append(
+        " ".join(
+          [
+            "HETATM" if hetero else "ATOM",
+            str(int(atom_ids[atom_index])),
+            _format_mmcif_token(element),
+            _format_mmcif_token(atom_name),
+            ".",
+            _format_mmcif_token(res_name),
+            str(res_id),
+            str(res_id),
+            _format_mmcif_token(ins_code or "?"),
+            _format_mmcif_token(chain_id),
+            f"{float(model.atoms['x'][atom_index]):.6f}",
+            f"{float(model.atoms['y'][atom_index]):.6f}",
+            f"{float(model.atoms['z'][atom_index]):.6f}",
+            f"{occupancy:.3f}",
+            str(entity_ids[chain_id]),
+            _format_mmcif_token(chain_id),
+            _format_mmcif_token(res_name),
+            f"{b_factor:.3f}",
+            str(model_id),
+            _format_mmcif_token("?" if charge is None else int(charge)),
+          ]
+        )
+      )
+
+  lines.append("#")
+  _write_cif_lines(cif, lines)
+
+
+def _models_for_cif_output(structure: Union[Structure, StructureEnsemble, StructureStack]) -> List[Tuple[int, Structure]]:
+  """Return a normalized list of ``(model_id, model)`` pairs for writing."""
+  if isinstance(structure, Structure):
+    model_id = int(structure.metadata.get("model_id", 1))
+    return [(model_id, structure)]
+  if isinstance(structure, StructureEnsemble):
+    return list(zip(structure.model_ids, structure.models()))
+  if isinstance(structure, StructureStack):
+    return list(zip(structure.model_ids, structure.models()))
+  raise TypeError(f"Unsupported structure type for mmCIF output: {type(structure).__name__}.")
+
+
+def _atom_ids_for_model(model: Structure) -> np.ndarray:
+  """Return atom IDs for a model, preserving them when possible."""
+  if "atom_id" in model.atom_annotations.dtype.names:
+    atom_ids = np.asarray(model.atom_annotations["atom_id"], dtype=np.int32)
+    if atom_ids.size and np.all(atom_ids > 0) and len(np.unique(atom_ids)) == len(atom_ids):
+      return atom_ids.copy()
+  return np.arange(1, len(model) + 1, dtype=np.int32)
+
+
+def _annotation_value_for_cif(model: Structure, name: str, atom_index: int, default):
+  """Return an annotation value with a fallback default for mmCIF output."""
+  if name not in model.atom_annotations.dtype.names:
+    return default
+  value = model.atom_annotations[name][atom_index]
+  if isinstance(value, np.generic):
+    return value.item()
+  return value
+
+
+def _format_mmcif_token(value: object) -> str:
+  """Return a safely tokenized mmCIF value."""
+  text = "" if value is None else str(value)
+  if not text or text in _MISSING_VALUES:
+    return "?"
+  if any(char.isspace() for char in text) or "'" in text or '"' in text or text.startswith("_") or text.startswith("#") or text.startswith(";"):
+    if '"' not in text:
+      return f'"{text}"'
+    if "'" not in text:
+      return f"'{text}'"
+  return text
+
+
+def _write_cif_lines(cif: Union[str, pathlib.Path, io.IOBase], lines: List[str]):
+  """Write text lines to a filepath or file-like object."""
+  text = "\n".join(lines) + "\n"
+  if isinstance(cif, io.IOBase):
+    cif.write(text)
+    return
+
+  with open(cif, "w", encoding="utf-8") as handle:
+    handle.write(text)

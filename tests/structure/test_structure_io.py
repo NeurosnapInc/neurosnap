@@ -1,8 +1,9 @@
-"""PDB I/O and ligand-extraction tests for structure objects."""
+"""Structure I/O and ligand-extraction tests."""
 
 import numpy as np
 import pytest
 
+from neurosnap.io.mmcif import save_cif
 from neurosnap.io.pdb import save_pdb
 from neurosnap.structure import extract_non_biopolymers
 
@@ -22,7 +23,15 @@ def test_save_and_reload_pdb(tmp_path):
 
 
 def test_save_and_reload_mmcif(tmp_path):
-  pytest.xfail("mmCIF read/write support has not been migrated to the structure layer yet.")
+  structure = parse_single_model(PDB_NO_H)
+  output_cif = tmp_path / "out.cif"
+
+  save_cif(structure, output_cif)
+  assert output_cif.exists() and output_cif.stat().st_size > 0
+
+  reloaded = parse_single_model(output_cif)
+  assert len(reloaded) == len(structure)
+  assert [chain.chain_id for chain in reloaded.chains()] == [chain.chain_id for chain in structure.chains()]
 
 
 @pytest.mark.xfail(reason="The structure layer does not expose a to_sdf() export helper yet.", strict=True)

@@ -1,11 +1,11 @@
 """Structure I/O and ligand-extraction tests."""
 
 import numpy as np
-import pytest
 
 from neurosnap.io.mmcif import save_cif
 from neurosnap.io.pdb import save_pdb
-from neurosnap.structure import extract_non_biopolymers
+from neurosnap.io.sdf import parse_sdf, save_sdf
+from neurosnap.structure import StructureEnsemble, StructureStack, extract_non_biopolymers
 
 from tests._structure_test_utils import PDB_NO_H, make_structure, parse_single_model
 
@@ -34,11 +34,60 @@ def test_save_and_reload_mmcif(tmp_path):
   assert [chain.chain_id for chain in reloaded.chains()] == [chain.chain_id for chain in structure.chains()]
 
 
-@pytest.mark.xfail(reason="The structure layer does not expose a to_sdf() export helper yet.", strict=True)
-def test_to_sdf_writes(tmp_path):
-  structure = parse_single_model(PDB_NO_H)
-  output_sdf = tmp_path / "prot.sdf"
-  structure.to_sdf(output_sdf)
+def _ligand_structure():
+  structure = make_structure(
+    [
+      ("C1", "LIG", "B", 1, 10.0, 0.0, 0.0, "C"),
+      ("C2", "LIG", "B", 1, 11.4, 0.0, 0.0, "C"),
+      ("O1", "LIG", "B", 1, 12.2, 1.0, 0.0, "O"),
+      ("N1", "LIG", "B", 1, 11.8, -1.1, 0.0, "N"),
+      ("S1", "LIG", "B", 1, 13.0, 0.0, 0.0, "S"),
+    ]
+  )
+  structure.atom_annotations["hetero"][:] = True
+  structure.bonds = np.array(
+    [(0, 1, 1), (1, 2, 2), (1, 3, 1), (0, 4, 1)],
+    dtype=structure._dtype_bond,
+  )
+  structure.metadata["title"] = "Ligand"
+  return structure
+
+
+def test_save_and_reload_sdf(tmp_path):
+  structure = _ligand_structure()
+  output_sdf = tmp_path / "ligand.sdf"
+
+  save_sdf(structure, output_sdf)
+  assert output_sdf.exists() and output_sdf.stat().st_size > 0
+
+  reloaded = parse_single_model(output_sdf)
+  assert len(reloaded) == len(structure)
+  assert np.array_equal(reloaded.atom_annotations["element"], structure.atom_annotations["element"])
+  assert np.allclose(
+    np.column_stack((reloaded.atoms["x"], reloaded.atoms["y"], reloaded.atoms["z"])),
+    np.column_stack((structure.atoms["x"], structure.atoms["y"], structure.atoms["z"])),
+  )
+  assert len(reloaded.bonds) == len(structure.bonds)
+  assert reloaded.metadata["title"] == "Ligand"
+
+
+def test_parse_sdf_multi_record_auto_returns_stack(tmp_path):
+  structure_one = _ligand_structure()
+  structure_two = _ligand_structure()
+  structure_two.metadata["model_id"] = 2
+  structure_two.translate(x=1.0, y=2.0, z=3.0)
+
+  ensemble = StructureEnsemble([structure_one], model_ids=[1])
+  ensemble.append(structure_two, model_id=2)
+  output_sdf = tmp_path / "ensemble.sdf"
+
+  save_sdf(ensemble, output_sdf)
+  parsed = parse_sdf(output_sdf, return_type="auto")
+
+  assert isinstance(parsed, StructureStack)
+  assert parsed.model_ids == [1, 2]
+  assert len(parsed[1]) == len(structure_one)
+  assert np.allclose(parsed[2].atoms["x"], structure_two.atoms["x"])
 
 
 def test_extract_non_biopolymers(tmp_path):

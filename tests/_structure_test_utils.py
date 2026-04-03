@@ -6,6 +6,7 @@ import numpy as np
 
 from neurosnap.io.mmcif import parse_mmcif
 from neurosnap.io.pdb import parse_pdb
+from neurosnap.io.sdf import parse_sdf
 from neurosnap.structure import Structure
 
 FILES = Path("tests/files")
@@ -85,6 +86,8 @@ def parse_ensemble(path):
   suffix = Path(path).suffix.lower()
   if suffix in {".cif", ".mmcif"}:
     return parse_mmcif(path, return_type="ensemble")
+  if suffix == ".sdf":
+    return parse_sdf(path, return_type="ensemble")
   return parse_pdb(path, return_type="ensemble")
 
 

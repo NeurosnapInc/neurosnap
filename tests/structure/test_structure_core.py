@@ -82,6 +82,14 @@ def test_remove_waters_and_non_biopolymers():
   assert heterogens.empty
 
 
+def test_filters_require_structure():
+  ensemble = parse_ensemble(PDB_MONO)
+  with pytest.raises(TypeError):
+    remove_waters(ensemble)
+  with pytest.raises(TypeError):
+    remove_non_biopolymers(ensemble)
+
+
 def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():
   structure = parse_single_model(PDB_NO_H)
 

@@ -7,7 +7,7 @@ import pytest
 
 from neurosnap.algos.clusterprot import ClusterProt, animate_results, create_figure_plotly
 from neurosnap.io.pdb import parse_pdb
-from neurosnap.structure import StructureEnsemble
+from neurosnap.structure import Structure, StructureEnsemble
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 CLUSTER_DIR = TESTS_DIR / "files" / "proteins_clustering"
@@ -54,13 +54,16 @@ def cluster_files():
 
 
 @pytest.fixture
-def proteins_from_paths(cluster_files):
-  return [str(p) for p in cluster_files]
+def structure_list(cluster_files):
+  return [parse_pdb(str(p), return_type="ensemble").first() for p in cluster_files]
 
 
 @pytest.fixture
-def structure_objects(cluster_files):
-  return [parse_pdb(str(p), return_type="ensemble") for p in cluster_files]
+def structure_ensemble(cluster_files):
+  ensemble = StructureEnsemble()
+  for structure in [parse_pdb(str(p), return_type="ensemble").first() for p in cluster_files]:
+    ensemble.append(structure)
+  return ensemble
 
 
 # -----------------------
@@ -70,13 +73,12 @@ def structure_objects(cluster_files):
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_clusterprot_with_paths_umap_1d(has_umap, has_sklearn, proteins_from_paths):
+def test_clusterprot_with_structure_list_umap_1d(has_umap, has_sklearn, structure_list):
   if not (has_umap and has_sklearn):
     pytest.skip("Requires umap-learn and scikit-learn")
 
   res = ClusterProt(
-    proteins=proteins_from_paths,  # file paths
-    model=1,
+    proteins=structure_list,
     chain=None,
     umap_n_neighbors=0,  # auto
     proj_1d_algo="umap",  # 1D: UMAP
@@ -84,9 +86,9 @@ def test_clusterprot_with_paths_umap_1d(has_umap, has_sklearn, proteins_from_pat
     dbscan_min_samples=0,  # auto
     eps_scale_factor=0.10,
   )
-  n = len(proteins_from_paths)
+  n = len(structure_list)
   # keys present
-  for k in ["structures", "titles", "projection_1d", "projection_2d", "cluster_labels", "model_id"]:
+  for k in ["structures", "titles", "projection_1d", "projection_2d", "cluster_labels"]:
     assert k in res
   # types & lengths
   assert len(res["structures"]) == n
@@ -105,38 +107,43 @@ def test_clusterprot_with_paths_umap_1d(has_umap, has_sklearn, proteins_from_pat
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_clusterprot_with_objects_pca_1d(has_umap, has_sklearn, structure_objects):
+def test_clusterprot_with_ensemble_pca_1d(has_umap, has_sklearn, structure_ensemble):
   if not (has_umap and has_sklearn):
     pytest.skip("Requires umap-learn and scikit-learn")
 
   res = ClusterProt(
-    proteins=structure_objects,  # pre-parsed structure containers
+    proteins=structure_ensemble,
     proj_1d_algo="pca",  # 1D: PCA
     dbscan_eps=0,  # auto
     dbscan_min_samples=0,  # auto
     eps_scale_factor=0.05,
   )
-  n = len(structure_objects)
-  assert all(isinstance(s, StructureEnsemble) for s in res["structures"])
+  n = len(structure_ensemble)
+  assert all(isinstance(s, Structure) for s in res["structures"])
   p1 = np.asarray(res["projection_1d"])
   assert p1.shape == (n, 1)
 
 
-def test_clusterprot_invalid_1d_algo_raises(proteins_from_paths, has_umap, has_sklearn):
+def test_clusterprot_invalid_1d_algo_raises(structure_list, has_umap, has_sklearn):
   if not (has_umap and has_sklearn):
     pytest.skip("Requires umap-learn and scikit-learn")
 
   with pytest.raises(ValueError):
-    ClusterProt(proteins=proteins_from_paths, proj_1d_algo="tsne?!")
+    ClusterProt(proteins=structure_list, proj_1d_algo="tsne?!")
 
 
 def test_clusterprot_minimum_count_enforced(cluster_files, has_umap, has_sklearn):
   if not (has_umap and has_sklearn):
     pytest.skip("Requires umap-learn and scikit-learn")
 
-  few = [str(p) for p in cluster_files[:3]]
+  few = [parse_pdb(str(p), return_type="ensemble").first() for p in cluster_files[:3]]
   with pytest.raises(AssertionError):
     ClusterProt(proteins=few)
+
+
+def test_clusterprot_rejects_non_structure_list_inputs():
+  with pytest.raises(TypeError):
+    ClusterProt(proteins=["not", "structures"])
 
 
 # -----------------------
@@ -145,12 +152,12 @@ def test_clusterprot_minimum_count_enforced(cluster_files, has_umap, has_sklearn
 
 
 @pytest.mark.slow
-def test_animate_results_monkeypatched(tmp_path, proteins_from_paths, has_umap, has_sklearn, monkeypatch):
+def test_animate_results_monkeypatched(tmp_path, structure_list, has_umap, has_sklearn, monkeypatch):
   if not (has_umap and has_sklearn):
     pytest.skip("Requires umap-learn and scikit-learn")
 
   # small run to produce results (use PCA for faster 1D if desired)
-  res = ClusterProt(proteins=proteins_from_paths, proj_1d_algo="pca")
+  res = ClusterProt(proteins=structure_list, proj_1d_algo="pca")
 
   # Patch rendering + animation to avoid heavy work
   import neurosnap.algos.clusterprot as cpmod
@@ -174,11 +181,11 @@ def test_animate_results_monkeypatched(tmp_path, proteins_from_paths, has_umap, 
 # -----------------------
 
 
-def test_create_figure_plotly_with_fake_module(monkeypatch, proteins_from_paths, has_umap, has_sklearn):
+def test_create_figure_plotly_with_fake_module(monkeypatch, structure_list, has_umap, has_sklearn):
   if not (has_umap and has_sklearn):
     pytest.skip("Requires umap-learn and scikit-learn")
 
-  res = ClusterProt(proteins=proteins_from_paths, proj_1d_algo="pca")
+  res = ClusterProt(proteins=structure_list, proj_1d_algo="pca")
 
   # Build a fake plotly.express module
   class FakeFig:

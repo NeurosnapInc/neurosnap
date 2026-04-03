@@ -3,16 +3,21 @@ Implementation of the ClusterProt algorithm from https://neurosnap.ai/service/Cl
 ClusterProt is an algorithm for clustering proteins by their structure similarity.
 """
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from tqdm import tqdm
 
-from neurosnap.io.mmcif import parse_mmcif
-from neurosnap.io.pdb import parse_pdb
 from neurosnap.log import logger
-from neurosnap.structure import Structure, StructureEnsemble, StructureStack, align, animate_frames, calculate_distance_matrix, render_structure_pseudo3D
+from neurosnap.structure import (
+  Structure,
+  StructureEnsemble,
+  StructureStack,
+  align,
+  animate_frames,
+  calculate_distance_matrix,
+  render_structure_pseudo3D,
+)
 
 try:
   from sklearn.cluster import DBSCAN
@@ -26,8 +31,7 @@ except Exception as e:
 
 
 def ClusterProt(
-  proteins: List[Union[Structure, StructureEnsemble, StructureStack, str, Path]],
-  model: Optional[int] = None,
+  proteins: Union[List[Structure], StructureEnsemble, StructureStack],
   chain: Optional[str] = None,
   umap_n_neighbors: int = 0,
   proj_1d_algo: str = "umap",
@@ -49,8 +53,10 @@ def ClusterProt(
     7. Create the 1D projection using either UMAP or PCA (optional but useful for organizing proteins 1-dimensionally)
 
   Parameters:
-    proteins: List of structures to cluster, as Neurosnap structure containers or structure filepaths.
-    model: Model ID for ClusterProt to use (must be consistent across all structures). Defaults to the first available model in each input.
+    proteins: Structures to cluster. This can be either a list of single-model
+      :class:`Structure` objects or a multi-model
+      :class:`StructureEnsemble`/:class:`StructureStack`, in which case each
+      model is clustered separately.
     chain: Chain ID to for ClusterProt to use (must be consistent across all structures), if not provided calculates for all chains
     umap_n_neighbors: The ``n_neighbors`` value to provide to UMAP for the main projection. Leave as 0 to automatically calculate optimal value. Prior to the 2024-06-14 update this values was left as ``7``.
     proj_1d_algo: Algorithm to use for the 1D projection. Can be either ``"umap"`` or ``"pca"``
@@ -67,20 +73,18 @@ def ClusterProt(
       - cluster_labels (list<float>): List of the labels for each of the structures.
 
   """
-  structures = []
+  structures: List[Structure] = []
   titles = []
-  logger.debug(f"Loading {len(proteins)} structures for clustering")
-  for index, structure in enumerate(proteins, start=1):
-    if isinstance(structure, (Structure, StructureEnsemble, StructureStack)):
-      structures.append(structure)
-      titles.append(str(structure.metadata.get("title", f"structure_{index}")))
-    else:
-      structure_path = Path(structure)
-      if structure_path.suffix.lower() in {".cif", ".mmcif"}:
-        structures.append(parse_mmcif(structure_path, return_type="ensemble"))
-      else:
-        structures.append(parse_pdb(structure_path, return_type="ensemble"))
-      titles.append(structure_path.stem)
+  if isinstance(proteins, list):
+    if not all(isinstance(protein, Structure) for protein in proteins):
+      raise TypeError("ClusterProt() expects a list of Structure objects.")
+    structures = proteins
+    titles = [str(structure.metadata.get("title", f"structure_{index}")) for index, structure in enumerate(structures, start=1)]
+  elif isinstance(proteins, (StructureEnsemble, StructureStack)):
+    structures = list(proteins)
+    titles = [f"model_{model_id}" for model_id in proteins.model_ids]
+  else:
+    raise TypeError("ClusterProt() expects proteins to be a list[Structure], StructureEnsemble, or StructureStack.")
 
   proteins_vects = []
   logger.debug(f"Clustering {len(structures)} structures")
@@ -90,12 +94,12 @@ def ClusterProt(
   # compute distance matrices
   logger.debug("Computing distance matrices")
   prot_ref = structures[0]
-  protein_length = len(calculate_distance_matrix(prot_ref, model=model, chain=chain))
+  protein_length = len(calculate_distance_matrix(prot_ref, chain=chain))
   for index, prot in enumerate(structures):
-    dm = calculate_distance_matrix(prot, model=model, chain=chain)
-    assert len(dm) == protein_length, (
-      f"All structures need to have the same number of residues. Structures {titles[0]} and {titles[index]} have different lengths."
-    )
+    dm = calculate_distance_matrix(prot, chain=chain)
+    assert (
+      len(dm) == protein_length
+    ), f"All structures need to have the same number of residues. Structures {titles[0]} and {titles[index]} have different lengths."
     # get the upper triangle without the diagonal as a flattened vector
     triu_vect = dm[np.triu_indices(len(dm), k=1)]
     proteins_vects.append(triu_vect)
@@ -105,7 +109,7 @@ def ClusterProt(
   # align all proteins
   logger.debug("Aligning all structures")
   for prot in structures:
-    align(prot_ref, prot, model1=model, model2=model)
+    align(prot_ref, prot)
 
   # 2D projection and cluster it using DBSCAN
   if umap_n_neighbors == 0:
@@ -142,7 +146,6 @@ def ClusterProt(
   return {
     "structures": structures,
     "titles": titles,
-    "model_id": model,
     "projection_1d": proj_1d.tolist(),
     "projection_2d": proj_2d.tolist(),
     "cluster_labels": cluster_labels.tolist(),
@@ -159,14 +162,13 @@ def animate_results(cp_results: Dict, animation_fpath: str = "cluster_prot.gif")
   """
   structures = cp_results["structures"]
   titles = cp_results.get("titles", [f"structure_{index + 1}" for index in range(len(structures))])
-  model_id = cp_results.get("model_id")
   projection_1d = np.squeeze(np.asarray(cp_results["projection_1d"], dtype=float))
   order = np.argsort(projection_1d)
   frames = []
   subtitles = []
   total = len(order)
   for i, idx in enumerate(tqdm(order, desc="Rendering frames", unit="frame"), start=1):
-    frames.append(render_structure_pseudo3D(structures[idx], model=model_id, image_size=(800, 580)))
+    frames.append(render_structure_pseudo3D(structures[idx], image_size=(800, 580)))
     subtitles.append(f"{titles[idx]} ({i}/{total})")
   animate_frames(frames, animation_fpath, title="ClusterProt Animation", subtitles=subtitles, interval=150, repeat=True)
 

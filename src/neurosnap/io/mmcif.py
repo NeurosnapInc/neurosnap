@@ -6,17 +6,15 @@ This module provides Neurosnap-native :func:`parse_mmcif` and
 :class:`~neurosnap.structure.structure.StructureEnsemble`, and
 :class:`~neurosnap.structure.structure.StructureStack` objects.
 
-Parsing follows the atom-site driven approach used by BioPython's
-``MMCIFParser`` while building Neurosnap structures directly in a more
-Biotite-like array-oriented form.
+Parsing follows the atom-site driven mmCIF loop structure while building
+Neurosnap structures directly in an array-oriented form.
 """
 
 import io
 import pathlib
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
 
 import numpy as np
-from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 
 from neurosnap.log import logger
 from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
@@ -26,6 +24,139 @@ __all__ = ["parse_mmcif", "save_cif"]
 ReturnType = Literal["ensemble", "stack", "auto"]
 
 _MISSING_VALUES = {"", ".", "?"}
+
+
+def _read_mmcif_text(mmcif: Union[str, pathlib.Path, io.IOBase]) -> str:
+  """Return mmCIF text from a filepath or open file handle."""
+  if isinstance(mmcif, io.IOBase):
+    content = mmcif.read()
+  else:
+    with open(mmcif, encoding="utf-8") as handle:
+      content = handle.read()
+
+  if isinstance(content, bytes):
+    content = content.decode("utf-8")
+  if not content:
+    raise ValueError("Empty file.")
+  return content
+
+
+def _split_mmcif_line(line: str) -> Iterator[str]:
+  """Yield mmCIF tokens from a single line, handling quotes and comments."""
+  quote_chars = {"'", '"'}
+  whitespace_chars = {" ", "\t"}
+  in_token = False
+  quote_open_char = None
+  start_index = 0
+
+  for index, char in enumerate(line):
+    if char in whitespace_chars:
+      if in_token and quote_open_char is None:
+        in_token = False
+        yield line[start_index:index]
+    elif char in quote_chars:
+      if quote_open_char is None and not in_token:
+        quote_open_char = char
+        in_token = True
+        start_index = index + 1
+      elif char == quote_open_char and (index + 1 == len(line) or line[index + 1] in whitespace_chars):
+        quote_open_char = None
+        in_token = False
+        yield line[start_index:index]
+    elif char == "#" and not in_token:
+      return
+    elif not in_token:
+      in_token = True
+      start_index = index
+
+  if in_token:
+    yield line[start_index:]
+  if quote_open_char is not None:
+    raise ValueError(f"Line ended with quote open: {line}")
+
+
+def _tokenize_mmcif(text: str) -> Iterator[str]:
+  """Yield tokens from mmCIF text, including loop blocks and multiline values."""
+  lines = io.StringIO(text)
+  empty = True
+  for line in lines:
+    empty = False
+    if line.startswith("#"):
+      continue
+    if line.startswith(";"):
+      token_buffer = [line[1:].rstrip()]
+      for line in lines:
+        line = line.rstrip()
+        if line.startswith(";"):
+          yield "\n".join(token_buffer)
+          line = line[1:]
+          if line and line[0] not in {" ", "\t"}:
+            raise ValueError("Missing whitespace after closing semicolon for multiline mmCIF value.")
+          break
+        token_buffer.append(line)
+      else:
+        raise ValueError("Missing closing semicolon for multiline mmCIF value.")
+
+    yield from _split_mmcif_line(line.strip())
+
+  if empty:
+    raise ValueError("Empty file.")
+
+
+def _parse_mmcif_dict(text: str) -> Dict[str, Union[str, List[str]]]:
+  """Parse mmCIF text into a dictionary of scalar values and loop columns."""
+  tokens = _tokenize_mmcif(text)
+  try:
+    first_token = next(tokens)
+  except StopIteration as exc:
+    raise ValueError("Empty file.") from exc
+
+  if not first_token.startswith("data_"):
+    raise ValueError("The input mmCIF file must begin with a 'data_' directive.")
+
+  mmcif_dict: Dict[str, Union[str, List[str]]] = {first_token[0:5]: first_token[5:]}
+  loop_flag = False
+  pending_key: Optional[str] = None
+  loop_keys: List[str] = []
+  loop_key_count = 0
+  loop_value_index = 0
+
+  for token in tokens:
+    if token.lower() == "loop_":
+      loop_flag = True
+      loop_keys = []
+      loop_key_count = 0
+      loop_value_index = 0
+      pending_key = None
+      continue
+
+    if loop_flag:
+      if token.startswith("_") and (loop_key_count == 0 or loop_value_index % loop_key_count == 0):
+        if loop_value_index > 0:
+          loop_flag = False
+        else:
+          mmcif_dict[token] = []
+          loop_keys.append(token)
+          loop_key_count += 1
+          continue
+
+      if loop_flag:
+        if loop_key_count == 0:
+          raise ValueError("mmCIF loop_ block does not define any keys before values.")
+        column_key = loop_keys[loop_value_index % loop_key_count]
+        mmcif_dict[column_key].append(token)
+        loop_value_index += 1
+        continue
+
+    if pending_key is None:
+      pending_key = token
+    else:
+      mmcif_dict[pending_key] = [token]
+      pending_key = None
+
+  if pending_key is not None:
+    raise ValueError(f'mmCIF key "{pending_key}" is missing a value.')
+  return mmcif_dict
 
 
 def _normalize_mmcif_value(value: object) -> str:
@@ -95,7 +226,7 @@ def parse_mmcif(
   if return_type not in {"ensemble", "stack", "auto"}:
     raise ValueError('return_type must be one of "ensemble", "stack", or "auto".')
 
-  mmcif_dict = MMCIF2Dict(mmcif)
+  mmcif_dict = _parse_mmcif_dict(_read_mmcif_text(mmcif))
   atom_groups = mmcif_dict.get("_atom_site.group_PDB")
   if not atom_groups:
     raise ValueError('No "_atom_site" coordinate records were found in the mmCIF file.')

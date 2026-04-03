@@ -987,6 +987,19 @@ class StructureEnsemble:
     """Return the models as a shallow copied list."""
     return list(self._models)
 
+  def first(self) -> Structure:
+    """Return the first model in the ensemble.
+
+    Returns:
+      The first :class:`Structure` in stored order.
+
+    Raises:
+      IndexError: If the ensemble is empty.
+    """
+    if not self._models:
+      raise IndexError("Cannot fetch the first model from an empty StructureEnsemble.")
+    return self._models[0]
+
   def to_stack(self) -> "StructureStack":
     """Convert the ensemble into a ``StructureStack``.
 
@@ -1067,6 +1080,19 @@ class StructureStack:
     """Iterate over the stack as materialized ``Structure`` models."""
     for model_index in range(len(self)):
       yield self._model_to_structure(model_index)
+
+  def first(self) -> Structure:
+    """Return the first model in the stack.
+
+    Returns:
+      The first :class:`Structure` in stored order.
+
+    Raises:
+      IndexError: If the stack is empty.
+    """
+    if len(self) == 0:
+      raise IndexError("Cannot fetch the first model from an empty StructureStack.")
+    return self._model_to_structure(0)
 
   def __getitem__(self, index):
     """Return a materialized model by model ID or a sliced sub-stack by position.

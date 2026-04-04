@@ -39,8 +39,8 @@ from scipy.stats import pearsonr
 
 from neurosnap.io.pdb import save_pdb
 from neurosnap.log import logger
-from neurosnap.structure import Structure, StructureEnsemble, StructureStack, find_interface_contacts
-from neurosnap.structure._common import filter_structure_atoms, resolve_model
+from neurosnap.structure import Structure, find_interface_contacts
+from neurosnap.structure._common import filter_structure_atoms
 
 _METRIC_DEFINITIONS_LOGGED = False
 
@@ -272,7 +272,7 @@ quit
 #  Section 5 – Per-pair EC computation
 # ---------------------------------------------------------------------
 def compute_ec(
-  structure: Structure | StructureEnsemble | StructureStack,
+  structure: Structure,
   chain1: str,
   chain2: str,
   *,
@@ -284,12 +284,12 @@ def compute_ec(
 ) -> Tuple[float, float, float]:
   """
   Compute electrostatic complementarity (EC) and Pearson correlations (r_b, r_t)
-  for an order-invariant interface chain pair in a Neurosnap structure container.
+  for an order-invariant interface chain pair in a single-model Neurosnap structure.
 
   Parameters
   ----------
   structure
-    Structure container containing the interface chains.
+    Single-model :class:`Structure` containing the interface chains.
   chain1
     Chain identifier for the first interface chain.
   chain2
@@ -310,8 +310,10 @@ def compute_ec(
   tuple[float, float, float]
     (ec, r_b, r_t), or (nan, nan, nan) when insufficient interface samples.
   """
-  structure_model = resolve_model(structure)
-  contacts = find_interface_contacts(structure_model, chain1, chain2, cutoff=cutoff, hydrogens=False)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"compute_ec() expects a Structure, found {type(structure).__name__}.")
+
+  contacts = find_interface_contacts(structure, chain1, chain2, cutoff=cutoff, hydrogens=False)
 
   ib_atoms = []
   ib_seen = set()
@@ -343,8 +345,8 @@ def compute_ec(
     workdir = Path(td)
     chain1_pdb = workdir / f"chain1_{chain1}.pdb"
     chain2_pdb = workdir / f"chain2_{chain2}.pdb"
-    write_single_chain_pdb(structure_model, chain1, chain1_pdb)
-    write_single_chain_pdb(structure_model, chain2, chain2_pdb)
+    write_single_chain_pdb(structure, chain1, chain1_pdb)
+    write_single_chain_pdb(structure, chain2, chain2_pdb)
 
     chain1_pqr = chain1_pdb.with_suffix(".pqr")
     chain2_pqr = chain2_pdb.with_suffix(".pqr")

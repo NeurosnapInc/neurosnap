@@ -34,7 +34,7 @@ import math
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -72,10 +72,8 @@ from neurosnap.algos.evoef2_lib.constants import (
   SSBOND_DISTANCE,
 )
 from neurosnap.algos.evoef2_lib.weights import get_weights
-from neurosnap.io.mmcif import parse_mmcif
-from neurosnap.io.pdb import parse_pdb
 from neurosnap.log import logger
-from neurosnap.structure._common import StructureLike, resolve_model
+from neurosnap.structure import Structure as NSStructure
 
 
 @dataclass
@@ -1473,7 +1471,7 @@ def _add_bonds_from_topology(res: Residue, topologies: Dict[str, ResidueTopology
 
 
 def rebuild_missing_atoms(
-  structure: Union[StructureLike, str, Path],
+  structure: NSStructure,
   *,
   param_path: Optional[Path] = None,
   topo_path: Optional[Path] = None,
@@ -1481,20 +1479,17 @@ def rebuild_missing_atoms(
   """Rebuild missing heavy atoms and hydrogens using EvoEF2 topology.
 
   Args:
-    structure: Structure container or structure filepath.
+    structure: Single-model :class:`Structure`.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
 
   Returns:
     Structure with missing atoms reconstructed where possible.
   """
-  if isinstance(structure, (str, Path)):
-    structure_path = Path(structure)
-    if structure_path.suffix.lower() in {".cif", ".mmcif"}:
-      structure = parse_mmcif(structure_path, return_type="ensemble")
-    else:
-      structure = parse_pdb(structure_path, return_type="ensemble")
-  df = resolve_model(structure).to_dataframe()
+  if not isinstance(structure, NSStructure):
+    raise TypeError(f"rebuild_missing_atoms() expects a Structure, found {type(structure).__name__}.")
+
+  df = structure.to_dataframe()
   # Only merge NA params/topology if the structure contains NA residues.
   has_na = any(_is_nucleic_res_name(name) for name in df["res_name"].unique())
 
@@ -2608,7 +2603,7 @@ def _residue_and_ligand_energy(res: Residue, ligand: Residue, terms: List[float]
 # Public API
 # -----------------------------
 def calculate_stability(
-  structure: Union[StructureLike, str, Path],
+  structure: NSStructure,
   *,
   param_path: Optional[Path] = None,
   topo_path: Optional[Path] = None,
@@ -2620,7 +2615,7 @@ def calculate_stability(
   """Compute EvoEF2 stability energy for a structure.
 
   Args:
-    structure: Structure container or PDB path.
+    structure: Single-model :class:`Structure`.
     param_path: Optional parameter file override.
     topo_path: Optional topology file override.
     weight_dict: Weights dictionary to use.
@@ -2687,7 +2682,7 @@ def calculate_stability(
 
 
 def calculate_interface_energy(
-  structure: Union[StructureLike, str, Path],
+  structure: NSStructure,
   split1: Sequence[str],
   split2: Sequence[str],
   *,
@@ -2698,7 +2693,7 @@ def calculate_interface_energy(
   """Compute interface energy between two chain groups.
 
   Args:
-    structure: Structure container or PDB path.
+    structure: Single-model :class:`Structure`.
     split1: Chain IDs for group 1 as they appear in the selected structure model.
       Pass a sequence of exact chain name strings, e.g. ``["A"]`` or ``["A", "C"]``.
       Matching is case-sensitive and no whitespace is trimmed.
@@ -2732,7 +2727,7 @@ def calculate_interface_energy(
 
 
 def calculate_binding(
-  structure: Union[StructureLike, str, Path],
+  structure: NSStructure,
   split1: Sequence[str],
   split2: Sequence[str],
   *,
@@ -2746,7 +2741,7 @@ def calculate_binding(
   """Compute interface energy and DG_bind for two chain groups.
 
   Args:
-    structure: Structure container or PDB path.
+    structure: Single-model :class:`Structure`.
     split1: Chain IDs for group 1 as exact strings from the selected structure model.
       Examples: ``["A"]`` for a monomer partner, ``["A", "C"]`` for a multi-chain partner.
       IDs are matched exactly (case-sensitive, no normalization).

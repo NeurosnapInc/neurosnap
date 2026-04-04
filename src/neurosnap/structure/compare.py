@@ -4,45 +4,43 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from ._common import available_chain_ids, backbone_atom_order, coord_matrix, resolve_model, resolve_model_id, set_model_coordinates
+from ._common import available_chain_ids, backbone_atom_order, coord_matrix
 from .analysis import get_backbone
+from .structure import Structure
 
 
 def align(
-  reference,
-  mobile,
+  reference: Structure,
+  mobile: Structure,
   chains1: Optional[Sequence[str]] = None,
   chains2: Optional[Sequence[str]] = None,
-  model1: Optional[int] = None,
-  model2: Optional[int] = None,
 ):
-  """Align a mobile model onto a reference model using polymer backbone atoms.
+  """Align a mobile structure onto a reference structure using polymer backbone atoms.
 
   When both ``chains1`` and ``chains2`` are provided, they are interpreted as
   explicit pairwise chain mappings in matching order.
 
   Parameters:
-    reference: Reference :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
-    mobile: Mobile structure container to transform in-place.
+    reference: Reference single-model :class:`Structure`.
+    mobile: Mobile single-model :class:`Structure` to transform in-place.
     chains1: Optional reference chain IDs to include in the alignment.
     chains2: Optional mobile chain IDs to include in the alignment.
-    model1: Optional reference model ID.
-    model2: Optional mobile model ID.
 
   Returns:
-    ``None``. The selected mobile model is transformed in-place.
+    ``None``. The mobile structure is transformed in-place.
   """
-  reference_model = resolve_model(reference, model=model1)
-  mobile_model = resolve_model(mobile, model=model2)
+  if not isinstance(reference, Structure):
+    raise TypeError(f"align() expects reference to be a Structure, found {type(reference).__name__}.")
+  if not isinstance(mobile, Structure):
+    raise TypeError(f"align() expects mobile to be a Structure, found {type(mobile).__name__}.")
 
   chains1 = list(chains1 or [])
   chains2 = list(chains2 or [])
   chains1_provided = bool(chains1)
   chains2_provided = bool(chains2)
 
-  available_reference_chains = available_chain_ids(reference_model)
-  available_mobile_chains = available_chain_ids(mobile_model)
+  available_reference_chains = available_chain_ids(reference)
+  available_mobile_chains = available_chain_ids(mobile)
 
   if chains1:
     for chain_id in chains1:
@@ -72,7 +70,7 @@ def align(
     mobile_chain_specs = [(chain_id, chain_id) for chain_id in chains2]
 
   def backbone_atom_map(structure_model, chain_specs):
-    """Build a residue-aware backbone lookup for one selected model."""
+    """Build a residue-aware backbone lookup for one structure."""
     chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
     atom_map = {}
     for map_key, chain_id in chain_specs:
@@ -89,8 +87,8 @@ def align(
             atom_map[(map_key, residue.res_id, residue.ins_code, atom_name)] = residue_atoms[atom_name]
     return atom_map
 
-  reference_atom_map = backbone_atom_map(reference_model, reference_chain_specs)
-  mobile_atom_map = backbone_atom_map(mobile_model, mobile_chain_specs)
+  reference_atom_map = backbone_atom_map(reference, reference_chain_specs)
+  mobile_atom_map = backbone_atom_map(mobile, mobile_chain_specs)
   if not reference_atom_map:
     raise ValueError("Reference structure does not contain any backbone atoms to align.")
   if not mobile_atom_map:
@@ -117,42 +115,43 @@ def align(
     rotation = u_matrix @ vt_matrix
   translation = reference_center - (mobile_center @ rotation)
 
-  all_mobile_coords = coord_matrix(mobile_model)
+  all_mobile_coords = coord_matrix(mobile)
   aligned_coords = all_mobile_coords @ rotation.astype(np.float32) + translation.astype(np.float32)
-  set_model_coordinates(mobile, aligned_coords, model=resolve_model_id(mobile, model=model2))
+  mobile.atoms["x"] = aligned_coords[:, 0]
+  mobile.atoms["y"] = aligned_coords[:, 1]
+  mobile.atoms["z"] = aligned_coords[:, 2]
 
 
 def calculate_rmsd(
-  reference,
-  mobile,
+  reference: Structure,
+  mobile: Structure,
   chains1: Optional[Sequence[str]] = None,
   chains2: Optional[Sequence[str]] = None,
-  model1: Optional[int] = None,
-  model2: Optional[int] = None,
   align_structures: bool = True,
 ) -> float:
   """Calculate backbone RMSD between two structures.
 
   Parameters:
-    reference: Reference structure container.
-    mobile: Mobile structure container.
+    reference: Reference single-model :class:`Structure`.
+    mobile: Mobile single-model :class:`Structure`.
     chains1: Optional reference chain IDs to include.
     chains2: Optional mobile chain IDs to include.
-    model1: Optional reference model ID.
-    model2: Optional mobile model ID.
     align_structures: If ``True``, align the mobile structure before computing
       RMSD.
 
   Returns:
     Backbone RMSD in Å.
   """
-  if align_structures:
-    align(reference, mobile, chains1=chains1, chains2=chains2, model1=model1, model2=model2)
+  if not isinstance(reference, Structure):
+    raise TypeError(f"calculate_rmsd() expects reference to be a Structure, found {type(reference).__name__}.")
+  if not isinstance(mobile, Structure):
+    raise TypeError(f"calculate_rmsd() expects mobile to be a Structure, found {type(mobile).__name__}.")
 
-  reference_model = resolve_model(reference, model=model1)
-  mobile_model = resolve_model(mobile, model=model2)
-  reference_coords = get_backbone(reference_model, chains=chains1, include_nucleotides=True)
-  mobile_coords = get_backbone(mobile_model, chains=chains2, include_nucleotides=True)
+  if align_structures:
+    align(reference, mobile, chains1=chains1, chains2=chains2)
+
+  reference_coords = get_backbone(reference, chains=chains1, include_nucleotides=True)
+  mobile_coords = get_backbone(mobile, chains=chains2, include_nucleotides=True)
   if reference_coords.shape != mobile_coords.shape:
     raise ValueError("Structures must have the same number of backbone atoms for RMSD calculation.")
   if reference_coords.size == 0:

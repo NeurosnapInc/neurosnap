@@ -1,12 +1,8 @@
-from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple
 
 import numpy as np
 
-from neurosnap.io.mmcif import parse_mmcif
-from neurosnap.io.pdb import parse_pdb
-from neurosnap.structure import Structure, StructureEnsemble, StructureStack
-from neurosnap.structure._common import resolve_model
+from neurosnap.structure import Structure
 
 
 def _chain_cb_or_gly_ca(structure: Structure, chain_id: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -153,7 +149,7 @@ def _calc_pdockq_from_arrays(chain_coords: dict, chain_plddt: dict, dist_thresh:
 
 
 def calculate_pDockQ(
-  structure: Union[str, Path, Structure, StructureEnsemble, StructureStack],
+  structure: Structure,
   chain1: str = None,
   chain2: str = None,
   dist_thresh: float = 8.0,
@@ -163,7 +159,7 @@ def calculate_pDockQ(
   for a two-chain complex.
 
   Args:
-      structure: Structure container or structure filepath.
+      structure: Single-model :class:`Structure`.
       chain1: Chain ID for the first chain (e.g., "A"). If None, auto-detected if only 2 chains exist.
       chain2: Chain ID for the second chain (e.g., "B"). If None, auto-detected if only 2 chains exist.
       dist_thresh: Distance threshold (Å) for interface contacts, default 8.0
@@ -176,14 +172,10 @@ def calculate_pDockQ(
             the pDockQ score. Represents the minimum expected probability that the
             predicted interface is correct (bounded roughly 0.55-0.98 with higher being better).
   """
-  if isinstance(structure, (str, Path)):
-    structure_path = Path(structure)
-    if structure_path.suffix.lower() in {".cif", ".mmcif"}:
-      structure = parse_mmcif(structure_path, return_type="ensemble")
-    else:
-      structure = parse_pdb(structure_path, return_type="ensemble")
-  model_structure = resolve_model(structure)
-  chains = [chain.chain_id for chain in model_structure.chains()]
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_pDockQ() expects a Structure, found {type(structure).__name__}.")
+
+  chains = [chain.chain_id for chain in structure.chains()]
 
   # Auto-detect if chains are not specified
   if chain1 is None or chain2 is None:
@@ -203,8 +195,8 @@ def calculate_pDockQ(
     raise ValueError("chain_id1 and chain_id2 must be different.")
 
   # Extract chain representatives and plDDT
-  coords1, plddt1 = _chain_cb_or_gly_ca(model_structure, chain1)
-  coords2, plddt2 = _chain_cb_or_gly_ca(model_structure, chain2)
+  coords1, plddt1 = _chain_cb_or_gly_ca(structure, chain1)
+  coords2, plddt2 = _chain_cb_or_gly_ca(structure, chain2)
 
   chain_coords = {chain1: coords1, chain2: coords2}
   chain_plddt = {chain1: plddt1, chain2: plddt2}

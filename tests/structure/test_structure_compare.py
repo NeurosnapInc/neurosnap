@@ -20,6 +20,7 @@ from tests._structure_test_utils import (
   coords_from_atom_defs,
   make_structure,
   parse_single_model,
+  parse_ensemble,
   replace_chain,
   transform_atoms,
 )
@@ -82,6 +83,16 @@ def test_rmsd_pairwise_chain_mapping():
 
   rmsd = calculate_rmsd(reference, mobile, chains1=["B"], chains2=["A"], align_structures=True)
   assert rmsd < 1e-3
+
+
+def test_compare_helpers_require_structure():
+  ensemble = parse_ensemble(AF2_RANK1)
+  mobile = parse_single_model(AF2_RANK2)
+
+  with pytest.raises(TypeError):
+    align(ensemble, mobile)
+  with pytest.raises(TypeError):
+    calculate_rmsd(ensemble, mobile)
 
 
 def test_align_pairwise_chain_mapping_requires_equal_lengths():

@@ -10,6 +10,7 @@ import numpy as np
 
 from neurosnap.algos import evoef2
 from neurosnap.algos.evoef2 import calculate_binding, calculate_interface_energy, calculate_stability, rebuild_missing_atoms
+from tests._structure_test_utils import parse_single_model
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -168,7 +169,7 @@ EVOEF2_REFERENCE_4AOW_AF2 = {
   ],
 )
 def test_evoef2_stability_matches_reference(pdb_name, reference, total_delta_limit):
-  actual = calculate_stability(str(FILES / pdb_name))
+  actual = calculate_stability(parse_single_model(FILES / pdb_name))
   bad_terms = _compare_terms(actual, reference, abs_tol=0.1, rel_tol=0.01)
   total_delta = abs(float(actual["total"]) - float(reference["total"]))
   assert total_delta <= total_delta_limit, (
@@ -198,7 +199,7 @@ def test_load_tables_shapes():
 
 
 def test_rebuild_missing_atoms_produces_valid_atoms():
-  structure = rebuild_missing_atoms(str(FILES / "1nkp_mycmax.pdb"))
+  structure = rebuild_missing_atoms(parse_single_model(FILES / "1nkp_mycmax.pdb"))
   assert structure.chains
   valid_atoms = sum(
     1
@@ -211,7 +212,7 @@ def test_rebuild_missing_atoms_produces_valid_atoms():
 
 
 def test_calc_phi_psi_assigns_values():
-  structure = rebuild_missing_atoms(str(FILES / "dimer_af2.pdb"))
+  structure = rebuild_missing_atoms(parse_single_model(FILES / "dimer_af2.pdb"))
   for chain in structure.chains:
     if chain.is_protein:
       evoef2._calc_phi_psi(chain)
@@ -222,9 +223,9 @@ def test_calc_phi_psi_assigns_values():
 
 
 def test_interface_and_binding_have_expected_keys():
-  pdb_path = str(FILES / "dimer_af2.pdb")
-  interface = calculate_interface_energy(pdb_path, split1=["A"], split2=["B"])
-  binding = calculate_binding(pdb_path, split1=["A"], split2=["B"])
+  structure = parse_single_model(FILES / "dimer_af2.pdb")
+  interface = calculate_interface_energy(structure, split1=["A"], split2=["B"])
+  binding = calculate_binding(structure, split1=["A"], split2=["B"])
   assert "total" in interface
   assert "dg_bind" in binding
   assert "stability_complex" in binding
@@ -235,9 +236,9 @@ def test_interface_and_binding_have_expected_keys():
 
 
 def test_ptm_binding_smoke():
-  cif_path = str(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
-  interface = calculate_interface_energy(cif_path, split1=["A"], split2=["B"])
-  binding = calculate_binding(cif_path, split1=["A"], split2=["B"])
+  structure = parse_single_model(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
+  interface = calculate_interface_energy(structure, split1=["A"], split2=["B"])
+  binding = calculate_binding(structure, split1=["A"], split2=["B"])
   assert "total" in interface
   assert "dg_bind" in binding
   assert "stability_complex" in binding
@@ -248,8 +249,8 @@ def test_ptm_binding_smoke():
 
 
 def test_dg_bind_matches_subtraction():
-  pdb_path = str(FILES / "dimer_af2.pdb")
-  binding = calculate_binding(pdb_path, split1=["A"], split2=["B"])
+  structure = parse_single_model(FILES / "dimer_af2.pdb")
+  binding = calculate_binding(structure, split1=["A"], split2=["B"])
   full = binding["stability_complex"]
   s1 = binding["stability_split1"]
   s2 = binding["stability_split2"]
@@ -260,7 +261,7 @@ def test_dg_bind_matches_subtraction():
 
 
 def test_debug_structure_smoke():
-  stats = _debug_evoef2_structure(str(FILES / "dimer_af2.pdb"))
+  stats = _debug_evoef2_structure(parse_single_model(FILES / "dimer_af2.pdb"))
   assert stats["total_atoms"] > 0
   assert stats["valid_atoms"] > 0
   assert stats["protein_residues"] > 0
@@ -268,7 +269,7 @@ def test_debug_structure_smoke():
 
 def test_na_binding_dna_dna_smoke():
   data = calculate_binding(
-    str(FILES / "1nkp_mycmax_with_hydrogens.pdb"),
+    parse_single_model(FILES / "1nkp_mycmax_with_hydrogens.pdb"),
     split1=["H"],
     split2=["J"],
   )
@@ -278,7 +279,7 @@ def test_na_binding_dna_dna_smoke():
 
 def test_na_binding_protein_dna_smoke():
   data = calculate_binding(
-    str(FILES / "1nkp_mycmax_with_hydrogens.pdb"),
+    parse_single_model(FILES / "1nkp_mycmax_with_hydrogens.pdb"),
     split1=["D"],
     split2=["J"],
   )
@@ -287,13 +288,13 @@ def test_na_binding_protein_dna_smoke():
 
 
 def test_rna_stability_smoke():
-  data = calculate_stability(str(FILES / "rna_monomer_1.cif"))
+  data = calculate_stability(parse_single_model(FILES / "rna_monomer_1.cif"))
   assert "total" in data
   assert np.isfinite(data["total"])
 
 
 def test_ptm_stability_smoke():
-  data = calculate_stability(str(FILES / "lrrk2_8fo2_with_ptm_truncated.cif"))
+  data = calculate_stability(parse_single_model(FILES / "lrrk2_8fo2_with_ptm_truncated.cif"))
   assert "total" in data
   assert np.isfinite(data["total"])
   assert data["total"] == pytest.approx(-5820.224155352682, abs=5.0)

@@ -61,15 +61,15 @@ def test__calc_pdockq_from_arrays_no_contacts_returns_zero():
 
 
 def test_calculate_pdockq_autodetect_two_chains_and_ranges():
-  prot_path = FILES / "dimer_af2.pdb"  # has exactly two chains
+  structure = parse_single_model(FILES / "dimer_af2.pdb")  # has exactly two chains
 
-  pd, ppv = calculate_pDockQ(str(prot_path))  # auto-detect A/B
+  pd, ppv = calculate_pDockQ(structure)  # auto-detect A/B
   assert 0.0 <= pd <= 1.0
   # PPV table spans ~0.56..0.98; allow 0 if no contacts in this model
   assert 0.0 <= ppv <= 0.99
 
   # If we make the threshold tiny, likely no contacts -> (0, 0)
-  pd0, ppv0 = calculate_pDockQ(str(prot_path), dist_thresh=0.1)
+  pd0, ppv0 = calculate_pDockQ(structure, dist_thresh=0.1)
   assert pd0 == 0.0 and ppv0 == 0.0
 
 
@@ -86,3 +86,8 @@ def test_calculate_pdockq_requires_two_chains_or_explicit_ids():
   # Wrong chain name should raise
   with pytest.raises(ValueError):
     _ = calculate_pDockQ(single, chain1="A", chain2="Z")
+
+
+def test_calculate_pdockq_requires_structure():
+  with pytest.raises(TypeError):
+    calculate_pDockQ("tests/files/dimer_af2.pdb")

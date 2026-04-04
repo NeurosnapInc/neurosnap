@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from neurosnap.algos import ec_interface
-from tests._structure_test_utils import parse_single_model
+from tests._structure_test_utils import make_structure, parse_single_model
 
 
 class FakeAtom:
@@ -19,10 +19,15 @@ class FakeAtom:
 
 
 def test_compute_ec_returns_nan_without_contacts(monkeypatch):
-  monkeypatch.setattr(ec_interface, "resolve_model", lambda structure, model=None: structure)
+  structure = make_structure(
+    [
+      ("CA", "GLY", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "B", 1, 10.0, 0.0, 0.0, "C"),
+    ]
+  )
   monkeypatch.setattr(ec_interface, "find_interface_contacts", lambda *args, **kwargs: [])
 
-  result = ec_interface.compute_ec(object(), "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
+  result = ec_interface.compute_ec(structure, "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
 
   assert all(math.isnan(v) for v in result)
 
@@ -30,7 +35,12 @@ def test_compute_ec_returns_nan_without_contacts(monkeypatch):
 def test_compute_ec_requires_sufficient_samples(monkeypatch):
   chain1_atoms = [FakeAtom((i, 0.0, 0.0), chain_id="A", res_id=i + 1, atom_name=f"C{i}") for i in range(5)]
   chain2_atoms = [FakeAtom((i + 10, 0.0, 0.0), chain_id="B", res_id=i + 1, atom_name=f"N{i}") for i in range(5)]
-  monkeypatch.setattr(ec_interface, "resolve_model", lambda structure, model=None: structure)
+  structure = make_structure(
+    [
+      ("CA", "GLY", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "B", 1, 10.0, 0.0, 0.0, "C"),
+    ]
+  )
   monkeypatch.setattr(ec_interface, "find_interface_contacts", lambda *args, **kwargs: list(zip(chain1_atoms, chain2_atoms)))
 
   monkeypatch.setattr(ec_interface, "write_single_chain_pdb", lambda structure, chain_id, outfile: outfile.write_text(f"{chain_id}\n"))
@@ -48,7 +58,7 @@ def test_compute_ec_requires_sufficient_samples(monkeypatch):
   monkeypatch.setattr(ec_interface, "_parse_dx", lambda path: (np.zeros(3), (1, 1, 1), np.zeros((2, 2, 2))))
   monkeypatch.setattr(ec_interface, "_sample_potential", lambda coords, origin, delta, grid: np.arange(len(coords), dtype=float))
 
-  result = ec_interface.compute_ec(object(), "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
+  result = ec_interface.compute_ec(structure, "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
 
   assert all(math.isnan(v) for v in result)
   assert prep_calls["count"] == 2  # both interface chains
@@ -58,7 +68,12 @@ def test_compute_ec_requires_sufficient_samples(monkeypatch):
 def test_compute_ec_uses_pearson_correlations(monkeypatch):
   chain1_atoms = [FakeAtom((i, 0.0, 0.0), chain_id="A", res_id=i + 1, atom_name=f"C{i}") for i in range(12)]
   chain2_atoms = [FakeAtom((i + 100, 0.0, 0.0), chain_id="B", res_id=i + 1, atom_name=f"N{i}") for i in range(12)]
-  monkeypatch.setattr(ec_interface, "resolve_model", lambda structure, model=None: structure)
+  structure = make_structure(
+    [
+      ("CA", "GLY", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "B", 1, 10.0, 0.0, 0.0, "C"),
+    ]
+  )
   monkeypatch.setattr(ec_interface, "find_interface_contacts", lambda *args, **kwargs: list(zip(chain1_atoms, chain2_atoms)))
 
   written_chains = []
@@ -84,12 +99,17 @@ def test_compute_ec_uses_pearson_correlations(monkeypatch):
 
   monkeypatch.setattr(ec_interface, "_sample_potential", fake_sample_potential)
 
-  ec, r_b, r_t = ec_interface.compute_ec(object(), "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
+  ec, r_b, r_t = ec_interface.compute_ec(structure, "A", "B", cutoff=4.5, forcefield="AMBER", pdb2pqr="pdb2pqr", apbs="apbs")
 
   assert ec == pytest.approx(0.0)
   assert r_b == pytest.approx(-1.0)
   assert r_t == pytest.approx(1.0)
   assert written_chains == ["A", "B"]
+
+
+def test_compute_ec_requires_structure():
+  with pytest.raises(TypeError):
+    ec_interface.compute_ec(object(), "A", "B")
 
 
 def test_compute_ec_real_structure_with_stubbed_io(monkeypatch):

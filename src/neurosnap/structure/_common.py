@@ -1,14 +1,13 @@
 """Shared helpers for standalone structure analysis functions."""
 
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 
 from neurosnap.constants import AA_RECORDS, BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NUC_DNA_CODES, NUC_RNA_CODES
 
-from .structure import Residue, Structure, StructureEnsemble, StructureStack
+from .structure import Residue, Structure, StructureStack
 
-StructureLike = Union[Structure, StructureEnsemble, StructureStack]
 PolymerType = Literal["protein", "dna", "rna"]
 ResidueKey = Tuple[str, int, str, str, bool]
 
@@ -17,62 +16,6 @@ ResidueKey = Tuple[str, int, str, str, bool]
 _PROTEIN_BACKBONE_ATOMS = ("N", "CA", "C")
 _DNA_BACKBONE_ATOMS = ("P", "O1P", "O2P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4'", "C1'", "C2'", "C3'", "O3'")
 _RNA_BACKBONE_ATOMS = ("P", "O1P", "O2P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4'", "C1'", "C2'", "O2'", "C3'", "O3'")
-
-
-def resolve_model_id(structure: StructureLike, model: Optional[int] = None) -> int:
-  """Resolve an optional model selector to a concrete model ID."""
-  model_ids = [int(structure.metadata.get("model_id", 1))] if isinstance(structure, Structure) else list(structure.model_ids)
-  if not model_ids:
-    raise ValueError("Structure does not contain any models.")
-
-  if model is None:
-    return model_ids[0]
-
-  model_id = int(model)
-  if model_id not in model_ids:
-    raise ValueError(f"Model ID {model_id} was not found. Available models: {model_ids}.")
-  return model_id
-
-
-def resolve_model(structure: StructureLike, model: Optional[int] = None) -> Structure:
-  """Materialize or retrieve a single selected model."""
-  model_id = resolve_model_id(structure, model=model)
-  if isinstance(structure, Structure):
-    return structure
-  return structure[model_id]
-
-
-def set_model_coordinates(structure: StructureLike, coord: np.ndarray, model: Optional[int] = None):
-  """Update coordinates for a selected model in-place."""
-  coord = np.asarray(coord, dtype=np.float32)
-  if coord.ndim != 2 or coord.shape[1] != 3:
-    raise ValueError("Coordinate matrix must have shape (n_atoms, 3).")
-
-  if isinstance(structure, Structure):
-    if len(structure) != len(coord):
-      raise ValueError("Coordinate matrix does not match the structure atom count.")
-    structure.atoms["x"] = coord[:, 0]
-    structure.atoms["y"] = coord[:, 1]
-    structure.atoms["z"] = coord[:, 2]
-    return
-
-  model_id = resolve_model_id(structure, model=model)
-  if isinstance(structure, StructureEnsemble):
-    target = structure[model_id]
-    if len(target) != len(coord):
-      raise ValueError("Coordinate matrix does not match the selected model atom count.")
-    target.atoms["x"] = coord[:, 0]
-    target.atoms["y"] = coord[:, 1]
-    target.atoms["z"] = coord[:, 2]
-    return
-
-  try:
-    position = structure.model_ids.index(model_id)
-  except ValueError:
-    raise ValueError(f"Model ID {model_id} was not found. Available models: {list(structure.model_ids)}.")
-  if structure.atom_count != len(coord):
-    raise ValueError("Coordinate matrix does not match the selected model atom count.")
-  structure.coord[position] = coord
 
 
 def coord_matrix(structure: Structure) -> np.ndarray:

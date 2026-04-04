@@ -205,6 +205,14 @@ class Structure:
       chains.append(Chain(chain_id=chain_id, _residues=tuple(residues)))
     return chains
 
+  def chain_ids(self) -> List[str]:
+    """Return all chains IDs found in the structure.
+
+    Returns:
+      List of strings for each chain.
+    """
+    return [str(x) for x in np.unique(self.atom_annotations["chain_id"])]
+
   def renumber(self, chain: Optional[str] = None, start: int = 1):
     """Renumber residues in-place.
 

@@ -5,7 +5,10 @@ import pandas as pd
 import pytest
 
 from neurosnap.structure import (
+  ca_distance_matrix,
   calculate_distance_matrix,
+  calculate_protein_volume,
+  calculate_surface_area,
   get_backbone,
   remove_non_biopolymers,
   remove_waters,
@@ -99,6 +102,13 @@ def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():
   distance_matrix = calculate_distance_matrix(structure)
   assert distance_matrix.ndim == 2 and distance_matrix.shape[0] == distance_matrix.shape[1]
   assert np.allclose(np.diag(distance_matrix), 0.0)
+  assert np.allclose(distance_matrix, ca_distance_matrix(structure))
+
+  surface_area = calculate_surface_area(structure, level="R")
+  assert isinstance(surface_area, float) and surface_area >= 0.0
+
+  volume = calculate_protein_volume(structure)
+  assert isinstance(volume, float) and volume >= 0.0
 
   center_of_mass = structure.calculate_center_of_mass()
   assert isinstance(center_of_mass, np.ndarray) and center_of_mass.shape == (3,)
@@ -106,3 +116,17 @@ def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():
   assert distances.ndim == 1 and distances.size > 0
   radius_of_gyration = structure.calculate_rog(center=center_of_mass)
   assert radius_of_gyration > 0.0
+
+
+def test_analysis_helpers_require_structure():
+  ensemble = parse_ensemble(PDB_MONO)
+  with pytest.raises(TypeError):
+    get_backbone(ensemble)
+  with pytest.raises(TypeError):
+    calculate_distance_matrix(ensemble)
+  with pytest.raises(TypeError):
+    ca_distance_matrix(ensemble)
+  with pytest.raises(TypeError):
+    calculate_surface_area(ensemble)
+  with pytest.raises(TypeError):
+    calculate_protein_volume(ensemble)

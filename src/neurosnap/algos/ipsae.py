@@ -16,8 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from neurosnap.constants import STANDARD_NUCLEOTIDES
-from neurosnap.structure import Atom, Residue, Structure, StructureEnsemble, StructureStack
-from neurosnap.structure._common import resolve_model, resolve_model_id
+from neurosnap.structure import Atom, Residue, Structure
 
 
 def ptm_func(x: np.ndarray | float, d0: float) -> np.ndarray | float:
@@ -110,15 +109,15 @@ def _is_hydrogen_atom(atom: Atom) -> bool:
 
 
 def _structure_to_residue_arrays(
-  structure: Structure | StructureEnsemble | StructureStack,
-  model: Optional[int] = None,
+  structure: Structure,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
   """
   Returns arrays aligned across residues:
     residue_names (N,), chains (N,), residue_numbers (N,), cb_like_coords (N,3)
   Only biopolymer residues (standard AAs or nucleotides) with a valid proxy atom are included.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"_structure_to_residue_arrays() expects a Structure, found {type(structure).__name__}.")
   residue_names: List[str] = []
   chains: List[str] = []
   residue_numbers: List[int] = []
@@ -127,7 +126,7 @@ def _structure_to_residue_arrays(
 
   polymer_counter = 0
 
-  for chain in structure_model.chains():
+  for chain in structure.chains():
     ch_id = chain.chain_id
     for residue in chain.residues():
       if residue.hetero:
@@ -164,8 +163,7 @@ def _structure_to_residue_arrays(
 
 
 def _protein_to_site_arrays_with_nonstandard_atoms(
-  structure: Structure | StructureEnsemble | StructureStack,
-  model: Optional[int] = None,
+  structure: Structure,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
   """
   Returns site-level arrays aligned across the structure order:
@@ -175,13 +173,14 @@ def _protein_to_site_arrays_with_nonstandard_atoms(
   Non-standard polymer residues (e.g., PTMs, ligands in polymer chains) contribute one
   site per non-hydrogen atom in atom order.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"_protein_to_site_arrays_with_nonstandard_atoms() expects a Structure, found {type(structure).__name__}.")
   residue_names: List[str] = []
   chains: List[str] = []
   residue_numbers: List[int] = []
   coords: List[np.ndarray] = []
 
-  for chain in structure_model.chains():
+  for chain in structure.chains():
     ch_id = chain.chain_id
     for residue in chain.residues():
       if residue.hetero:
@@ -211,7 +210,7 @@ def _protein_to_site_arrays_with_nonstandard_atoms(
         coords.append(atom.coord.astype(float))
 
   if not residue_names:
-    raise ValueError("No usable sites were found in the selected model.")
+    raise ValueError("No usable sites were found in the structure.")
 
   return (
     np.array(residue_names, dtype=object),
@@ -233,11 +232,10 @@ def _classify_chains(chains: np.ndarray, residue_names: np.ndarray) -> Dict[str,
 
 
 def calculate_ipSAE(
-  structure: Structure | StructureEnsemble | StructureStack,
+  structure: Structure,
   plddt: np.ndarray,
   pae_matrix: np.ndarray,
   *,
-  model: Optional[int] = None,
   pae_cutoff: float = 10.0,
   dist_cutoff: float = 10.0,
   pDockQ_cutoff: float = 8.0,
@@ -260,10 +258,9 @@ def calculate_ipSAE(
   order is selected.
 
   Args:
-    structure: Neurosnap structure container containing the complex.
+    structure: Single-model Neurosnap :class:`Structure` containing the complex.
     plddt: Per-site pLDDT aligned to the selected analysis order (normalized to [0-100] NOT [0-1]).
     pae_matrix: Site-site PAE (Å) aligned to the same order.
-    model: Structure model ID to analyze. Defaults to the first model.
     pae_cutoff: PAE threshold (Å) for ipSAE and counting “valid” pairs.
     dist_cutoff: Distance cutoff (Å) for interface-restricted counts.
     pDockQ_cutoff: Distance cutoff (Å) used by pDockQ/pDockQ2 neighbor tests.
@@ -301,7 +298,7 @@ def calculate_ipSAE(
       - Pair/unique-residue tallies with and without distance constraints.
     - **scores**: Interface-level auxiliary scores:
       - ``pDockQ``, ``pDockQ2``, ``LIS``.
-    - **params**: The parameters actually used (cutoffs, model).
+    - **params**: The parameters actually used (cutoffs only).
     - **pml**: Optional PyMOL alias script string (if ``return_pml`` is True).
     - **residue_order**: Metadata for the selected analysis order:
       - ``names`` (3-letter codes), ``chains`` (chain IDs), ``numbers`` (seq IDs).
@@ -326,7 +323,8 @@ def calculate_ipSAE(
     - pDockQ neighbors use ``pDockQ_cutoff`` on the representative-atom distances.
     - LIS averages ``(12 - PAE) / 12`` for PAE ≤ 12 Å over inter-chain pairs only.
   """
-  selected_model_id = resolve_model_id(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_ipSAE() expects a Structure, found {type(structure).__name__}.")
   (
     residue_names,
     chains,
@@ -334,7 +332,7 @@ def calculate_ipSAE(
     coords_cb,
     keep_indices,
     total_polymer_residues,
-  ) = _structure_to_residue_arrays(structure, model=model)
+  ) = _structure_to_residue_arrays(structure)
 
   keep_indices = np.asarray(keep_indices, dtype=int)
   N = len(chains)
@@ -354,7 +352,7 @@ def calculate_ipSAE(
       chains_token,
       residue_nums_token,
       coords_token,
-    ) = _protein_to_site_arrays_with_nonstandard_atoms(structure, model=model)
+    ) = _protein_to_site_arrays_with_nonstandard_atoms(structure)
     Nt = len(chains_token)
     if plddt.shape == (Nt,) and pae_matrix.shape == (Nt, Nt):
       residue_names = residue_names_token
@@ -783,7 +781,6 @@ def calculate_ipSAE(
       "pae_cutoff": float(pae_cutoff),
       "dist_cutoff": float(dist_cutoff),
       "pDockQ_cutoff": float(pDockQ_cutoff),
-      "model": selected_model_id,
     },
     "pml": pml,
     "residue_order": {

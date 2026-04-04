@@ -15,7 +15,7 @@ from neurosnap.algos.ipsae import (
   ptm_func,
   ptm_func_vec,
 )
-from tests._structure_test_utils import make_structure, parse_ensemble
+from tests._structure_test_utils import make_structure, parse_ensemble, parse_single_model
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -108,7 +108,7 @@ def test_calculate_ipsae_basic(struct_path: Path, score_path: Path):
   assert struct_path.exists(), f"Missing structure fixture: {struct_path}"
   assert score_path.exists(), f"Missing score fixture: {score_path}"
 
-  structure = parse_ensemble(struct_path)
+  structure = parse_single_model(struct_path)
   plddt, pae = _load_plddt_pae(score_path)
 
   # Should succeed and return the full result dict
@@ -156,7 +156,7 @@ def test_calculate_ipsae_basic(struct_path: Path, score_path: Path):
 
 
 def test_calculate_ipsae_shape_mismatch_raises():
-  structure = parse_ensemble(FILES / "dimer_af2.pdb")
+  structure = parse_single_model(FILES / "dimer_af2.pdb")
   plddt, pae = _load_plddt_pae(FILES / "dimer_af2.json")
   # break plddt length
   with pytest.raises(ValueError):
@@ -167,7 +167,7 @@ def test_calculate_ipsae_shape_mismatch_raises():
 
 
 def test_calculate_ipsae_reports_pairs_and_counts():
-  structure = parse_ensemble(FILES / "dimer_af2.pdb")
+  structure = parse_single_model(FILES / "dimer_af2.pdb")
   plddt, pae = _load_plddt_pae(FILES / "dimer_af2.json")
   res = calculate_ipSAE(structure, plddt=plddt, pae_matrix=pae, pae_cutoff=10.0, dist_cutoff=10.0)
 
@@ -182,6 +182,13 @@ def test_calculate_ipsae_reports_pairs_and_counts():
   # valid pairs counts are non-negative
   assert res["counts"]["pairs_with_pae_lt_cutoff"][c1][c2] >= 0.0
   assert res["counts"]["pairs_with_pae_lt_cutoff_and_dist"][c1][c2] >= 0.0
+
+
+def test_calculate_ipsae_requires_structure():
+  structure = parse_ensemble(FILES / "dimer_af2.pdb")
+  plddt, pae = _load_plddt_pae(FILES / "dimer_af2.json")
+  with pytest.raises(TypeError):
+    calculate_ipSAE(structure, plddt=plddt, pae_matrix=pae)
 
 
 def test_calculate_ipsae_accepts_nucleic_acids():
@@ -277,7 +284,7 @@ def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
 
 
 def test_calculate_ipsae_min_metric_with_ptm_fixture():
-  prot = parse_ensemble(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
+  prot = parse_single_model(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
   plddt, pae = _load_plddt_pae(FILES / "chai1_dimer_ptm_protein_with_nanobody.json")
   res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae)
 

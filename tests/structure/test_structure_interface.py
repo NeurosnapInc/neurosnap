@@ -5,12 +5,16 @@ import pytest
 from neurosnap.structure import (
   calculate_bsa,
   calculate_hydrogen_bonds,
+  calculate_interface_hydrogen_bonding_residues,
+  find_disulfide_bonds,
+  find_hydrophobic_residues,
   find_interface_contacts,
   find_interface_residues,
   find_non_interface_hydrophobic_patches,
+  find_salt_bridges,
 )
 
-from tests._structure_test_utils import PDB_DIMER, PDB_WITH_H, make_structure, parse_single_model
+from tests._structure_test_utils import PDB_DIMER, PDB_MONO, PDB_WITH_H, make_structure, parse_ensemble, parse_single_model
 
 
 def test_find_interface_contacts_hydrogen_filtering():
@@ -104,6 +108,64 @@ def test_hbond_errors():
     calculate_hydrogen_bonds(structure, chain="Z")
   with pytest.raises(ValueError):
     calculate_hydrogen_bonds(structure, chain="A", chain_other="Z")
+
+
+def test_interaction_helpers_require_structure():
+  ensemble = parse_ensemble(PDB_MONO)
+
+  with pytest.raises(TypeError):
+    find_disulfide_bonds(ensemble)
+  with pytest.raises(TypeError):
+    find_salt_bridges(ensemble)
+  with pytest.raises(TypeError):
+    find_hydrophobic_residues(ensemble)
+  with pytest.raises(TypeError):
+    calculate_hydrogen_bonds(ensemble)
+  with pytest.raises(TypeError):
+    calculate_interface_hydrogen_bonding_residues(ensemble)
+
+
+def test_find_disulfide_bonds_detects_close_cysteines():
+  structure = make_structure(
+    [
+      ("SG", "CYS", "A", 1, 0.0, 0.0, 0.0, "S"),
+      ("SG", "CYS", "A", 2, 1.9, 0.0, 0.0, "S"),
+      ("SG", "CYS", "A", 3, 5.0, 0.0, 0.0, "S"),
+    ]
+  )
+
+  bonds = find_disulfide_bonds(structure)
+  assert {(res1.res_id, res2.res_id) for res1, res2 in bonds} == {(1, 2)}
+
+
+def test_find_salt_bridges_and_hydrophobic_residues():
+  structure = make_structure(
+    [
+      ("CA", "LYS", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CA", "ASP", "A", 2, 3.0, 0.0, 0.0, "C"),
+      ("CA", "VAL", "A", 3, 10.0, 0.0, 0.0, "C"),
+      ("CA", "SER", "B", 1, 20.0, 0.0, 0.0, "C"),
+    ]
+  )
+
+  bridges = find_salt_bridges(structure)
+  assert {(pos.res_id, neg.res_id) for pos, neg in bridges} == {(1, 2)}
+
+  hydrophobic = find_hydrophobic_residues(structure)
+  assert [(chain_id, residue.res_name, residue.res_id) for chain_id, residue in hydrophobic] == [("A", "VAL", 3)]
+
+
+def test_calculate_interface_hydrogen_bonding_residues_counts_unique_residues():
+  structure = make_structure(
+    [
+      ("N", "SER", "A", 1, 0.0, 0.0, 0.0, "N"),
+      ("H", "SER", "A", 1, 0.0, 0.0, -1.0, "H"),
+      ("O", "ASP", "B", 2, 0.0, 0.0, 2.8, "O"),
+    ]
+  )
+
+  assert calculate_hydrogen_bonds(structure, chain="A", chain_other="B") == 1
+  assert calculate_interface_hydrogen_bonding_residues(structure, chain="A", chain_other="B") == 2
 
 
 @pytest.mark.slow

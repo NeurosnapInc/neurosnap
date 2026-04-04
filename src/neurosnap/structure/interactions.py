@@ -6,30 +6,29 @@ import numpy as np
 
 from neurosnap.constants import HYDROPHOBIC_RESIDUES
 
-from ._common import available_chain_ids, resolve_model
-from .structure import Atom, Residue
+from ._common import available_chain_ids
+from .structure import Atom, Residue, Structure
 
 
 def find_disulfide_bonds(
-  structure, chain: Optional[str] = None, model: Optional[int] = None, threshold: float = 2.05
+  structure: Structure, chain: Optional[str] = None, threshold: float = 2.05
 ) -> List[Tuple[Residue, Residue]]:
   """Find disulfide bonds between cysteine residues using SG-SG distance.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chain: Optional chain ID to restrict the search to.
-    model: Optional model ID when selecting from an ensemble or stack.
     threshold: Maximum SG-SG distance in Å used to classify a disulfide bond.
 
   Returns:
     List of ``(residue1, residue2)`` cysteine pairs that satisfy the distance
     cutoff.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"find_disulfide_bonds() expects a Structure, found {type(structure).__name__}.")
   disulfide_pairs = []
 
-  for chain_view in structure_model.chains():
+  for chain_view in structure.chains():
     if chain is not None and chain_view.chain_id != chain:
       continue
     cysteines = [residue for residue in chain_view.residues() if residue.res_name.strip().upper() == "CYS"]
@@ -47,26 +46,25 @@ def find_disulfide_bonds(
   return disulfide_pairs
 
 
-def find_salt_bridges(structure, chain: Optional[str] = None, model: Optional[int] = None, cutoff: float = 4.0) -> List[Tuple[Residue, Residue]]:
+def find_salt_bridges(structure: Structure, chain: Optional[str] = None, cutoff: float = 4.0) -> List[Tuple[Residue, Residue]]:
   """Identify salt bridges using CA-CA distance as a simple proxy.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chain: Optional chain ID to restrict the search to.
-    model: Optional model ID when selecting from an ensemble or stack.
     cutoff: Maximum CA-CA distance in Å used to classify a salt bridge.
 
   Returns:
     List of ``(positive_residue, negative_residue)`` pairs that satisfy the
     distance cutoff.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"find_salt_bridges() expects a Structure, found {type(structure).__name__}.")
   positive_residues = {"LYS", "ARG"}
   negative_residues = {"ASP", "GLU"}
   salt_bridges = []
 
-  for chain_view in structure_model.chains():
+  for chain_view in structure.chains():
     if chain is not None and chain_view.chain_id != chain:
       continue
     positive = [residue for residue in chain_view.residues() if residue.res_name.strip().upper() in positive_residues]
@@ -85,23 +83,22 @@ def find_salt_bridges(structure, chain: Optional[str] = None, model: Optional[in
   return salt_bridges
 
 
-def find_hydrophobic_residues(structure, chain: Optional[str] = None, model: Optional[int] = None) -> List[Tuple[str, Residue]]:
-  """Return hydrophobic residues from a selected model.
+def find_hydrophobic_residues(structure: Structure, chain: Optional[str] = None) -> List[Tuple[str, Residue]]:
+  """Return hydrophobic residues from a single structure.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chain: Optional chain ID to restrict the search to.
-    model: Optional model ID when selecting from an ensemble or stack.
 
   Returns:
     List of ``(chain_id, residue)`` tuples for residues classified as
     hydrophobic.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"find_hydrophobic_residues() expects a Structure, found {type(structure).__name__}.")
   hydrophobic = []
 
-  for chain_view in structure_model.chains():
+  for chain_view in structure.chains():
     if chain is not None and chain_view.chain_id != chain:
       continue
     for residue in chain_view.residues():
@@ -112,34 +109,32 @@ def find_hydrophobic_residues(structure, chain: Optional[str] = None, model: Opt
 
 
 def calculate_hydrogen_bonds(
-  structure,
+  structure: Structure,
   chain: Optional[str] = None,
   chain_other: Optional[str] = None,
   *,
-  model: Optional[int] = None,
   donor_acceptor_cutoff: float = 3.5,
   angle_cutoff: float = 120.0,
 ) -> int:
   """Count hydrogen bonds using explicit hydrogens and simple geometric cutoffs.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chain: Optional donor-chain ID. When omitted, all chains are searched.
     chain_other: Optional acceptor-chain ID for inter-chain counting.
-    model: Optional model ID when selecting from an ensemble or stack.
     donor_acceptor_cutoff: Maximum donor-acceptor distance in Å.
     angle_cutoff: Minimum donor-H-acceptor angle in degrees.
 
   Returns:
     Total number of hydrogen bonds that satisfy the geometric cutoffs.
   """
-  structure_model = resolve_model(structure, model=model)
-  _validate_hydrogen_bond_inputs(structure_model, chain=chain, chain_other=chain_other)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_hydrogen_bonds() expects a Structure, found {type(structure).__name__}.")
+  _validate_hydrogen_bond_inputs(structure, chain=chain, chain_other=chain_other)
 
   hydrogen_distance_cutoff = 1.2
   hydrogen_bond_count = 0
-  chain_lookup = {chain_view.chain_id: chain_view for chain_view in structure_model.chains()}
+  chain_lookup = {chain_view.chain_id: chain_view for chain_view in structure.chains()}
   donor_chain_ids = [chain] if chain is not None else list(chain_lookup)
 
   for donor_chain_id in donor_chain_ids:
@@ -176,22 +171,19 @@ def calculate_hydrogen_bonds(
 
 
 def calculate_interface_hydrogen_bonding_residues(
-  structure,
+  structure: Structure,
   chain: Optional[str] = None,
   chain_other: Optional[str] = None,
   *,
-  model: Optional[int] = None,
   donor_acceptor_cutoff: float = 3.5,
   angle_cutoff: float = 120.0,
 ) -> int:
   """Count unique residues that participate in inter- or intra-chain hydrogen bonds.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chain: Optional donor-chain ID. When omitted, all chains are searched.
     chain_other: Optional acceptor-chain ID for inter-chain counting.
-    model: Optional model ID when selecting from an ensemble or stack.
     donor_acceptor_cutoff: Maximum donor-acceptor distance in Å.
     angle_cutoff: Minimum donor-H-acceptor angle in degrees.
 
@@ -199,11 +191,12 @@ def calculate_interface_hydrogen_bonding_residues(
     Number of unique residues that participate in at least one qualifying
     hydrogen bond.
   """
-  structure_model = resolve_model(structure, model=model)
-  _validate_hydrogen_bond_inputs(structure_model, chain=chain, chain_other=chain_other)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_interface_hydrogen_bonding_residues() expects a Structure, found {type(structure).__name__}.")
+  _validate_hydrogen_bond_inputs(structure, chain=chain, chain_other=chain_other)
 
   hydrogen_distance_cutoff = 1.2
-  chain_lookup = {chain_view.chain_id: chain_view for chain_view in structure_model.chains()}
+  chain_lookup = {chain_view.chain_id: chain_view for chain_view in structure.chains()}
   donor_chain_ids = [chain] if chain is not None else list(chain_lookup)
   hydrogen_bonding_residues: Set[Tuple[str, int, str, str, bool]] = set()
 
@@ -262,9 +255,9 @@ def _atom_by_name(residue: Residue, atom_name: str) -> Optional[Atom]:
   return None
 
 
-def _validate_hydrogen_bond_inputs(structure_model, chain: Optional[str], chain_other: Optional[str]):
-  """Validate hydrogen-bond chain inputs against a selected model."""
-  available_chains = set(available_chain_ids(structure_model))
+def _validate_hydrogen_bond_inputs(structure: Structure, chain: Optional[str], chain_other: Optional[str]):
+  """Validate hydrogen-bond chain inputs against a structure."""
+  available_chains = set(available_chain_ids(structure))
   if chain_other is not None and chain is None:
     raise ValueError("`chain_other` is specified, but `chain` is not. Both must be provided for inter-chain calculation.")
   if chain is not None and chain not in available_chains:

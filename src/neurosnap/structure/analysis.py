@@ -12,18 +12,17 @@ from rdkit import Chem
 from neurosnap.constants import AA_RECORDS, STANDARD_NUCLEOTIDES, VDW_RADII_BONDI
 from neurosnap.log import logger
 
-from ._common import backbone_atom_order, classify_polymer_residue, coord_matrix, filter_structure_atoms, residue_key, resolve_model
+from ._common import backbone_atom_order, classify_polymer_residue, coord_matrix, filter_structure_atoms, residue_key
 from .structure import Structure
 
 
 def get_backbone(
-  structure,
+  structure: Structure,
   chains: Optional[Sequence[str]] = None,
-  model: Optional[int] = None,
   *,
   include_nucleotides: bool = True,
 ) -> np.ndarray:
-  """Extract ordered backbone coordinates from a selected model.
+  """Extract ordered backbone coordinates from a single structure.
 
   Protein residues contribute ``N``, ``CA``, and ``C`` atoms. When
   ``include_nucleotides`` is enabled, DNA and RNA residues contribute their
@@ -31,21 +30,20 @@ def get_backbone(
   ignored.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chains: Optional chain IDs to include. If ``None``, all chains are used.
-    model: Optional model ID when selecting from an ensemble or stack.
     include_nucleotides: If ``True``, include DNA and RNA backbone atoms in
       addition to protein backbone atoms.
 
   Returns:
     A NumPy array of backbone coordinates with shape ``(n_atoms, 3)``.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"get_backbone() expects a Structure, found {type(structure).__name__}.")
   selected_chain_ids = None if chains is None else {str(chain_id) for chain_id in chains}
   backbone_coords = []
 
-  for chain_view in structure_model.chains():
+  for chain_view in structure.chains():
     if selected_chain_ids is not None and chain_view.chain_id not in selected_chain_ids:
       continue
     for residue in chain_view.residues():
@@ -63,21 +61,21 @@ def get_backbone(
   return np.asarray(backbone_coords, dtype=np.float32)
 
 
-def calculate_distance_matrix(structure, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
-  """Calculate the CA-atom distance matrix for a selected model and chain set.
+def calculate_distance_matrix(structure: Structure, chain: Optional[str] = None) -> np.ndarray:
+  """Calculate the CA-atom distance matrix for a single structure.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or :class:`StructureStack`.
-    model: Optional model ID when selecting from an ensemble or stack.
+    structure: Input single-model :class:`Structure`.
     chain: Optional chain ID to restrict the calculation to.
 
   Returns:
     A square NumPy array of pairwise CA distances in Å.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_distance_matrix() expects a Structure, found {type(structure).__name__}.")
   ca_coords = []
 
-  for chain_view in structure_model.chains():
+  for chain_view in structure.chains():
     if chain is not None and chain_view.chain_id != chain:
       continue
     for residue in chain_view.residues():
@@ -93,24 +91,21 @@ def calculate_distance_matrix(structure, model: Optional[int] = None, chain: Opt
   return np.linalg.norm(coord[:, np.newaxis, :] - coord[np.newaxis, :, :], axis=-1)
 
 
-def ca_distance_matrix(structure, model: Optional[int] = None, chain: Optional[str] = None) -> np.ndarray:
+def ca_distance_matrix(structure: Structure, chain: Optional[str] = None) -> np.ndarray:
   """Alias for :func:`calculate_distance_matrix`.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
-    model: Optional model ID when selecting from an ensemble or stack.
+    structure: Input single-model :class:`Structure`.
     chain: Optional chain ID to restrict the calculation to.
 
   Returns:
     A square NumPy array of pairwise CA distances in Å.
   """
-  return calculate_distance_matrix(structure, model=model, chain=chain)
+  return calculate_distance_matrix(structure, chain=chain)
 
 
 def calculate_surface_area(
-  structure,
-  model: Optional[int] = None,
+  structure: Structure,
   level: str = "R",
   probe_radius: float = 1.4,
   n_sphere_points: int = 96,
@@ -121,9 +116,7 @@ def calculate_surface_area(
   kept for compatibility with the public surface-area API.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
-    model: Optional model ID when selecting from an ensemble or stack.
+    structure: Input single-model :class:`Structure`.
     level: Compatibility flag matching the historical public API. The returned
       total SASA is always a structure-level scalar, regardless of this value.
       Must be one of ``"A"``, ``"R"``, ``"C"``, ``"M"``, or ``"S"``.
@@ -137,12 +130,13 @@ def calculate_surface_area(
   """
   if level not in {"A", "R", "C", "M", "S"}:
     raise ValueError('level must be one of "A", "R", "C", "M", or "S".')
-  structure_model = resolve_model(structure, model=model)
-  atom_areas = _atom_surface_areas(structure_model, probe_radius=probe_radius, n_sphere_points=n_sphere_points)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_surface_area() expects a Structure, found {type(structure).__name__}.")
+  atom_areas = _atom_surface_areas(structure, probe_radius=probe_radius, n_sphere_points=n_sphere_points)
   return float(atom_areas.sum())
 
 
-def calculate_protein_volume(structure, model: Optional[int] = None, chain: Optional[str] = None) -> float:
+def calculate_protein_volume(structure: Structure, chain: Optional[str] = None) -> float:
   """Estimate protein volume from atom van der Waals spheres.
 
   The calculation sums the volumes of van der Waals spheres for atoms belonging
@@ -150,18 +144,17 @@ def calculate_protein_volume(structure, model: Optional[int] = None, chain: Opti
   estimate rather than an excluded-volume or solvent-corrected measurement.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
-    model: Optional model ID when selecting from an ensemble or stack.
+    structure: Input single-model :class:`Structure`.
     chain: Optional chain ID to restrict the calculation to.
 
   Returns:
     Estimated protein volume in Å³.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_protein_volume() expects a Structure, found {type(structure).__name__}.")
   volume = 0.0
 
-  for chain_view in structure_model.chains():
+  for chain_view in structure.chains():
     if chain is not None and chain_view.chain_id != chain:
       continue
     for residue in chain_view.residues():

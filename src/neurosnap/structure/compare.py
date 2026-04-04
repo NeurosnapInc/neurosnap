@@ -149,8 +149,10 @@ def calculate_rmsd(
   if align_structures:
     align(reference, mobile, chains1=chains1, chains2=chains2, model1=model1, model2=model2)
 
-  reference_coords = get_backbone(reference, chains=chains1, model=model1, include_nucleotides=True)
-  mobile_coords = get_backbone(mobile, chains=chains2, model=model2, include_nucleotides=True)
+  reference_model = resolve_model(reference, model=model1)
+  mobile_model = resolve_model(mobile, model=model2)
+  reference_coords = get_backbone(reference_model, chains=chains1, include_nucleotides=True)
+  mobile_coords = get_backbone(mobile_model, chains=chains2, include_nucleotides=True)
   if reference_coords.shape != mobile_coords.shape:
     raise ValueError("Structures must have the same number of backbone atoms for RMSD calculation.")
   if reference_coords.size == 0:

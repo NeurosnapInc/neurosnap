@@ -1,7 +1,7 @@
 """Chain-interface analysis helpers for Neurosnap structures."""
 
 import copy
-from typing import Iterable, List, Optional, Set, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
@@ -184,7 +184,7 @@ def find_non_interface_hydrophobic_patches(
   hydrogens: bool = True,
   patch_cutoff: float = 6.0,
   min_patch_area: float = 40.0,
-) -> List[Set[Residue]]:
+) -> List[List[Residue]]:
   """Identify solvent-exposed hydrophobic patches outside specified interfaces.
 
   Hydrophobic residues are first filtered to remove interface residues and
@@ -206,7 +206,7 @@ def find_non_interface_hydrophobic_patches(
       component to be returned.
 
   Returns:
-    List of residue sets, where each set represents one hydrophobic patch.
+    List of residue lists, where each list represents one hydrophobic patch.
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"find_non_interface_hydrophobic_patches() expects a Structure, found {type(structure).__name__}.")
@@ -292,6 +292,6 @@ def find_non_interface_hydrophobic_patches(
 
     component_area = sum(float(residue_sasa.get(hydrophobic_keys[index], 0.0)) for index in component)
     if component_area >= min_patch_area:
-      patches.append({hydrophobic_residues[index] for index in component})
+      patches.append([hydrophobic_residues[index] for index in component])
 
   return patches

@@ -60,7 +60,6 @@ def test_find_interface_residues_returns_pairs():
   assert keys(pairs_no_h) == {("A", 1, "B", 1), ("A", 2, "B", 2)}
 
 
-@pytest.mark.xfail(reason="Hydrophobic patch detection currently returns unhashable Residue views.", strict=True)
 def test_find_non_interface_hydrophobic_patches_expected_sets_chain_a():
   structure = parse_single_model(PDB_DIMER)
   patches = find_non_interface_hydrophobic_patches(structure, [("A", "B")], target_chains=["A"])
@@ -75,7 +74,6 @@ def test_find_non_interface_hydrophobic_patches_expected_sets_chain_a():
   assert actual == expected
 
 
-@pytest.mark.xfail(reason="Hydrophobic patch detection currently returns unhashable Residue views.", strict=True)
 def test_find_non_interface_hydrophobic_patches_expected_sets_chain_b():
   structure = parse_single_model(PDB_DIMER)
   patches = find_non_interface_hydrophobic_patches(structure, [("A", "B")], target_chains=["B"])

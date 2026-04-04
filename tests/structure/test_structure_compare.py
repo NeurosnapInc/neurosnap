@@ -33,7 +33,6 @@ def test_rmsd_align_af2():
   assert rmsd < 0.45
 
 
-@pytest.mark.xfail(reason="Backbone RMSD does not currently reconcile hydrogenated and non-hydrogenated structures.", strict=True)
 def test_rmsd_align_hydrogens():
   reference = parse_single_model(PDB_NO_H)
   mobile = parse_single_model(PDB_WITH_H)

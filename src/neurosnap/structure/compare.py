@@ -5,35 +5,22 @@ from typing import Optional, Sequence
 import numpy as np
 
 from ._common import available_chain_ids, backbone_atom_order, coord_matrix
-from .analysis import get_backbone
 from .structure import Structure
 
 
-def align(
+def _matched_backbone_coords(
   reference: Structure,
   mobile: Structure,
   chains1: Optional[Sequence[str]] = None,
   chains2: Optional[Sequence[str]] = None,
-):
-  """Align a mobile structure onto a reference structure using polymer backbone atoms.
+) -> tuple[np.ndarray, np.ndarray]:
+  """Return matched backbone coordinates for two structures.
 
-  When both ``chains1`` and ``chains2`` are provided, they are interpreted as
-  explicit pairwise chain mappings in matching order.
-
-  Parameters:
-    reference: Reference single-model :class:`Structure`.
-    mobile: Mobile single-model :class:`Structure` to transform in-place.
-    chains1: Optional reference chain IDs to include in the alignment.
-    chains2: Optional mobile chain IDs to include in the alignment.
-
-  Returns:
-    ``None``. The mobile structure is transformed in-place.
+  Matching is done by chain mapping plus residue/atom identity, not by raw
+  atom-table order. This keeps pairwise comparisons stable even when the two
+  files store chains in different orders or one file includes extra
+  non-backbone atoms such as hydrogens.
   """
-  if not isinstance(reference, Structure):
-    raise TypeError(f"align() expects reference to be a Structure, found {type(reference).__name__}.")
-  if not isinstance(mobile, Structure):
-    raise TypeError(f"align() expects mobile to be a Structure, found {type(mobile).__name__}.")
-
   chains1 = list(chains1 or [])
   chains2 = list(chains2 or [])
   chains1_provided = bool(chains1)
@@ -102,6 +89,35 @@ def align(
 
   reference_coords = np.asarray([reference_atom_map[key] for key in common_keys], dtype=np.float32)
   mobile_coords = np.asarray([mobile_atom_map[key] for key in common_keys], dtype=np.float32)
+  return reference_coords, mobile_coords
+
+
+def align(
+  reference: Structure,
+  mobile: Structure,
+  chains1: Optional[Sequence[str]] = None,
+  chains2: Optional[Sequence[str]] = None,
+):
+  """Align a mobile structure onto a reference structure using polymer backbone atoms.
+
+  When both ``chains1`` and ``chains2`` are provided, they are interpreted as
+  explicit pairwise chain mappings in matching order.
+
+  Parameters:
+    reference: Reference single-model :class:`Structure`.
+    mobile: Mobile single-model :class:`Structure` to transform in-place.
+    chains1: Optional reference chain IDs to include in the alignment.
+    chains2: Optional mobile chain IDs to include in the alignment.
+
+  Returns:
+    ``None``. The mobile structure is transformed in-place.
+  """
+  if not isinstance(reference, Structure):
+    raise TypeError(f"align() expects reference to be a Structure, found {type(reference).__name__}.")
+  if not isinstance(mobile, Structure):
+    raise TypeError(f"align() expects mobile to be a Structure, found {type(mobile).__name__}.")
+
+  reference_coords, mobile_coords = _matched_backbone_coords(reference, mobile, chains1=chains1, chains2=chains2)
   # Standard Kabsch alignment on the matched backbone coordinates.
   reference_center = reference_coords.mean(axis=0)
   mobile_center = mobile_coords.mean(axis=0)
@@ -140,7 +156,8 @@ def calculate_rmsd(
       RMSD.
 
   Returns:
-    Backbone RMSD in Å.
+    Backbone RMSD in Å using the same residue/atom correspondence as
+    :func:`align`.
   """
   if not isinstance(reference, Structure):
     raise TypeError(f"calculate_rmsd() expects reference to be a Structure, found {type(reference).__name__}.")
@@ -150,10 +167,7 @@ def calculate_rmsd(
   if align_structures:
     align(reference, mobile, chains1=chains1, chains2=chains2)
 
-  reference_coords = get_backbone(reference, chains=chains1, include_nucleotides=True)
-  mobile_coords = get_backbone(mobile, chains=chains2, include_nucleotides=True)
-  if reference_coords.shape != mobile_coords.shape:
-    raise ValueError("Structures must have the same number of backbone atoms for RMSD calculation.")
+  reference_coords, mobile_coords = _matched_backbone_coords(reference, mobile, chains1=chains1, chains2=chains2)
   if reference_coords.size == 0:
     return 0.0
 

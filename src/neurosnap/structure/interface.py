@@ -7,7 +7,7 @@ import numpy as np
 
 from neurosnap.constants import HYDROPHOBIC_RESIDUES
 
-from ._common import StructureLike, available_chain_ids, filter_structure_atoms, residue_key, resolve_model
+from ._common import available_chain_ids, filter_structure_atoms, residue_key
 from .analysis import _residue_surface_area_map, calculate_surface_area
 from .structure import Atom, Residue, Structure
 
@@ -36,11 +36,10 @@ def find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float = 4.5) -
 
 
 def calculate_bsa(
-  structure: StructureLike,
+  structure: Structure,
   chain_group_1: List[str],
   chain_group_2: List[str],
   *,
-  model: Optional[int] = None,
   level: str = "R",
 ) -> float:
   """Calculate buried surface area between two chain groups.
@@ -49,18 +48,19 @@ def calculate_bsa(
     ``(SASA(group 1) + SASA(group 2)) - SASA(complex)``
 
   Parameters:
-    structure: Input complex as a Neurosnap structure container.
+    structure: Input complex as a single-model :class:`Structure`.
     chain_group_1: Chain IDs for the first group.
     chain_group_2: Chain IDs for the second group.
-    model: Optional model ID when selecting from an ensemble or stack.
     level: Surface-area aggregation level forwarded to
       :func:`calculate_surface_area`.
 
   Returns:
     Buried surface area in Å².
   """
-  structure_model = resolve_model(structure, model=model)
-  all_chains = {chain.chain_id for chain in structure_model.chains()}
+  if not isinstance(structure, Structure):
+    raise TypeError(f"calculate_bsa() expects a Structure, found {type(structure).__name__}.")
+
+  all_chains = {chain.chain_id for chain in structure.chains()}
   if not chain_group_1 or not chain_group_2:
     raise ValueError("Chain groups cannot be empty.")
   if not set(chain_group_1).isdisjoint(chain_group_2):
@@ -68,19 +68,19 @@ def calculate_bsa(
   if set(chain_group_1).union(set(chain_group_2)) != all_chains:
     raise ValueError("Chain groups must cover all chains.")
 
-  sasa_complex = calculate_surface_area(structure_model, level=level)
+  sasa_complex = calculate_surface_area(structure, level=level)
   group_structures = []
   for keep_chains in (set(chain_group_1), set(chain_group_2)):
     # BSA is defined against the isolated partners, so each group gets a
     # filtered copy of the complex with only its chains retained.
     group_structure = Structure(remove_annotations=False)
-    group_structure._dtype_atoms = structure_model._dtype_atoms
-    group_structure._dtype_atom_annotations = structure_model._dtype_atom_annotations
-    group_structure._dtype_bond = structure_model._dtype_bond
-    group_structure.atoms = structure_model.atoms.copy()
-    group_structure.atom_annotations = structure_model.atom_annotations.copy()
-    group_structure.bonds = structure_model.bonds.copy()
-    group_structure.metadata = copy.deepcopy(structure_model.metadata)
+    group_structure._dtype_atoms = structure._dtype_atoms
+    group_structure._dtype_atom_annotations = structure._dtype_atom_annotations
+    group_structure._dtype_bond = structure._dtype_bond
+    group_structure.atoms = structure.atoms.copy()
+    group_structure.atom_annotations = structure.atom_annotations.copy()
+    group_structure.bonds = structure.bonds.copy()
+    group_structure.metadata = copy.deepcopy(structure.metadata)
     filter_structure_atoms(group_structure, np.isin(group_structure.atom_annotations["chain_id"], list(keep_chains)))
     group_structures.append(group_structure)
 
@@ -91,46 +91,45 @@ def calculate_bsa(
 
 
 def find_interface_contacts(
-  structure,
+  structure: Structure,
   chain1: str,
   chain2: str,
   *,
-  model: Optional[int] = None,
   cutoff: float = 4.5,
   hydrogens: bool = True,
 ) -> List[Tuple[Atom, Atom]]:
   """Identify atom-atom contacts between two chains using a distance cutoff.
 
   Parameters:
-    structure: Input structure container.
+    structure: Input single-model :class:`Structure`.
     chain1: First chain ID.
     chain2: Second chain ID.
-    model: Optional model ID when selecting from an ensemble or stack.
     cutoff: Contact cutoff distance in Å.
     hydrogens: Whether hydrogen atoms should be included.
 
   Returns:
     List of contacting ``(atom1, atom2)`` pairs.
   """
-  structure_model = resolve_model(structure, model=model)
-  available_chains = {chain.chain_id for chain in structure_model.chains()}
+  if not isinstance(structure, Structure):
+    raise TypeError(f"find_interface_contacts() expects a Structure, found {type(structure).__name__}.")
+
+  available_chains = {chain.chain_id for chain in structure.chains()}
   if chain1 not in available_chains:
     raise ValueError(f"Chain {chain1} was not found.")
   if chain2 not in available_chains:
     raise ValueError(f"Chain {chain2} was not found.")
 
-  chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
+  chain_lookup = {chain.chain_id: chain for chain in structure.chains()}
   atoms1 = [atom for residue in chain_lookup[chain1].residues() for atom in residue.atoms() if hydrogens or atom.element != "H"]
   atoms2 = [atom for residue in chain_lookup[chain2].residues() for atom in residue.atoms() if hydrogens or atom.element != "H"]
   return find_contacts(atoms1, atoms2, cutoff=cutoff)
 
 
 def find_interface_residues(
-  structure,
+  structure: Structure,
   chain1: str,
   chain2: str,
   *,
-  model: Optional[int] = None,
   cutoff: float = 4.5,
   hydrogens: bool = True,
 ) -> List[Tuple[Residue, Residue]]:
@@ -140,31 +139,31 @@ def find_interface_residues(
   one output pair.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chain1: First chain ID.
     chain2: Second chain ID.
-    model: Optional model ID when selecting from an ensemble or stack.
     cutoff: Contact cutoff distance in Å.
     hydrogens: Whether hydrogen atoms should be included in the contact search.
 
   Returns:
     List of unique contacting ``(residue1, residue2)`` pairs.
   """
-  structure_model = resolve_model(structure, model=model)
-  available_chains = {chain.chain_id for chain in structure_model.chains()}
+  if not isinstance(structure, Structure):
+    raise TypeError(f"find_interface_residues() expects a Structure, found {type(structure).__name__}.")
+
+  available_chains = {chain.chain_id for chain in structure.chains()}
   if chain1 not in available_chains:
     raise ValueError(f"Chain {chain1} was not found.")
   if chain2 not in available_chains:
     raise ValueError(f"Chain {chain2} was not found.")
 
-  chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
+  chain_lookup = {chain.chain_id: chain for chain in structure.chains()}
   residue_lookup1 = {(residue.chain_id, residue.res_id, residue.ins_code): residue for residue in chain_lookup[chain1].residues()}
   residue_lookup2 = {(residue.chain_id, residue.res_id, residue.ins_code): residue for residue in chain_lookup[chain2].residues()}
 
   residue_pairs = []
   seen = set()
-  for atom1, atom2 in find_interface_contacts(structure_model, chain1, chain2, cutoff=cutoff, hydrogens=hydrogens):
+  for atom1, atom2 in find_interface_contacts(structure, chain1, chain2, cutoff=cutoff, hydrogens=hydrogens):
     residue_key1 = (atom1.chain_id, atom1.res_id, atom1.ins_code)
     residue_key2 = (atom2.chain_id, atom2.res_id, atom2.ins_code)
     pair_key = residue_key1 + residue_key2
@@ -177,11 +176,10 @@ def find_interface_residues(
 
 
 def find_non_interface_hydrophobic_patches(
-  structure,
+  structure: Structure,
   chain_pairs: Iterable[Tuple[str, str]],
   target_chains: Optional[Iterable[str]] = None,
   *,
-  model: Optional[int] = None,
   cutoff_interface: float = 4.5,
   hydrogens: bool = True,
   patch_cutoff: float = 6.0,
@@ -194,13 +192,11 @@ def find_non_interface_hydrophobic_patches(
   components.
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or
-      :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     chain_pairs: Iterable of chain-ID pairs whose interfaces should be excluded
       from patch detection.
     target_chains: Optional chain IDs to search for patches. If ``None``, all
       chains are considered.
-    model: Optional model ID when selecting from an ensemble or stack.
     cutoff_interface: Distance cutoff in Å used to classify interface contacts.
     hydrogens: Whether hydrogen atoms should be included in the interface
       contact search.
@@ -212,12 +208,14 @@ def find_non_interface_hydrophobic_patches(
   Returns:
     List of residue sets, where each set represents one hydrophobic patch.
   """
-  structure_model = resolve_model(structure, model=model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"find_non_interface_hydrophobic_patches() expects a Structure, found {type(structure).__name__}.")
+
   chain_pairs = [(chain1.strip(), chain2.strip()) for chain1, chain2 in chain_pairs]
-  available_chains = set(available_chain_ids(structure_model))
+  available_chains = set(available_chain_ids(structure))
   for chain1, chain2 in chain_pairs:
     if chain1 not in available_chains or chain2 not in available_chains:
-      raise ValueError(f"Chain pair ({chain1}, {chain2}) is not present in the selected model.")
+      raise ValueError(f"Chain pair ({chain1}, {chain2}) is not present in the structure.")
 
   target_chain_set = None
   if target_chains is not None:
@@ -229,7 +227,7 @@ def find_non_interface_hydrophobic_patches(
   interface_residue_keys = set()
   for chain1, chain2 in chain_pairs:
     for atom1, atom2 in find_interface_contacts(
-      structure_model,
+      structure,
       chain1,
       chain2,
       cutoff=cutoff_interface,
@@ -238,12 +236,12 @@ def find_non_interface_hydrophobic_patches(
       interface_residue_keys.add((atom1.chain_id, atom1.res_id, atom1.ins_code, atom1.res_name, atom1.hetero))
       interface_residue_keys.add((atom2.chain_id, atom2.res_id, atom2.ins_code, atom2.res_name, atom2.hetero))
 
-  residue_sasa = _residue_surface_area_map(structure_model)
+  residue_sasa = _residue_surface_area_map(structure)
   hydrophobic_residues = []
   hydrophobic_keys = []
   hydrophobic_ca_coords = []
 
-  for chain in structure_model.chains():
+  for chain in structure.chains():
     if target_chain_set is not None and chain.chain_id not in target_chain_set:
       continue
     for residue in chain.residues():

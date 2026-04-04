@@ -17,7 +17,7 @@ from tqdm import tqdm
 from neurosnap.constants import VDW_RADII_BONDI
 from neurosnap.log import logger
 
-from ._common import resolve_model
+from .structure import Structure
 
 
 def render_pseudo3D(
@@ -325,9 +325,8 @@ def render_pseudo3D(
 
 
 def render_structure_pseudo3D(
-  structure,
+  structure: Structure,
   *,
-  model: Optional[int] = None,
   style: str = "residue_id",
   use_radii: bool = False,
   image_size: Tuple[int, int] = (576, 432),
@@ -336,11 +335,10 @@ def render_structure_pseudo3D(
   upsample: int = 2,
   chainbreak: int = 5,
 ) -> Image.Image:
-  """Render a structure model using the pseudo-3D Pillow renderer.
+  """Render a single structure using the pseudo-3D Pillow renderer.
 
   Parameters:
-    structure: Structure, ensemble, or stack to render.
-    model: Optional model ID when selecting from an ensemble or stack.
+    structure: Input single-model :class:`Structure`.
     style: Coloring mode (residue_id, chain_id, b-factor, pLDDT, residue_type)
     use_radii: If True, apply van der Waals radii as per-atom sizes
     image_size: Output image size (width, height)
@@ -353,7 +351,10 @@ def render_structure_pseudo3D(
     Pillow Image containing the rendering
 
   """
-  df = resolve_model(structure, model=model).to_dataframe()
+  if not isinstance(structure, Structure):
+    raise TypeError(f"render_structure_pseudo3D() expects a Structure, found {type(structure).__name__}.")
+
+  df = structure.to_dataframe()
   xyz = df[["x", "y", "z"]].to_numpy(dtype=np.float32, copy=False)
   chains = df["chain"].to_numpy()
   unique_chains = pd.unique(chains)

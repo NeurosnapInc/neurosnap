@@ -63,6 +63,12 @@ def test_select_residues_parsing_and_invert():
     select_residues(structure, "Z999")
 
 
+def test_select_residues_requires_structure():
+  ensemble = parse_ensemble(PDB_MONO)
+  with pytest.raises(TypeError):
+    select_residues(ensemble, "A1")
+
+
 def test_renumber_updates_dataframe():
   structure = parse_single_model(PDB_NO_H)
   structure.renumber(start=1)

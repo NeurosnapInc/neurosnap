@@ -1,8 +1,9 @@
 import numpy as np
+import pytest
 from PIL import Image
 
 from neurosnap.structure import animate_frames, render_pseudo3D, render_structure_pseudo3D
-from tests._structure_test_utils import parse_single_model
+from tests._structure_test_utils import parse_ensemble, parse_single_model
 
 
 def test_render_pseudo3D_creates_image():
@@ -54,6 +55,12 @@ def test_render_structure_pseudo3D_covid_trimer(tmp_path):
   out = tmp_path / "covid_trimer.png"
   img.save(out)
   assert out.exists() and out.stat().st_size > 0
+
+
+def test_render_structure_pseudo3D_requires_structure():
+  ensemble = parse_ensemble("tests/files/1nkp_mycmax.pdb")
+  with pytest.raises(TypeError):
+    render_structure_pseudo3D(ensemble)
 
 
 def test_animate_frames_writes_gif(tmp_path):

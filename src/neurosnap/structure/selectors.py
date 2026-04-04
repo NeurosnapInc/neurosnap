@@ -1,12 +1,13 @@
 """Residue-selection utilities for Neurosnap structures."""
 
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from ._common import available_chain_ids, resolve_model
+from ._common import available_chain_ids
+from .structure import Structure
 
 
-def select_residues(structure, selectors: str, invert: bool = False, model: Optional[int] = None) -> Dict[str, List[int]]:
+def select_residues(structure: Structure, selectors: str, invert: bool = False) -> Dict[str, List[int]]:
   """Select residues from a structure using a chain/residue selector string.
 
   Supported selector forms include:
@@ -15,16 +16,17 @@ def select_residues(structure, selectors: str, invert: bool = False, model: Opti
     - ``"AB:10"`` or ``"AB:10-20"`` for multi-character chain IDs
 
   Parameters:
-    structure: Input :class:`Structure`, :class:`StructureEnsemble`, or :class:`StructureStack`.
+    structure: Input single-model :class:`Structure`.
     selectors: Comma-delimited selector string.
     invert: Whether to invert the selection within each chain.
-    model: Optional model ID when selecting from an ensemble or stack.
 
   Returns:
     Dictionary mapping chain IDs to sorted residue numbers.
   """
-  structure_model = resolve_model(structure, model=model)
-  chain_ids = available_chain_ids(structure_model)
+  if not isinstance(structure, Structure):
+    raise TypeError(f"select_residues() expects a Structure, found {type(structure).__name__}.")
+
+  chain_ids = available_chain_ids(structure)
   output = {chain_id: set() for chain_id in chain_ids}
 
   selectors = re.sub(r"\s", "", selectors).strip(",")
@@ -34,7 +36,7 @@ def select_residues(structure, selectors: str, invert: bool = False, model: Opti
     raise ValueError("Provided selectors string is empty.")
 
   residue_ids_by_chain = {}
-  for chain in structure_model.chains():
+  for chain in structure.chains():
     residue_ids_by_chain[chain.chain_id] = {residue.res_id for residue in chain.residues()}
 
   for selector in selectors.split(","):

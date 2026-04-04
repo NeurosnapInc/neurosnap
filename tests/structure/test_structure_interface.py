@@ -110,6 +110,19 @@ def test_hbond_errors():
     calculate_hydrogen_bonds(structure, chain="A", chain_other="Z")
 
 
+def test_interface_helpers_require_structure():
+  ensemble = parse_ensemble(PDB_DIMER)
+
+  with pytest.raises(TypeError):
+    calculate_bsa(ensemble, ["A"], ["B"])
+  with pytest.raises(TypeError):
+    find_interface_contacts(ensemble, "A", "B")
+  with pytest.raises(TypeError):
+    find_interface_residues(ensemble, "A", "B")
+  with pytest.raises(TypeError):
+    find_non_interface_hydrophobic_patches(ensemble, [("A", "B")])
+
+
 def test_interaction_helpers_require_structure():
   ensemble = parse_ensemble(PDB_MONO)
 

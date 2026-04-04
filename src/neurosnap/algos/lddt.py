@@ -1,6 +1,4 @@
-"""
-Code for LDDT (Local Distance Difference Test) calculation, adapted from https://github.com/ba-lab/disteval/blob/main/LDDT.ipynb
-"""
+"""Code for LDDT (Local Distance Difference Test) calculation."""
 
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
@@ -13,11 +11,9 @@ from neurosnap.constants import (
   BACKBONE_ATOMS_RNA,
   STANDARD_NUCLEOTIDES,
 )
-from neurosnap.structure import Atom, Residue, Structure, StructureEnsemble, StructureStack
-from neurosnap.structure._common import resolve_model
+from neurosnap.structure import Atom, Residue, Structure
 
 _PROTEIN_BACKBONE_FALLBACK = tuple(atom for atom in ("CA", "N", "C") if atom in BACKBONE_ATOMS_AA)
-_PROTEIN_ATOM_PRIORITY = ("CB",) + _PROTEIN_BACKBONE_FALLBACK
 
 _NUCLEOTIDE_CODE_MAP = {code: (code[1] if len(code) == 2 and code[0] == "D" else code) for code in STANDARD_NUCLEOTIDES}
 _NUCLEOTIDE_BACKBONE_ATOMS = BACKBONE_ATOMS_DNA.union(BACKBONE_ATOMS_RNA)
@@ -120,9 +116,8 @@ def _get_atom(residue: Residue, name: str) -> Optional[Atom]:
 
 
 def _extract_cb_coords_from_structure(
-  structure: Union[Structure, StructureEnsemble, StructureStack],
+  structure: Structure,
   *,
-  model: Optional[int] = None,
   chains: Optional[List[str]] = None,
   require_standard_aa: bool = True,
 ) -> Dict[Tuple[str, int], Tuple[float, float, float]]:
@@ -131,10 +126,9 @@ def _extract_cb_coords_from_structure(
   Returns:
     dict keyed by (chain_id, res_id) -> (x,y,z)
   """
-  structure_model = resolve_model(structure, model=model)
   coords: Dict[Tuple[str, int], Tuple[float, float, float]] = {}
-  chain_lookup = {chain.chain_id: chain for chain in structure_model.chains()}
-  chain_ids = [chain.chain_id for chain in structure_model.chains()] if not chains else list(chains)
+  chain_lookup = {chain.chain_id: chain for chain in structure.chains()}
+  chain_ids = [chain.chain_id for chain in structure.chains()] if not chains else list(chains)
   for cid in chain_ids:
     chain = chain_lookup.get(cid)
     if chain is None:
@@ -245,11 +239,9 @@ def _calc_lddt_from_maps(
 
 
 def calc_lddt(
-  reference: Union[np.ndarray, Structure, StructureEnsemble, StructureStack],
-  prediction: Union[np.ndarray, Structure, StructureEnsemble, StructureStack],
+  reference: Union[np.ndarray, Structure],
+  prediction: Union[np.ndarray, Structure],
   *,
-  model_ref: Optional[int] = None,
-  model_pred: Optional[int] = None,
   chains_ref: Optional[List[str]] = None,
   chains_pred: Optional[List[str]] = None,
   R: float = 15.0,
@@ -260,10 +252,8 @@ def calc_lddt(
   """Compute lDDT from distance maps or Neurosnap structure containers.
 
   Args:
-    reference: Distance map or structure used as the ground truth.
-    prediction: Distance map or structure to compare against the reference.
-    model_ref: Optional model ID to select when `reference` is multi-model.
-    model_pred: Optional model ID to select when `prediction` is multi-model.
+    reference: Distance map or single-model structure used as the ground truth.
+    prediction: Distance map or single-model structure to compare against the reference.
     chains_ref: Chain identifiers to include when `reference` is a structure.
     chains_pred: Chain identifiers to include when `prediction` is a structure.
     R: Maximum reference distance to consider when defining the L set.
@@ -284,9 +274,8 @@ def calc_lddt(
   """
   is_ref_array = isinstance(reference, np.ndarray)
   is_pred_array = isinstance(prediction, np.ndarray)
-  structure_types = (Structure, StructureEnsemble, StructureStack)
-  is_ref_structure = isinstance(reference, structure_types)
-  is_pred_structure = isinstance(prediction, structure_types)
+  is_ref_structure = isinstance(reference, Structure)
+  is_pred_structure = isinstance(prediction, Structure)
 
   if is_ref_array and is_pred_array:
     if reference.shape != prediction.shape:
@@ -294,8 +283,8 @@ def calc_lddt(
     return _calc_lddt_from_maps(reference, prediction, R=R, sep_thresh=sep_thresh, T_set=T_set)
 
   if is_ref_structure and is_pred_structure:
-    ref_cb = _extract_cb_coords_from_structure(reference, model=model_ref, chains=chains_ref, require_standard_aa=require_standard_aa)
-    pred_cb = _extract_cb_coords_from_structure(prediction, model=model_pred, chains=chains_pred, require_standard_aa=require_standard_aa)
+    ref_cb = _extract_cb_coords_from_structure(reference, chains=chains_ref, require_standard_aa=require_standard_aa)
+    pred_cb = _extract_cb_coords_from_structure(prediction, chains=chains_pred, require_standard_aa=require_standard_aa)
 
     # Intersect keys to ensure 1:1 residue correspondence
     common_keys = sorted(set(ref_cb.keys()).intersection(pred_cb.keys()), key=lambda x: (x[0], x[1]))
@@ -307,4 +296,4 @@ def calc_lddt(
     pred_map = _coords_to_distmat(common_keys, pred_cb)
     return _calc_lddt_from_maps(true_map, pred_map, R=R, sep_thresh=sep_thresh, T_set=T_set)
 
-  raise TypeError("calc_lddt expects both inputs to be either numpy.ndarray distance maps or Neurosnap structure containers.")
+  raise TypeError("calc_lddt expects both inputs to be either numpy.ndarray distance maps or single-model Neurosnap Structure objects.")

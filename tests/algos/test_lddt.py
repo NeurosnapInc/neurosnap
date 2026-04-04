@@ -1,17 +1,10 @@
-"""
-Tests for the neurosnap.algos.lddt module.
-"""
-
-from pathlib import Path
+"""Tests for the neurosnap.algos.lddt module."""
 
 import numpy as np
 import pytest
 
 from neurosnap.algos.lddt import calc_lddt
-from tests._structure_test_utils import parse_single_model
-
-TESTS_DIR = Path(__file__).resolve().parents[1]
-FILES = TESTS_DIR / "files"
+from tests._structure_test_utils import FILES, parse_ensemble, parse_single_model
 
 
 @pytest.fixture(scope="module")
@@ -55,6 +48,12 @@ def test_calc_lddt_distance_map_shape_mismatch_raises():
 def test_calc_lddt_mixed_input_types_raises(rank1_protein):
   with pytest.raises(TypeError):
     calc_lddt(rank1_protein, np.zeros((1, 1)))
+
+
+def test_calc_lddt_rejects_multi_model_structure_inputs():
+  ensemble = parse_ensemble(FILES / "4AOW_af2_rank_1.pdb")
+  with pytest.raises(TypeError):
+    calc_lddt(ensemble, ensemble)
 
 
 def test_calc_lddt_identical_nucleic_acids_returns_one(rna_model_one):

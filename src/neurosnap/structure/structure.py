@@ -313,6 +313,26 @@ class Structure:
 
     return np.average(coord[known_mass_mask], axis=0, weights=masses[known_mass_mask])
 
+  def calculate_geometric_center(self, chains: Optional[List[str]] = None) -> np.ndarray:
+    """Calculate the geometric center for the selected atoms.
+
+    Parameters:
+      chains: Optional chain IDs to include. If ``None``, all atoms are used.
+
+    Returns:
+      A length-3 NumPy array containing the arithmetic mean of the selected
+      atom coordinates in Å.
+
+    Raises:
+      ValueError: If no atoms are found in the selected structure.
+    """
+    atom_mask = self._atom_mask(chains=chains)
+    if not np.any(atom_mask):
+      raise ValueError("No atoms were found in the selected structure.")
+
+    coord = self._coord_matrix(atom_mask=atom_mask)
+    return coord.mean(axis=0)
+
   def distances_from(self, point: np.ndarray, chains: Optional[List[str]] = None) -> np.ndarray:
     """Calculate distances from a point for the selected atoms.
 

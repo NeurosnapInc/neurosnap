@@ -118,10 +118,18 @@ def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():
 
   center_of_mass = structure.calculate_center_of_mass()
   assert isinstance(center_of_mass, np.ndarray) and center_of_mass.shape == (3,)
+  geometric_center = structure.calculate_geometric_center()
+  assert isinstance(geometric_center, np.ndarray) and geometric_center.shape == (3,)
   distances = structure.distances_from(center_of_mass)
   assert distances.ndim == 1 and distances.size > 0
   radius_of_gyration = structure.calculate_rog(center=center_of_mass)
   assert radius_of_gyration > 0.0
+
+  first_chain = structure.chains()[0].chain_id
+  chain_center = structure.calculate_geometric_center(chains=[first_chain])
+  dataframe = structure.to_dataframe().query("chain == @first_chain")
+  expected_center = dataframe[["x", "y", "z"]].to_numpy(dtype=np.float32).mean(axis=0)
+  assert np.allclose(chain_center, expected_center)
 
 
 def test_analysis_helpers_require_structure():

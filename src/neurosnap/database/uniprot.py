@@ -8,7 +8,7 @@ import requests
 from tqdm import tqdm
 
 from neurosnap.log import logger
-from neurosnap.msa import read_msa
+from neurosnap.sequence.align import read_msa
 
 
 def fetch_accessions(accessions: Iterable[str], batch_size: int = 150) -> Dict[str, Union[str, None]]:

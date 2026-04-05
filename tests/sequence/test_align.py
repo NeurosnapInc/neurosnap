@@ -1,11 +1,11 @@
-# tests/test_msa.py
+# tests/sequence/test_align.py
 import os
 import shutil
 from pathlib import Path
 
 import pytest
 
-from neurosnap.msa import (
+from neurosnap.sequence.align import (
   align_mafft,
   alignment_coverage,
   consensus_sequence,

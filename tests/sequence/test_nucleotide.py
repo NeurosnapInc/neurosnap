@@ -1,10 +1,10 @@
-# tests/test_nucleotide.py
+# tests/sequence/test_nucleotide.py
 import gzip
 from pathlib import Path
 
 import pytest
 
-from neurosnap.nucleotide import get_reverse_complement, split_interleaved_fastq
+from neurosnap.sequence.nucleotide import get_reverse_complement, split_interleaved_fastq
 
 
 def test_reverse_complement_dna_basic():

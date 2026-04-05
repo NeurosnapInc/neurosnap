@@ -13,6 +13,11 @@ Subpackages
    :maxdepth: 4
 
    neurosnap.algos
+   neurosnap.constants
+   neurosnap.database
+   neurosnap.io
+   neurosnap.sequence
+   neurosnap.structure
 
 Submodules
 ----------
@@ -23,9 +28,4 @@ Submodules
    neurosnap.api
    neurosnap.chemicals
    neurosnap.conformers
-   neurosnap.constants
    neurosnap.log
-   neurosnap.msa
-   neurosnap.nucleotide
-   neurosnap.protein
-   neurosnap.rendering

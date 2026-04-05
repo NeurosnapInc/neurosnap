@@ -1,5 +1,7 @@
 """Chemistry and element-level constants."""
 
+## van der Waals radii (Å) for common elements
+# Bondi values
 VDW_RADII_BONDI = {
   "H": 1.2,
   "He": 1.4,
@@ -31,6 +33,7 @@ VDW_RADII_BONDI = {
   "Pb": 2.02,
 }
 
+# UFF values
 VDW_RADII_UFF = {
   "H": 2.886,
   "He": 2.362,

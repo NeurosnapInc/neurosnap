@@ -3,20 +3,22 @@
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+## Amino Acid Codes and Properties
+# Codes for standard amino acids
 STANDARD_AAs = set("ACDEFGHIKLMNPQRSTVWY")
 
 
+# Amino acid Record class
 @dataclass(frozen=True)
 class AARecord:
-  """Metadata for one amino-acid or modified amino-acid residue."""
-
-  code: Optional[str]
-  abr: str
-  name: str
-  is_standard: bool
-  standard_equiv_abr: Optional[str]
+  code: Optional[str]  # 1-letter code; None for if unavailable
+  abr: str  # 3-letter abbreviation or CCD code
+  name: str  # full name (upper-cased)
+  is_standard: bool  # True for the 20 canonical AAs
+  standard_equiv_abr: Optional[str]  # e.g., "LYS" for KCX; None if standard or unknown
 
 
+## Amino acids keyed by ABR
 AA_RECORDS: Dict[str, AARecord] = {
   "ALA": AARecord("A", "ALA", "ALANINE", True, None),
   "ARG": AARecord("R", "ARG", "ARGININE", True, None),
@@ -61,6 +63,8 @@ AA_RECORDS: Dict[str, AARecord] = {
   "MHO": AARecord(None, "MHO", "METHIONINE SULFOXIDE", False, "MET"),
 }
 
+# Alias map: every searchable token → ABR
+# (1-letter codes, 3-letter codes, and names)
 AA_ALIASES: Dict[str, str] = {}
 for abr, rec in AA_RECORDS.items():
   if rec.code is not None:
@@ -68,6 +72,11 @@ for abr, rec in AA_RECORDS.items():
   AA_ALIASES[abr] = abr
   AA_ALIASES[rec.name] = abr
 
+## Amino acid molecular masses
+# Average residue masses (in Daltons) for amino acids *as incorporated into peptides/proteins*.
+# These values already account for the loss of one H2O molecule during peptide bond formation,
+# so they represent the contribution of each amino acid *residue* in a chain.
+# Source: https://proteomicsresource.washington.edu/protocols06/masses.php (Average masses)
 AA_MASS_PROTEIN_AVG = {
   "A": 71.07790000,
   "R": 156.1856800,
@@ -93,6 +102,10 @@ AA_MASS_PROTEIN_AVG = {
   "U": 150.0379000,
 }
 
+# Monoisotopic residue masses (in Daltons) for amino acids *as incorporated into peptides/proteins*.
+# These use the exact mass of the most abundant isotope of each element (e.g., 12C, 1H, 16O, 14N).
+# Like the average masses above, these are residue contributions (with H2O already removed).
+# Source: https://proteomicsresource.washington.edu/protocols06/masses.php (Monoisotopic masses)
 AA_MASS_PROTEIN_MONO = {
   "A": 71.0371138050,
   "R": 156.101111050,
@@ -118,6 +131,9 @@ AA_MASS_PROTEIN_MONO = {
   "U": 150.953633405,
 }
 
+# Average molecular masses (in Daltons) of *free amino acids* (not incorporated into a chain).
+# These values include the full amino acid with terminal H and OH groups, i.e. before peptide bond formation.
+# Often used for small-molecule calculations or educational purposes, but not for intact peptides/proteins.
 AA_MASS_FREE = {
   "A": 89.090,
   "R": 174.20,
@@ -143,6 +159,9 @@ AA_MASS_FREE = {
   "U": 168.06,
 }
 
+## pKa Values
+# Default pKa set (EMBOSS-like). Values are typical textbook approximations.
+# You can swap these for another set (e.g., Bjellqvist, IPC) if desired.
 DEFAULT_PKA = {
   "N_TERMINUS": 8.6,
   "C_TERMINUS": 3.6,

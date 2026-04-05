@@ -332,7 +332,7 @@ def pad_seqs(seqs: List[str], char: str = "-", truncate: Union[bool, int] = Fals
     longest_seq = max(len(x) for x in seqs)
 
   for i, seq in enumerate(seqs):
-    seqs[i] = seq.ljust(longest_seq, "-")
+    seqs[i] = seq.ljust(longest_seq, char)
     seqs[i] = seqs[i][:longest_seq]
   return seqs
 

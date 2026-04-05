@@ -5,7 +5,7 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from neurosnap.constants import HYDROPHOBIC_RESIDUES
+from neurosnap.constants.structure import HYDROPHOBIC_RESIDUES
 
 from ._common import available_chain_ids, filter_structure_atoms, residue_key
 from .analysis import _residue_surface_area_map, calculate_surface_area

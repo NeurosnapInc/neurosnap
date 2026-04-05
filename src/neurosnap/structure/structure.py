@@ -15,7 +15,8 @@ from typing import Any, Dict, Iterator, List, Literal, Mapping, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from neurosnap.constants import AA_MASS_PROTEIN_AVG, AA_RECORDS, BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NUC_DNA_CODES, NUC_RNA_CODES, STANDARD_NUCLEOTIDES
+from neurosnap.constants.sequence import AA_MASS_PROTEIN_AVG, AA_RECORDS
+from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NUC_DNA_CODES, NUC_RNA_CODES, STANDARD_NUCLEOTIDES
 
 ### IMPORTANT NOTES
 # Universal unit is Å.

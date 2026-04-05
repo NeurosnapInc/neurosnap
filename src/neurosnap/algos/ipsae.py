@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from neurosnap.constants import STANDARD_NUCLEOTIDES
+from neurosnap.constants.structure import STANDARD_NUCLEOTIDES
 from neurosnap.structure import Atom, Residue, Structure
 
 

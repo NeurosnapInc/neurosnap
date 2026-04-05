@@ -4,8 +4,8 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from neurosnap.constants import (
-  AA_RECORDS,
+from neurosnap.constants.sequence import AA_RECORDS
+from neurosnap.constants.structure import (
   BACKBONE_ATOMS_AA,
   BACKBONE_ATOMS_DNA,
   BACKBONE_ATOMS_RNA,

@@ -4,7 +4,7 @@ from typing import List, Optional, Set, Tuple
 
 import numpy as np
 
-from neurosnap.constants import HYDROPHOBIC_RESIDUES
+from neurosnap.constants.structure import HYDROPHOBIC_RESIDUES
 
 from ._common import available_chain_ids
 from .structure import Atom, Residue, Structure

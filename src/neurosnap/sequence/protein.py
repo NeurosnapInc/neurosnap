@@ -2,7 +2,7 @@ import re
 from collections import Counter
 from typing import Dict
 
-from neurosnap.constants import (
+from neurosnap.constants.sequence import (
   AA_ALIASES,
   AA_MASS_PROTEIN_AVG,
   AA_RECORDS,

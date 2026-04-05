@@ -9,7 +9,9 @@ from typing import Dict, Optional, Sequence
 import numpy as np
 from rdkit import Chem
 
-from neurosnap.constants import AA_RECORDS, STANDARD_NUCLEOTIDES, VDW_RADII_BONDI
+from neurosnap.constants.chemistry import VDW_RADII_BONDI
+from neurosnap.constants.sequence import AA_RECORDS
+from neurosnap.constants.structure import STANDARD_NUCLEOTIDES
 from neurosnap.log import logger
 
 from ._common import backbone_atom_order, classify_polymer_residue, coord_matrix, filter_structure_atoms, residue_key

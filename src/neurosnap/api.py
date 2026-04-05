@@ -9,18 +9,8 @@ import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from tabulate import tabulate
 
+from neurosnap.constants.api import USER_AGENT
 from neurosnap.log import logger
-
-# try to get the version of the user agent
-version = "unknown"
-try:
-  from importlib.metadata import version
-
-  version("neurosnap")
-except:  # noqa: E722
-  pass
-# User agent to use throughout the application
-USER_AGENT = f"Neurosnap-OSS-Tools/v-{version}"
 
 
 class NeurosnapAPI:

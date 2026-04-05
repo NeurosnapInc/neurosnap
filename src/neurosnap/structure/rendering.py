@@ -14,7 +14,7 @@ from scipy.spatial import cKDTree
 from scipy.special import expit as sigmoid
 from tqdm import tqdm
 
-from neurosnap.constants import VDW_RADII_BONDI
+from neurosnap.constants.chemistry import VDW_RADII_BONDI
 from neurosnap.log import logger
 
 from .structure import Structure

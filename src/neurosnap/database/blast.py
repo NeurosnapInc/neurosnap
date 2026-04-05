@@ -8,7 +8,7 @@ import pandas as pd
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
-from neurosnap.api import USER_AGENT
+from neurosnap.constants.api import USER_AGENT
 
 
 def run_blast(

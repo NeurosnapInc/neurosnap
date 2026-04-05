@@ -17,8 +17,8 @@ from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 import requests
 from Bio import SearchIO
 
-from neurosnap.api import USER_AGENT
-from neurosnap.constants import STANDARD_AAs
+from neurosnap.constants.api import USER_AGENT
+from neurosnap.constants.sequence import STANDARD_AAs
 from neurosnap.log import logger
 
 ### CONSTANTS ###

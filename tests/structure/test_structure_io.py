@@ -1,9 +1,12 @@
 """Structure I/O and ligand-extraction tests."""
 
+import io
+
 import numpy as np
+import pytest
 
 from neurosnap.io.mmcif import save_cif
-from neurosnap.io.pdb import save_pdb
+from neurosnap.io.pdb import parse_pdb, save_pdb
 from neurosnap.io.sdf import parse_sdf, save_sdf
 from neurosnap.structure import StructureEnsemble, StructureStack, extract_non_biopolymers
 
@@ -116,3 +119,41 @@ def test_extract_non_biopolymers(tmp_path):
   assert output_dir.exists()
   assert len(sdf_files) == 1
   assert sdf_files[0].stat().st_size > 0
+
+
+def test_parse_pdb_malformed_conect_strict_invalid_serial():
+  pdb_text = (
+    "ATOM      1  C1  LIG A   1       0.000   0.000   0.000  1.00 20.00           C  \n"
+    "ATOM      2  C2  LIG A   1       1.400   0.000   0.000  1.00 20.00           C  \n"
+    "CONECT    1XXXX\n"
+    "END\n"
+  )
+
+  with pytest.raises(ValueError, match='Invalid CONECT serial "XXXX"'):
+    parse_pdb(io.StringIO(pdb_text), return_type="ensemble", malformed_conect="strict")
+
+
+def test_parse_pdb_malformed_conect_warn_invalid_serial(caplog):
+  pdb_text = (
+    "ATOM      1  C1  LIG A   1       0.000   0.000   0.000  1.00 20.00           C  \n"
+    "ATOM      2  C2  LIG A   1       1.400   0.000   0.000  1.00 20.00           C  \n"
+    "CONECT    1XXXX\n"
+    "END\n"
+  )
+
+  ensemble = parse_pdb(io.StringIO(pdb_text), return_type="ensemble", malformed_conect="warn")
+  assert len(ensemble.first().bonds) == 0
+  assert any('Invalid CONECT serial "XXXX"' in message for message in caplog.messages)
+
+
+def test_parse_pdb_malformed_conect_ignore_unknown_reference(caplog):
+  pdb_text = (
+    "ATOM      1  C1  LIG A   1       0.000   0.000   0.000  1.00 20.00           C  \n"
+    "ATOM      2  C2  LIG A   1       1.400   0.000   0.000  1.00 20.00           C  \n"
+    "CONECT    1    9\n"
+    "END\n"
+  )
+
+  ensemble = parse_pdb(io.StringIO(pdb_text), return_type="ensemble", malformed_conect="ignore")
+  assert len(ensemble.first().bonds) == 0
+  assert not caplog.messages

@@ -21,6 +21,7 @@ from neurosnap.structure.structure import Structure, StructureEnsemble, Structur
 __all__ = ["parse_pdb", "save_pdb"]
 
 ReturnType = Literal["ensemble", "stack", "auto"]
+ConectErrorMode = Literal["strict", "warn", "ignore"]
 AtomKey = Tuple[str, int, str, str, bool, str]
 AltlocSite = Tuple[int, AtomKey]
 ConectRecord = Tuple[int, List[int], int]
@@ -182,6 +183,7 @@ class _ModelAccumulator:
 def parse_pdb(
   pdb: Union[str, pathlib.Path, io.IOBase],
   return_type: ReturnType = "auto",
+  malformed_conect: ConectErrorMode = "warn",
 ) -> Union[StructureEnsemble, StructureStack]:
   """Parse a PDB file into Neurosnap structure containers.
 
@@ -211,6 +213,9 @@ def parse_pdb(
       :class:`StructureEnsemble`, ``"stack"`` requires stack-compatible models,
       and ``"auto"`` returns a :class:`StructureStack` when possible or falls
       back to a :class:`StructureEnsemble`.
+    malformed_conect: How malformed ``CONECT`` records should be handled.
+      ``"strict"`` raises immediately, ``"warn"`` logs a warning and skips the
+      bad record, and ``"ignore"`` silently skips it.
 
   Returns:
     A :class:`StructureEnsemble` or :class:`StructureStack` depending on
@@ -218,12 +223,14 @@ def parse_pdb(
   """
   if return_type not in {"ensemble", "stack", "auto"}:
     raise ValueError('return_type must be one of "ensemble", "stack", or "auto".')
+  if malformed_conect not in {"strict", "warn", "ignore"}:
+    raise ValueError('malformed_conect must be one of "strict", "warn", or "ignore".')
   lines = _read_lines(pdb)
   if not lines:
     raise ValueError("Empty file.")
 
   altloc_sites: set[AltlocSite] = set()
-  ensemble = _parse_pdb_models(lines, altloc_sites)
+  ensemble = _parse_pdb_models(lines, altloc_sites, malformed_conect=malformed_conect)
   ensemble.metadata["source_format"] = "pdb"
 
   if altloc_sites:
@@ -288,6 +295,7 @@ def save_pdb(structure: Union[Structure, StructureEnsemble, StructureStack], pdb
 def _parse_pdb_models(
   lines: Iterable[str],
   altloc_sites: set[AltlocSite],
+  malformed_conect: ConectErrorMode,
 ) -> StructureEnsemble:
   """Parse PDB coordinate records into a :class:`StructureEnsemble`.
 
@@ -332,7 +340,7 @@ def _parse_pdb_models(
       continue
 
     if record_type == "CONECT":
-      conect = _parse_conect_record(padded_line, line_number)
+      conect = _parse_conect_record(padded_line, line_number, malformed_conect=malformed_conect)
       if conect is not None:
         pending_conect.append(conect)
       continue
@@ -343,7 +351,7 @@ def _parse_pdb_models(
   if not models:
     raise ValueError("No models or atoms were found in the PDB file.")
 
-  _apply_conect_records(models, pending_conect)
+  _apply_conect_records(models, pending_conect, malformed_conect=malformed_conect)
   ensemble = StructureEnsemble()
   for model in models:
     ensemble.append(model.to_structure(), model_id=model.model_id)
@@ -539,7 +547,11 @@ def _format_conect_records(source_serial: int, target_serial: int, count: int) -
   return lines
 
 
-def _apply_conect_records(models: List[_ModelAccumulator], pending_conect: List[ConectRecord]):
+def _apply_conect_records(
+  models: List[_ModelAccumulator],
+  pending_conect: List[ConectRecord],
+  malformed_conect: ConectErrorMode,
+):
   """Apply stored ``CONECT`` records to all models that contain the referenced serials."""
   for source_serial, target_serials, line_number in pending_conect:
     found_match = False
@@ -549,7 +561,10 @@ def _apply_conect_records(models: List[_ModelAccumulator], pending_conect: List[
           found_match = True
 
     if not found_match:
-      raise ValueError(f"CONECT record references unknown atom serials for source atom {source_serial} at line {line_number}.")
+      _handle_malformed_conect(
+        f"CONECT record references unknown atom serials for source atom {source_serial} at line {line_number}.",
+        malformed_conect=malformed_conect,
+      )
 
 
 def _parse_model_id(line: str, line_number: int) -> int:
@@ -619,7 +634,7 @@ def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRe
   )
 
 
-def _parse_conect_record(line: str, line_number: int) -> Optional[Tuple[int, List[int], int]]:
+def _parse_conect_record(line: str, line_number: int, malformed_conect: ConectErrorMode) -> Optional[Tuple[int, List[int], int]]:
   """Parse a ``CONECT`` record into source and target serial numbers."""
   serials: List[int] = []
   for start in range(6, len(line), 5):
@@ -629,11 +644,20 @@ def _parse_conect_record(line: str, line_number: int) -> Optional[Tuple[int, Lis
     try:
       serials.append(int(chunk))
     except ValueError:
-      raise ValueError(f'Invalid CONECT serial "{chunk}" at line {line_number}.')
+      _handle_malformed_conect(f'Invalid CONECT serial "{chunk}" at line {line_number}.', malformed_conect=malformed_conect)
+      return None
 
   if len(serials) < 2:
     return None
   return serials[0], serials[1:], line_number
+
+
+def _handle_malformed_conect(message: str, malformed_conect: ConectErrorMode):
+  """Handle a malformed ``CONECT`` record according to parser policy."""
+  if malformed_conect == "strict":
+    raise ValueError(message)
+  if malformed_conect == "warn":
+    logger.warning(message)
 
 
 def _parse_float_field(field: str, *, default: float, line_number: int, label: str) -> float:

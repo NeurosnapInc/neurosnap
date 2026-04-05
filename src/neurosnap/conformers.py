@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import rdkit
 from rdkit import Chem
-from rdkit.Chem import AllChem, rdDistGeom, rdFMCS, rdMolAlign
+from rdkit.Chem import AllChem, rdDistGeom, rdFMCS
 from rdkit.ML.Cluster import Butina
 
 from neurosnap.log import logger

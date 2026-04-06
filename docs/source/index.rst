@@ -51,13 +51,13 @@ Documentation Map
 **Core SDK modules:**
 
 * `API client <neurosnap.api.html>`_
-* `Protein utilities <neurosnap.protein.html>`_
-* `MSA utilities <neurosnap.msa.html>`_
+* `Structure utilities <neurosnap.structure.html>`_
+* `Sequence alignment utilities <neurosnap.sequence.align.html>`_
 * `Chemical utilities <neurosnap.chemicals.html>`_
 * `Conformer generation <neurosnap.conformers.html>`_
-* `Nucleotide utilities <neurosnap.nucleotide.html>`_
+* `Nucleotide utilities <neurosnap.sequence.nucleotide.html>`_
 * `Constants and residue metadata <neurosnap.constants.html>`_
-* `Rendering utilities <neurosnap.rendering.html>`_
+* `Rendering utilities <neurosnap.structure.rendering.html>`_
 * `Logging utilities <neurosnap.log.html>`_
 
 **Algorithm modules:**

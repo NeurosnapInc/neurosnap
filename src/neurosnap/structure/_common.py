@@ -1,6 +1,6 @@
 """Shared helpers for standalone structure analysis functions."""
 
-from typing import List, Literal, Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 

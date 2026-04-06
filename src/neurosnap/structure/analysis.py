@@ -14,7 +14,7 @@ from neurosnap.constants.sequence import AA_RECORDS
 from neurosnap.constants.structure import STANDARD_NUCLEOTIDES
 from neurosnap.log import logger
 
-from ._common import backbone_atom_order, classify_polymer_residue, coord_matrix, filter_structure_atoms, residue_key
+from ._common import backbone_atom_order, classify_polymer_residue, coord_matrix, filter_structure_atoms
 from .structure import Structure
 
 
@@ -177,10 +177,9 @@ def _residue_surface_area_map(structure_model, probe_radius: float = 1.4, n_sphe
   atom_index = 0
   for chain_view in structure_model.chains():
     for residue in chain_view.residues():
-      key = residue_key(residue)
-      residue_areas[key] = residue_areas.get(key, 0.0)
+      residue_areas[residue] = residue_areas.get(residue, 0.0)
       for _atom in residue.atoms():
-        residue_areas[key] += float(atom_areas[atom_index])
+        residue_areas[residue] += float(atom_areas[atom_index])
         atom_index += 1
 
   return residue_areas

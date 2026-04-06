@@ -4,7 +4,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from ._common import classify_polymer_residue, filter_structure_atoms, residue_index_groups
+from ._common import classify_polymer_residue, filter_structure_atoms
 from .structure import Structure
 
 
@@ -56,15 +56,13 @@ def remove_non_biopolymers(structure: Structure, chain: Optional[str] = None):
 def _remove_residues(structure: Structure, predicate: Callable, chain: Optional[str]):
   """Remove residues that satisfy a predicate from a single-model structure."""
   keep_mask = np.ones(len(structure), dtype=bool)
-  residue_groups = residue_index_groups(structure)
   for chain_view in structure.chains():
     if chain is not None and chain_view.chain_id != chain:
       continue
     for residue in chain_view.residues():
       if not predicate(residue):
         continue
-      residue_id = (residue.chain_id, residue.res_id, residue.ins_code, residue.res_name, residue.hetero)
-      for atom_index in residue_groups.get(residue_id, []):
+      for atom_index in residue.atom_indices():
         keep_mask[atom_index] = False
 
   filter_structure_atoms(structure, keep_mask)

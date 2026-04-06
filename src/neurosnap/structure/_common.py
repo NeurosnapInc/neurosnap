@@ -1,6 +1,6 @@
 """Shared helpers for standalone structure analysis functions."""
 
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -10,7 +10,7 @@ from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA
 from .structure import Residue, Structure, StructureStack
 
 PolymerType = Literal["protein", "dna", "rna"]
-ResidueKey = Tuple[str, int, str, str, bool]
+
 
 # Backbone extraction needs a deterministic atom order so RMSD/alignment
 # calculations do not depend on the atom order used in the parsed file.
@@ -24,11 +24,6 @@ def coord_matrix(structure: Structure) -> np.ndarray:
   if len(structure) == 0:
     return np.zeros((0, 3), dtype=np.float32)
   return np.column_stack((structure.atoms["x"], structure.atoms["y"], structure.atoms["z"])).astype(np.float32, copy=False)
-
-
-def residue_key(residue: Residue) -> ResidueKey:
-  """Return a stable residue identifier tuple."""
-  return (residue.chain_id, residue.res_id, residue.ins_code, residue.res_name, residue.hetero)
 
 
 def classify_polymer_residue(residue: Residue) -> Optional[PolymerType]:
@@ -108,19 +103,3 @@ def filter_stack_atoms(stack: StructureStack, keep_mask: np.ndarray):
   stack.coord = stack.coord[:, keep_mask, :].copy()
   stack.atom_annotations = stack.atom_annotations[keep_mask].copy()
   stack.bonds = new_bonds
-
-
-def residue_index_groups(structure: Structure) -> Dict[ResidueKey, List[int]]:
-  """Return atom indices grouped by residue key."""
-  groups: Dict[ResidueKey, List[int]] = {}
-  annotations = structure.atom_annotations
-  for atom_index in range(len(structure)):
-    key = (
-      str(annotations["chain_id"][atom_index]),
-      int(annotations["res_id"][atom_index]),
-      str(annotations["ins_code"][atom_index]),
-      str(annotations["res_name"][atom_index]),
-      bool(annotations["hetero"][atom_index]),
-    )
-    groups.setdefault(key, []).append(atom_index)
-  return groups

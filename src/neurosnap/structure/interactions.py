@@ -197,7 +197,7 @@ def calculate_interface_hydrogen_bonding_residues(
   hydrogen_distance_cutoff = 1.2
   chain_lookup = {chain_view.chain_id: chain_view for chain_view in structure.chains()}
   donor_chain_ids = [chain] if chain is not None else list(chain_lookup)
-  hydrogen_bonding_residues: Set[Tuple[str, int, str, str, bool]] = set()
+  hydrogen_bonding_residues: Set[Residue] = set()
 
   for donor_chain_id in donor_chain_ids:
     donor_chain = chain_lookup[donor_chain_id]
@@ -228,18 +228,8 @@ def calculate_interface_hydrogen_bonding_residues(
 
               for hydrogen in bonded_hydrogens:
                 if _hydrogen_bond_angle(donor_atom, hydrogen, acceptor_atom) >= angle_cutoff:
-                  hydrogen_bonding_residues.add(
-                    (donor_residue.chain_id, donor_residue.res_id, donor_residue.ins_code, donor_residue.res_name, donor_residue.hetero)
-                  )
-                  hydrogen_bonding_residues.add(
-                    (
-                      acceptor_residue.chain_id,
-                      acceptor_residue.res_id,
-                      acceptor_residue.ins_code,
-                      acceptor_residue.res_name,
-                      acceptor_residue.hetero,
-                    )
-                  )
+                  hydrogen_bonding_residues.add(donor_residue)
+                  hydrogen_bonding_residues.add(acceptor_residue)
                   break
 
   return len(hydrogen_bonding_residues)

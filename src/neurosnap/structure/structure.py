@@ -47,6 +47,7 @@ _STRUCTURE_DATAFRAME_COLUMNS = (
   "mass",
 )
 
+
 class Structure:
   """Single-model molecular structure container.
 
@@ -203,6 +204,7 @@ class Structure:
             res_name=res_name,
             hetero=hetero,
             _atoms=tuple(self._atom_view(atom_index) for atom_index in atom_indices),
+            _atom_indices=tuple(atom_indices),
           )
         )
       chains.append(Chain(chain_id=chain_id, _residues=tuple(residues)))
@@ -581,9 +583,7 @@ class Structure:
 
     if unknown_elements:
       message = (
-        "Unknown element mass for atom selection: "
-        + ", ".join(sorted(unknown_elements))
-        + ". This is likely an error in the input structure."
+        "Unknown element mass for atom selection: " + ", ".join(sorted(unknown_elements)) + ". This is likely an error in the input structure."
       )
       logger.warning(message)
       raise ValueError(message)
@@ -635,7 +635,20 @@ class Atom:
 
 @dataclass(frozen=True, slots=True)
 class Residue:
-  """Immutable residue-level hierarchy view."""
+  """Immutable residue-level hierarchy view.
+
+  A :class:`Residue` groups atoms that share the same chain identifier,
+  residue number, insertion code, residue name, and hetero flag. The object is
+  a lightweight read-only view over the parsed atom table, intended for
+  traversal and analysis rather than in-place editing.
+
+  Attributes:
+    chain_id: Chain identifier containing the residue.
+    res_id: Residue sequence number.
+    ins_code: PDB insertion code for the residue.
+    res_name: Residue name / CCD code.
+    hetero: ``True`` for heterogens and ``False`` for polymer ``ATOM`` records.
+  """
 
   chain_id: str
   res_id: int
@@ -643,21 +656,68 @@ class Residue:
   res_name: str
   hetero: bool
   _atoms: Tuple[Atom, ...] = field(repr=False)
+  _atom_indices: Tuple[int, ...] = field(repr=False)
 
   def atoms(self) -> List[Atom]:
-    """Return all atoms in this residue."""
+    """Return the atoms that belong to this residue.
+
+    Returns:
+      List of immutable :class:`Atom` views in atom-table order.
+    """
     return list(self._atoms)
+
+  def atom_indices(self) -> List[int]:
+    """Return atom-table indices for the atoms in this residue.
+
+    Returns:
+      List of integer atom indices in atom-table order.
+    """
+    return list(self._atom_indices)
+
+  def key(self) -> Tuple[str, int, str, str, bool]:
+    """Return a stable residue identity tuple.
+
+    The returned key is suitable for dictionary/set membership when residue
+    identity needs to be tracked outside the object itself.
+
+    Returns:
+      ``(chain_id, res_id, ins_code, res_name, hetero)``
+    """
+    return (self.chain_id, self.res_id, self.ins_code, self.res_name, self.hetero)
+
+  def __hash__(self):
+    """Return a hash derived from :meth:`key`."""
+    return hash(self.key())
+
+  def __eq__(self, other):
+    """Compare two residue views by stable identity."""
+    if not isinstance(other, Residue):
+      return NotImplemented
+    return self.key() == other.key()
 
 
 @dataclass(frozen=True, slots=True)
 class Chain:
-  """Immutable chain-level hierarchy view."""
+  """Immutable chain-level hierarchy view.
+
+  A :class:`Chain` is a read-only hierarchy view over the residues associated
+  with one chain identifier in a single :class:`Structure`. It provides chain-
+  level traversal plus convenience helpers for sequence extraction and simple
+  residue-number gap detection.
+
+  Attributes:
+    chain_id: Chain identifier represented by this view.
+  """
 
   chain_id: str
   _residues: Tuple[Residue, ...] = field(repr=False)
 
   def residues(self) -> List[Residue]:
-    """Return all residues in this chain."""
+    """Return the residues that belong to this chain.
+
+    Returns:
+      List of immutable :class:`Residue` views in residue order.
+    """
     return list(self._residues)
 
   def sequence(
@@ -716,9 +776,7 @@ class Chain:
       if detected_polymer_type is None:
         detected_polymer_type = residue_polymer_type
       elif not _polymer_types_compatible(detected_polymer_type, residue_polymer_type):
-        raise ValueError(
-          f'Chain "{self.chain_id}" mixes polymer residue types; found both "{detected_polymer_type}" and "{residue_polymer_type}".'
-        )
+        raise ValueError(f'Chain "{self.chain_id}" mixes polymer residue types; found both "{detected_polymer_type}" and "{residue_polymer_type}".')
 
       if polymer_type != "auto" and not _polymer_types_compatible(polymer_type, residue_polymer_type):
         raise ValueError(
@@ -778,6 +836,10 @@ class Chain:
 
     Hetero residues are ignored so ligand or solvent numbering does not create
     artificial gaps in the polymer residue sequence.
+
+    Returns:
+      Sorted list of integer residue IDs that are absent between observed
+      non-hetero residue numbers.
     """
     residue_ids = sorted({residue.res_id for residue in self._residues if not residue.hetero})
     missing_ids = []

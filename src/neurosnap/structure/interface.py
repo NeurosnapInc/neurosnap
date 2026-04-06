@@ -7,7 +7,7 @@ import numpy as np
 
 from neurosnap.constants.structure import HYDROPHOBIC_RESIDUES
 
-from ._common import filter_structure_atoms, residue_key
+from ._common import filter_structure_atoms
 from .analysis import _residue_surface_area_map, calculate_surface_area
 from .structure import Atom, Residue, Structure
 
@@ -238,7 +238,6 @@ def find_non_interface_hydrophobic_patches(
 
   residue_sasa = _residue_surface_area_map(structure)
   hydrophobic_residues = []
-  hydrophobic_keys = []
   hydrophobic_ca_coords = []
 
   for chain in structure.chains():
@@ -248,16 +247,15 @@ def find_non_interface_hydrophobic_patches(
       residue_name = residue.res_name.strip().upper()
       if residue.hetero or residue_name not in HYDROPHOBIC_RESIDUES:
         continue
-      key = residue_key(residue)
+      key = residue.key()
       if key in interface_residue_keys:
         continue
-      if residue_sasa.get(key, 0.0) <= 0.01:
+      if residue_sasa.get(residue, 0.0) <= 0.01:
         continue
       ca_atom = next((atom for atom in residue.atoms() if atom.atom_name.strip().upper() == "CA"), None)
       if ca_atom is None:
         continue
       hydrophobic_residues.append(residue)
-      hydrophobic_keys.append(key)
       hydrophobic_ca_coords.append(ca_atom.coord)
 
   if not hydrophobic_ca_coords:
@@ -290,7 +288,7 @@ def find_non_interface_hydrophobic_patches(
     if len(component) <= 1:
       continue
 
-    component_area = sum(float(residue_sasa.get(hydrophobic_keys[index], 0.0)) for index in component)
+    component_area = sum(float(residue_sasa.get(hydrophobic_residues[index], 0.0)) for index in component)
     if component_area >= min_patch_area:
       patches.append([hydrophobic_residues[index] for index in component])
 

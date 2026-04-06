@@ -26,11 +26,6 @@ def coord_matrix(structure: Structure) -> np.ndarray:
   return np.column_stack((structure.atoms["x"], structure.atoms["y"], structure.atoms["z"])).astype(np.float32, copy=False)
 
 
-def available_chain_ids(structure: Structure) -> List[str]:
-  """Return chain IDs in first-seen order for a single model."""
-  return [chain.chain_id for chain in structure.chains()]
-
-
 def residue_key(residue: Residue) -> ResidueKey:
   """Return a stable residue identifier tuple."""
   return (residue.chain_id, residue.res_id, residue.ins_code, residue.res_name, residue.hetero)

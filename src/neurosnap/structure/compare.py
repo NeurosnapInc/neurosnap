@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from ._common import available_chain_ids, backbone_atom_order, coord_matrix
+from ._common import backbone_atom_order, coord_matrix
 from .structure import Structure
 
 
@@ -26,8 +26,8 @@ def _matched_backbone_coords(
   chains1_provided = bool(chains1)
   chains2_provided = bool(chains2)
 
-  available_reference_chains = available_chain_ids(reference)
-  available_mobile_chains = available_chain_ids(mobile)
+  available_reference_chains = reference.chain_ids()
+  available_mobile_chains = mobile.chain_ids()
 
   if chains1:
     for chain_id in chains1:

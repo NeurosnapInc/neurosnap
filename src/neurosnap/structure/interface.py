@@ -7,7 +7,7 @@ import numpy as np
 
 from neurosnap.constants.structure import HYDROPHOBIC_RESIDUES
 
-from ._common import available_chain_ids, filter_structure_atoms, residue_key
+from ._common import filter_structure_atoms, residue_key
 from .analysis import _residue_surface_area_map, calculate_surface_area
 from .structure import Atom, Residue, Structure
 
@@ -212,7 +212,7 @@ def find_non_interface_hydrophobic_patches(
     raise TypeError(f"find_non_interface_hydrophobic_patches() expects a Structure, found {type(structure).__name__}.")
 
   chain_pairs = [(chain1.strip(), chain2.strip()) for chain1, chain2 in chain_pairs]
-  available_chains = set(available_chain_ids(structure))
+  available_chains = set(structure.chain_ids())
   for chain1, chain2 in chain_pairs:
     if chain1 not in available_chains or chain2 not in available_chains:
       raise ValueError(f"Chain pair ({chain1}, {chain2}) is not present in the structure.")

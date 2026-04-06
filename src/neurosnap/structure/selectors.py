@@ -3,7 +3,6 @@
 import re
 from typing import Dict, List
 
-from ._common import available_chain_ids
 from .structure import Structure
 
 
@@ -26,7 +25,7 @@ def select_residues(structure: Structure, selectors: str, invert: bool = False) 
   if not isinstance(structure, Structure):
     raise TypeError(f"select_residues() expects a Structure, found {type(structure).__name__}.")
 
-  chain_ids = available_chain_ids(structure)
+  chain_ids = structure.chain_ids()
   output = {chain_id: set() for chain_id in chain_ids}
 
   selectors = re.sub(r"\s", "", selectors).strip(",")

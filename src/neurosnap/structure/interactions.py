@@ -6,7 +6,6 @@ import numpy as np
 
 from neurosnap.constants.structure import HYDROPHOBIC_RESIDUES
 
-from ._common import available_chain_ids
 from .structure import Atom, Residue, Structure
 
 
@@ -257,7 +256,7 @@ def _atom_by_name(residue: Residue, atom_name: str) -> Optional[Atom]:
 
 def _validate_hydrogen_bond_inputs(structure: Structure, chain: Optional[str], chain_other: Optional[str]):
   """Validate hydrogen-bond chain inputs against a structure."""
-  available_chains = set(available_chain_ids(structure))
+  available_chains = set(structure.chain_ids())
   if chain_other is not None and chain is None:
     raise ValueError("`chain_other` is specified, but `chain` is not. Both must be provided for inter-chain calculation.")
   if chain is not None and chain not in available_chains:

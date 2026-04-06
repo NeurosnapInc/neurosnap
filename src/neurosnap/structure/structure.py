@@ -224,7 +224,7 @@ class Structure:
         chain order using one continuous counter.
       start: Starting residue number.
     """
-    if chain is not None and chain not in self._available_chain_ids():
+    if chain is not None and chain not in self.chain_ids():
       raise ValueError(f'Chain "{chain}" was not found in the structure.')
 
     residue_number = int(start)
@@ -545,25 +545,13 @@ class Structure:
         residue_types[atom_index] = "AMINO_ACID"
     return residue_types
 
-  def _available_chain_ids(self) -> List[str]:
-    """Return chain identifiers present in the structure in first-seen order."""
-    chain_ids = []
-    seen = set()
-    for chain_id in self.atom_annotations["chain_id"]:
-      chain_id = str(chain_id)
-      if chain_id in seen:
-        continue
-      seen.add(chain_id)
-      chain_ids.append(chain_id)
-    return chain_ids
-
   def _atom_mask(self, chains: Optional[List[str]] = None) -> np.ndarray:
     """Return a boolean mask for atoms in the selected chains."""
     if chains is None:
       return np.ones(len(self), dtype=bool)
 
     selected_chains = [str(chain_id) for chain_id in chains]
-    missing_chains = sorted(set(selected_chains) - set(self._available_chain_ids()))
+    missing_chains = sorted(set(selected_chains) - set(self.chain_ids()))
     if missing_chains:
       raise ValueError(f'Chain(s) {", ".join(missing_chains)} were not found in the structure.')
 

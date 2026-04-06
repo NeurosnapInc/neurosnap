@@ -14,7 +14,7 @@ from neurosnap.log import logger
 CCD_ENTRIES_URL = "https://neurosnap.ai/assets/ccd/entries.json"
 DEFAULT_CCD_CACHE = "~/.cache/neurosnap/ccd_entries.json"
 
-_MEMORY_INDEX_CACHE: Dict[str, Tuple[str, Dict[str, "CCD"], Dict[str, "CCD"]]] = {}
+_MEMORY_INDEX_CACHE: Dict[str, Tuple[str, Dict[str, "CCD"]]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,13 +40,13 @@ class CCD:
     Raises:
       ValueError: If the stored canonical SMILES cannot be parsed.
     """
-    mol = Chem.MolFromSmiles(self.smiles_canonical)
+    mol = Chem.MolFromSmiles(self.smiles)
     if mol is None:
       raise ValueError(f'Could not parse canonical SMILES for CCD "{self.code}".')
     return mol
 
-  def smiles_canonical(self) -> Optional[str]:
-    """Return a canonical RDKit SMILES string or raises a ValueError exception if invalid."""
+  def smiles_canonical(self) -> str:
+    """Return the RDKit-canonicalized SMILES string for this CCD entry."""
     mol = Chem.MolFromSmiles(self.smiles)
     if mol is None:
       raise ValueError("Failed to canonicalize CCD entry.")
@@ -75,7 +75,7 @@ def get_ccd_entries(
     Dictionary mapping CCD code to :class:`CCD`.
   """
   resolved_cache_path = str(Path(cache_path).expanduser().resolve())
-  payload = _load_ccd_payload(resolved_cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout)
+  payload = _load_ccd_payload(cache_path=resolved_cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout)
   created_at = str(payload["created_at"])
 
   cached = _MEMORY_INDEX_CACHE.get(resolved_cache_path)
@@ -83,32 +83,31 @@ def get_ccd_entries(
     return cached[1]
 
   code_map: Dict[str, CCD] = {}
-  smiles_map: Dict[str, CCD] = {}
   for code, entry in payload["entries"].items():
     ccd = CCD(
       code=str(code).upper(),
       name=str(entry.get("name", "")),
-      smiles_canonical=str(entry.get("smiles_canonical", "")),
+      smiles=str(entry.get("smiles", "")),
     )
     code_map[ccd.code] = ccd
 
-  _MEMORY_INDEX_CACHE[resolved_cache_path] = (created_at, code_map, smiles_map)
+  _MEMORY_INDEX_CACHE[resolved_cache_path] = (created_at, code_map)
   return code_map
 
 
 def get_ccd(
   code: str,
-  cache_path: str = DEFAULT_CCD_CACHE,
   *,
+  cache_path: str = DEFAULT_CCD_CACHE,
   overwrite: bool = False,
   max_age_days: int = 7,
   timeout: int = 30,
 ) -> Optional[CCD]:
   """Return a CCD entry by its component code."""
-  return get_ccd_entries(cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout).get(str(code).upper().strip())
+  return get_ccd_entries(cache_path=cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout).get(str(code).upper().strip())
 
 
-def _load_ccd_payload(cache_path: str, *, overwrite: bool, max_age_days: int, timeout: int) -> dict:
+def _load_ccd_payload(*, cache_path: str, overwrite: bool, max_age_days: int, timeout: int) -> dict:
   """Load a cached CCD payload or refresh it from the remote endpoint."""
   path = Path(cache_path)
   if not overwrite and path.exists():
@@ -120,6 +119,7 @@ def _load_ccd_payload(cache_path: str, *, overwrite: bool, max_age_days: int, ti
     except (json.JSONDecodeError, OSError, ValueError):
       logger.warning("Could not read cached CCD entries; refreshing from remote source.")
 
+  logger.info("Fetching and caching CCD entries.")
   response = requests.get(CCD_ENTRIES_URL, timeout=timeout)
   response.raise_for_status()
   payload = response.json()

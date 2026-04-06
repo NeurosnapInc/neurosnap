@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from neurosnap.structure.structure import Structure
 from neurosnap.structure import (
   ca_distance_matrix,
   calculate_distance_matrix,
@@ -16,6 +17,34 @@ from neurosnap.structure import (
 )
 
 from tests._structure_test_utils import PDB_DIMER, PDB_MONO, PDB_NO_H, parse_ensemble, parse_single_model
+
+
+def _make_two_atom_structure(elements, coords, hetero=None):
+  structure = Structure(remove_annotations=False)
+  atom_count = len(elements)
+  structure.atoms = np.zeros(atom_count, dtype=structure._dtype_atoms)
+  structure.atom_annotations = np.zeros(atom_count, dtype=structure._dtype_atom_annotations)
+  hetero = [False] * atom_count if hetero is None else hetero
+
+  for atom_index, ((x, y, z), element, is_hetero) in enumerate(zip(coords, elements, hetero), start=1):
+    structure.atoms["x"][atom_index - 1] = x
+    structure.atoms["y"][atom_index - 1] = y
+    structure.atoms["z"][atom_index - 1] = z
+    structure.atom_annotations["chain_id"][atom_index - 1] = "A"
+    structure.atom_annotations["res_id"][atom_index - 1] = atom_index
+    structure.atom_annotations["ins_code"][atom_index - 1] = ""
+    structure.atom_annotations["res_name"][atom_index - 1] = "LIG" if is_hetero else "GLY"
+    structure.atom_annotations["hetero"][atom_index - 1] = is_hetero
+    structure.atom_annotations["atom_name"][atom_index - 1] = f"{element}{atom_index}"
+    structure.atom_annotations["element"][atom_index - 1] = element
+    structure.atom_annotations["atom_id"][atom_index - 1] = atom_index
+    structure.atom_annotations["b_factor"][atom_index - 1] = 0.0
+    structure.atom_annotations["occupancy"][atom_index - 1] = 1.0
+    structure.atom_annotations["charge"][atom_index - 1] = 0
+    structure.atom_annotations["sym_id"][atom_index - 1] = ""
+
+  structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+  return structure
 
 
 def test_parse_local_pdb_and_dataframe():
@@ -130,6 +159,31 @@ def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():
   dataframe = structure.to_dataframe().query("chain == @first_chain")
   expected_center = dataframe[["x", "y", "z"]].to_numpy(dtype=np.float32).mean(axis=0)
   assert np.allclose(chain_center, expected_center)
+
+
+def test_calculate_center_of_mass_includes_small_molecules():
+  structure = _make_two_atom_structure(
+    elements=["C", "Fe"],
+    coords=[(0.0, 0.0, 0.0), (10.0, 0.0, 0.0)],
+    hetero=[False, True],
+  )
+
+  center_of_mass = structure.calculate_center_of_mass()
+  expected_x = (12.011 * 0.0 + 55.845 * 10.0) / (12.011 + 55.845)
+  assert np.allclose(center_of_mass, np.array([expected_x, 0.0, 0.0], dtype=np.float32))
+
+
+def test_calculate_center_of_mass_warns_on_unknown_element(caplog):
+  structure = _make_two_atom_structure(
+    elements=["C", "Xx"],
+    coords=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+    hetero=[False, True],
+  )
+
+  with pytest.raises(ValueError, match="Unknown element mass"):
+    structure.calculate_center_of_mass()
+
+  assert any("Unknown element mass" in message for message in caplog.messages)
 
 
 def test_analysis_helpers_require_structure():

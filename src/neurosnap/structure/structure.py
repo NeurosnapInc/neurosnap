@@ -15,8 +15,10 @@ from typing import Any, Dict, Iterator, List, Literal, Mapping, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from neurosnap.constants.sequence import AA_MASS_PROTEIN_AVG, AA_RECORDS
+from neurosnap.constants.chemistry import ATOMIC_MASSES
+from neurosnap.constants.sequence import AA_RECORDS
 from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NUC_DNA_CODES, NUC_RNA_CODES, STANDARD_NUCLEOTIDES
+from neurosnap.log import logger
 
 ### IMPORTANT NOTES
 # Universal unit is Å.
@@ -300,7 +302,8 @@ class Structure:
       A length-3 NumPy array containing the center of mass in Å.
 
     Raises:
-      ValueError: If no selected atoms have a known amino-acid residue mass.
+      ValueError: If no atoms are found in the selected structure or if any
+        selected atom has an unknown element mass.
     """
     atom_mask = self._atom_mask(chains=chains)
     if not np.any(atom_mask):
@@ -308,11 +311,7 @@ class Structure:
 
     coord = self._coord_matrix(atom_mask=atom_mask)
     masses = self._atom_masses(atom_mask=atom_mask)
-    known_mass_mask = masses > 0.0
-    if not np.any(known_mass_mask):
-      raise ValueError("No atoms with known amino-acid residue masses were found in the selected structure.")
-
-    return np.average(coord[known_mass_mask], axis=0, weights=masses[known_mass_mask])
+    return np.average(coord, axis=0, weights=masses)
 
   def calculate_geometric_center(self, chains: Optional[List[str]] = None) -> np.ndarray:
     """Calculate the geometric center for the selected atoms.
@@ -577,51 +576,29 @@ class Structure:
     return np.column_stack((self.atoms["x"][atom_mask], self.atoms["y"][atom_mask], self.atoms["z"][atom_mask])).astype(np.float32, copy=False)
 
   def _atom_masses(self, atom_mask: Optional[np.ndarray] = None) -> np.ndarray:
-    """Return per-atom pseudo-masses derived from amino-acid residue weights.
-
-    Residue weights from :data:`AA_MASS_PROTEIN_AVG` are distributed evenly
-    across the atoms present in each amino-acid residue. Non-amino-acid
-    residues receive a mass of zero.
-    """
+    """Return per-atom masses derived from element symbols."""
     if atom_mask is None:
       atom_mask = np.ones(len(self), dtype=bool)
 
     selected_indices = np.flatnonzero(atom_mask)
     masses = np.zeros(len(selected_indices), dtype=np.float32)
-    residue_counts: Dict[Tuple[str, int, str, str, bool], int] = {}
-    residue_masses: Dict[Tuple[str, int, str, str, bool], float] = {}
-
-    for atom_index in selected_indices:
-      residue_key = (
-        self._annotation_value("chain_id", atom_index),
-        self._annotation_value("res_id", atom_index),
-        self._annotation_value("ins_code", atom_index),
-        self._annotation_value("res_name", atom_index),
-        self._annotation_value("hetero", atom_index),
-      )
-      residue_counts[residue_key] = residue_counts.get(residue_key, 0) + 1
-
-    for residue_key, atom_count in residue_counts.items():
-      residue_name = residue_key[3]
-      residue_record = AA_RECORDS.get(residue_name)
-      residue_mass = 0.0
-      if residue_record is not None:
-        residue_code = residue_record.code
-        if residue_code is None and residue_record.standard_equiv_abr is not None:
-          residue_code = AA_RECORDS[residue_record.standard_equiv_abr].code
-        if residue_code is not None:
-          residue_mass = float(AA_MASS_PROTEIN_AVG.get(residue_code, 0.0))
-      residue_masses[residue_key] = residue_mass / atom_count if atom_count else 0.0
+    unknown_elements = set()
 
     for index, atom_index in enumerate(selected_indices):
-      residue_key = (
-        self._annotation_value("chain_id", atom_index),
-        self._annotation_value("res_id", atom_index),
-        self._annotation_value("ins_code", atom_index),
-        self._annotation_value("res_name", atom_index),
-        self._annotation_value("hetero", atom_index),
+      element = str(self._annotation_value("element", atom_index)).strip()
+      if element not in ATOMIC_MASSES:
+        unknown_elements.add(element or "<blank>")
+        continue
+      masses[index] = float(ATOMIC_MASSES[element])
+
+    if unknown_elements:
+      message = (
+        "Unknown element mass for atom selection: "
+        + ", ".join(sorted(unknown_elements))
+        + ". This is likely an error in the input structure."
       )
-      masses[index] = residue_masses[residue_key]
+      logger.warning(message)
+      raise ValueError(message)
 
     return masses
 

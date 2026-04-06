@@ -107,6 +107,37 @@ def get_ccd(
   return get_ccd_entries(cache_path=cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout).get(str(code).upper().strip())
 
 
+def get_ccd_rcsb(ccd_code: str, fpath: str):
+  """
+  Fetches the ideal SDF (Structure Data File) for a given CCD (Chemical Component Dictionary) code
+  and saves it to the specified file path.
+
+  This function retrieves the idealized structure of a chemical component from the RCSB Protein
+  Data Bank (PDB) by downloading the corresponding SDF file. The downloaded file is then saved
+  to the specified location.
+
+  Parameters:
+      ccd_code (str): The three-letter CCD code representing the chemical component (e.g., "ATP").
+      fpath (str): The file path where the downloaded SDF file will be saved.
+
+  Raises:
+      HTTPError: If the request to fetch the SDF file fails (e.g., 404 or connection error).
+      IOError: If there is an issue saving the SDF file to the specified file path.
+
+  Example:
+      >>> fetch_ccd("ATP", "ATP_ideal.sdf")
+      Fetches the ideal SDF file for the ATP molecule and saves it as "ATP_ideal.sdf".
+
+  External Resources:
+      - SDF File Download: https://files.rcsb.org/ligands/download/{CCD_CODE}_ideal.sdf
+  """
+  ccd_code = ccd_code.upper()
+  logger.info(f"Fetching CCD with code {ccd_code} from rcsb.org...")
+  r = requests.get(f"https://files.rcsb.org/ligands/download/{ccd_code}_ideal.sdf")
+  r.raise_for_status()
+  with open(fpath, "wb") as f:
+    f.write(r.content)
+
 def _load_ccd_payload(*, cache_path: str, overwrite: bool, max_age_days: int, timeout: int) -> dict:
   """Load a cached CCD payload or refresh it from the remote endpoint."""
   path = Path(cache_path)

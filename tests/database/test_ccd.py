@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from rdkit import Chem
 
-from neurosnap.database.ccd import CCD, get_ccd, get_ccd_entries
+from neurosnap.database.ccd import CCD, get_ccd, get_ccd_entries, get_ccd_rcsb
 
 
 class _MockCCDResponse:
@@ -70,6 +70,15 @@ def test_get_ccd_by_code(monkeypatch, tmp_path: Path, ccd_payload):
   assert atp.code == "ATP"
   assert atp.smiles == ccd_payload["entries"]["ATP"]["smiles"]
   assert get_ccd("missing", cache_path=str(cache)) is None
+
+
+def test_get_ccd_rcsb_downloads_sdf(tmp_path: Path):
+  out = tmp_path / "ATP_ideal.sdf"
+  get_ccd_rcsb("atp", str(out))
+  assert out.exists()
+  content = out.read_text()
+  assert len(content) > 0
+  assert "V2000" in content or "V3000" in content
 
 
 def test_ccd_smiles_canonical_and_to_mol():

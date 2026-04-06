@@ -225,6 +225,12 @@ class Structure:
       chain: Chain ID to renumber. If ``None``, all chains are renumbered in
         chain order using one continuous counter.
       start: Starting residue number.
+
+    Notes:
+      Renumbering treats inserted residues as ordinary sequential residues and
+      clears their insertion codes. For example, residues ``10``, ``10A``, and
+      ``10B`` become ``1``, ``2``, and ``3`` (with empty insertion codes) when
+      renumbered with ``start=1``.
     """
     if chain is not None and chain not in self.chain_ids():
       raise ValueError(f'Chain "{chain}" was not found in the structure.')
@@ -252,6 +258,7 @@ class Structure:
       )
       if residue_key in residue_map:
         self.atom_annotations["res_id"][atom_index] = residue_map[residue_key]
+        self.atom_annotations["ins_code"][atom_index] = ""
 
   def translate(
     self,

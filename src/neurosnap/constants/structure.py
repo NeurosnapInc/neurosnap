@@ -2,9 +2,9 @@
 
 ## Backbone Atoms
 # Names of atoms that are part of a protein's backbone structure
-BACKBONE_ATOMS_AA = {"N", "CA", "C"}
+BACKBONE_ATOMS_AA = ("N", "CA", "C")
 # Names of atoms that are part of a DNA backbone structure
-BACKBONE_ATOMS_DNA = {
+BACKBONE_ATOMS_DNA = (
   # Phosphorus
   "P",
   # Phosphate oxygens (sometimes labeled OP1, OP2)
@@ -23,10 +23,10 @@ BACKBONE_ATOMS_DNA = {
   "O4'",
   "C1'",
   "C2'",
-}
+)
 # Names of atoms that are part of an RNA backbone structure
 # (Same as DNA but includes the 2'-OH group)
-BACKBONE_ATOMS_RNA = BACKBONE_ATOMS_DNA.union({"O2'"})
+BACKBONE_ATOMS_RNA = BACKBONE_ATOMS_DNA + ("O2'",)
 
 ## Nucleotide Codes
 # Single-letter PDB residue codes for standard DNA residues

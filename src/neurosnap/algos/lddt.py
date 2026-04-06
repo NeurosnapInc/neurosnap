@@ -16,7 +16,7 @@ from neurosnap.structure import Atom, Residue, Structure
 _PROTEIN_BACKBONE_FALLBACK = tuple(atom for atom in ("CA", "N", "C") if atom in BACKBONE_ATOMS_AA)
 
 _NUCLEOTIDE_CODE_MAP = {code: (code[1] if len(code) == 2 and code[0] == "D" else code) for code in STANDARD_NUCLEOTIDES}
-_NUCLEOTIDE_BACKBONE_ATOMS = BACKBONE_ATOMS_DNA.union(BACKBONE_ATOMS_RNA)
+_NUCLEOTIDE_BACKBONE_ATOMS = set(BACKBONE_ATOMS_DNA).union(BACKBONE_ATOMS_RNA)
 _NUCLEOTIDE_PREF_BASES = ("C4'", "C3'", "C1'", "C2'", "P", "O4'", "O3'", "O5'")
 _NUCLEOTIDE_ATOM_PRIORITY: List[Tuple[str, ...]] = []
 _seen_nuc_bases = set()

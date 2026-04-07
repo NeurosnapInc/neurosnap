@@ -1,6 +1,7 @@
 """Structure I/O and ligand-extraction tests."""
 
 import io
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -11,6 +12,9 @@ from neurosnap.io.sdf import parse_sdf, save_sdf
 from neurosnap.structure import StructureEnsemble, StructureStack, extract_non_biopolymers
 
 from tests._structure_test_utils import PDB_NO_H, make_structure, parse_single_model
+
+TESTS_DIR = Path(__file__).resolve().parents[1]
+FILES = TESTS_DIR / "files"
 
 
 def test_save_and_reload_pdb(tmp_path):
@@ -157,3 +161,20 @@ def test_parse_pdb_malformed_conect_ignore_unknown_reference(caplog):
   ensemble = parse_pdb(io.StringIO(pdb_text), return_type="ensemble", malformed_conect="ignore")
   assert len(ensemble.first().bonds) == 0
   assert not caplog.messages
+
+
+def test_parse_pdb_preserves_duplicate_ligand_atom_names_with_renaming(caplog):
+  pdb_text = (
+    "HETATM    1  C   UNK     0       0.000   0.000   0.000  0.00  0.00           C  \n"
+    "HETATM    2  C   UNK     0       1.000   0.000   0.000  0.00  0.00           C  \n"
+    "HETATM    3  C   UNK     0       2.000   0.000   0.000  0.00  0.00           C  \n"
+    "HETATM    4  O   UNK     0       3.000   0.000   0.000  0.00  0.00           O  \n"
+    "HETATM    5  O   UNK     0       4.000   0.000   0.000  0.00  0.00           O  \n"
+    "END\n"
+  )
+  structure = parse_pdb(io.StringIO(pdb_text), return_type="ensemble").first()
+  ligand = structure.to_dataframe().query("chain == '' and res_id == 0 and res_name == 'UNK'")
+
+  assert len(ligand) == 5
+  assert ligand["atom_name"].nunique() == 5
+  assert any('Duplicate atom name "C"' in message for message in caplog.messages)

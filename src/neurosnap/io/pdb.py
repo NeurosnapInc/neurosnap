@@ -23,6 +23,7 @@ __all__ = ["parse_pdb", "save_pdb"]
 ReturnType = Literal["ensemble", "stack", "auto"]
 ConectErrorMode = Literal["strict", "warn", "ignore"]
 AtomKey = Tuple[str, int, str, str, bool, str]
+ResidueKey = Tuple[str, int, str, str, bool]
 AltlocSite = Tuple[int, AtomKey]
 ConectRecord = Tuple[int, List[int], int]
 
@@ -74,14 +75,35 @@ class _ModelAccumulator:
   serial_to_index: Dict[int, int] = field(default_factory=dict)
   _atom_key_to_index: Dict[AtomKey, int] = field(default_factory=dict)
   _selected_altloc: Dict[AtomKey, Tuple[float, str, int]] = field(default_factory=dict)
+  _residue_atom_name_counts: Dict[ResidueKey, Counter[str]] = field(default_factory=dict)
   directed_bonds: Counter[Tuple[int, int]] = field(default_factory=Counter)
 
   def add_atom(self, atom: _AtomRecord):
     """Add or replace a selected atom record in the current model.
 
-    Alternate locations collapse onto the same ``atom_key`` so the model keeps
-    only one conformer per atom site.
+    Alternate locations collapse onto the same ``atom_key`` only when an
+    actual altloc identifier is present. Ordinary atoms with repeated names in
+    the same residue are preserved and renamed to unique atom names.
     """
+    if not atom.altloc:
+      atom = self._rename_duplicate_atom(atom)
+      atom_index = len(self.atoms)
+      self.atoms.append((atom.x, atom.y, atom.z))
+      self.annotations["chain_id"].append(atom.chain_id)
+      self.annotations["res_id"].append(atom.res_id)
+      self.annotations["ins_code"].append(atom.ins_code)
+      self.annotations["res_name"].append(atom.res_name)
+      self.annotations["hetero"].append(atom.hetero)
+      self.annotations["atom_name"].append(atom.atom_name)
+      self.annotations["element"].append(atom.element)
+      self.annotations["atom_id"].append(atom.atom_id)
+      self.annotations["b_factor"].append(atom.b_factor)
+      self.annotations["occupancy"].append(atom.occupancy)
+      self.annotations["charge"].append(atom.charge)
+      self.annotations["sym_id"].append("")
+      self.serial_to_index[atom.atom_id] = atom_index
+      return
+
     atom_index = self._atom_key_to_index.get(atom.atom_key)
     if atom_index is None:
       atom_index = len(self.atoms)
@@ -124,6 +146,45 @@ class _ModelAccumulator:
       del self.serial_to_index[prev_serial]
     self.serial_to_index[atom.atom_id] = atom_index
     self._selected_altloc[atom.atom_key] = (atom.occupancy, atom.altloc, atom.atom_id)
+
+  def _rename_duplicate_atom(self, atom: _AtomRecord) -> _AtomRecord:
+    """Return an atom record with a unique atom name within its residue."""
+    residue_key = (atom.chain_id, atom.res_id, atom.ins_code, atom.res_name, atom.hetero)
+    atom_name_counts = self._residue_atom_name_counts.setdefault(residue_key, Counter())
+    duplicate_index = atom_name_counts[atom.atom_name]
+    atom_name_counts[atom.atom_name] += 1
+    if duplicate_index == 0:
+      return atom
+
+    renamed_atom_name = _unique_atom_name(atom.atom_name, duplicate_index)
+    logger.warning(
+      'Duplicate atom name "%s" found in residue "%s" %s%s%s%s; renaming it to "%s".',
+      atom.atom_name,
+      atom.res_name,
+      atom.chain_id or "<blank chain>",
+      atom.res_id,
+      atom.ins_code or "",
+      " (hetero)" if atom.hetero else "",
+      renamed_atom_name,
+    )
+    return _AtomRecord(
+      x=atom.x,
+      y=atom.y,
+      z=atom.z,
+      chain_id=atom.chain_id,
+      res_id=atom.res_id,
+      ins_code=atom.ins_code,
+      res_name=atom.res_name,
+      hetero=atom.hetero,
+      atom_name=renamed_atom_name,
+      element=atom.element,
+      atom_id=atom.atom_id,
+      b_factor=atom.b_factor,
+      occupancy=atom.occupancy,
+      charge=atom.charge,
+      altloc=atom.altloc,
+      atom_key=(atom.chain_id, atom.res_id, atom.ins_code, atom.res_name, atom.hetero, renamed_atom_name),
+    )
 
   def add_directed_bond(self, source_serial: int, target_serial: int) -> bool:
     """Register a directed bond if both atom serials exist in this model."""
@@ -199,6 +260,12 @@ def parse_pdb(
   Alternate locations are always ignored. When alternate locations are present,
   the parser keeps only the highest-occupancy conformer for each atom site and
   emits a :func:`logger.warning` so the user knows this happened.
+
+  If a residue contains duplicate atom names without altloc identifiers, the
+  parser preserves all such atoms by automatically renaming later duplicates to
+  unique PDB-style atom names and emits a :func:`logger.warning` describing the
+  rename. This avoids incorrectly collapsing distinct ligand atoms that happen
+  to share generic names such as ``C`` or ``O``.
 
   Repeated ``CONECT`` records are interpreted as higher bond order using a
   directed-count collapse:
@@ -688,6 +755,13 @@ def _parse_charge(field: str, line_number: int) -> int:
     return int(field)
 
   raise ValueError(f'Invalid atom charge "{field}" at line {line_number}.')
+
+
+def _unique_atom_name(atom_name: str, duplicate_index: int) -> str:
+  """Return a best-effort unique atom name within the 4-character PDB limit."""
+  suffix = str(duplicate_index + 1)
+  base = atom_name.strip() or "X"
+  return f"{base[: max(1, 4 - len(suffix))]}{suffix}"[:4]
 
 
 def _read_lines(file: Union[str, pathlib.Path, io.IOBase]) -> List[str]:

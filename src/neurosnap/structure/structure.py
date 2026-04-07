@@ -138,6 +138,10 @@ class Structure:
     chain_ids = _structure_chain_ids(self)
     return f"<Structure: Models=1 Chains=[{', '.join(chain_ids)}] Atoms={len(self)}>"
 
+  def __iter__(self) -> Iterator["Chain"]:
+    """Iterate over chains in atom-table order."""
+    return iter(self.chains())
+
   def __getitem__(self, chain_id: str) -> "Chain":
     """Return a chain view by chain ID.
 
@@ -740,6 +744,10 @@ class Chain:
   chain_id: str
   _residues: Tuple[Residue, ...] = field(repr=False)
 
+  def __iter__(self) -> Iterator[Residue]:
+    """Iterate over residues in residue order."""
+    return iter(self._residues)
+
   def residues(self) -> List[Residue]:
     """Return the residues that belong to this chain.
 
@@ -747,6 +755,39 @@ class Chain:
       List of immutable :class:`Residue` views in residue order.
     """
     return list(self._residues)
+
+  def __getitem__(self, res_id: int) -> Residue:
+    """Return a residue view by residue ID, not by positional index.
+
+    Parameters:
+      res_id: Residue sequence number to retrieve.
+
+    Returns:
+      The first :class:`Residue` in this chain with the requested residue ID.
+
+    Raises:
+      TypeError: If ``res_id`` is not an integer residue ID.
+      KeyError: If no residue with the requested ID is present in the chain.
+
+    Notes:
+      This method looks up residues by their residue ID rather than by list
+      position. If multiple residues share the same residue ID, such as
+      inserted residues distinguished by insertion codes, the first matching
+      residue is returned and a warning is emitted.
+    """
+    if not isinstance(res_id, (int, np.integer)):
+      raise TypeError("Chain indices must be residue IDs as integers.")
+
+    matches = [residue for residue in self._residues if residue.res_id == int(res_id)]
+    if not matches:
+      raise KeyError(f'Residue ID {res_id} was not found in chain "{self.chain_id}".')
+    if len(matches) > 1:
+      logger.warning(
+        'Chain "%s" contains multiple residues with residue ID %d; returning the first match.',
+        self.chain_id,
+        int(res_id),
+      )
+    return matches[0]
 
   def sequence(
     self,

@@ -85,6 +85,52 @@ def test_structure_is_subscriptable_by_chain_id():
     structure["missing"]
 
 
+def test_chain_is_subscriptable_by_residue_id(caplog):
+  structure = Structure(remove_annotations=False)
+  structure.atoms = np.zeros(3, dtype=structure._dtype_atoms)
+  structure.atom_annotations = np.zeros(3, dtype=structure._dtype_atom_annotations)
+  structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+
+  for atom_index, (res_id, ins_code) in enumerate([(10, ""), (10, "A"), (11, "")], start=1):
+    structure.atoms["x"][atom_index - 1] = float(atom_index)
+    structure.atoms["y"][atom_index - 1] = 0.0
+    structure.atoms["z"][atom_index - 1] = 0.0
+    structure.atom_annotations["chain_id"][atom_index - 1] = "A"
+    structure.atom_annotations["res_id"][atom_index - 1] = res_id
+    structure.atom_annotations["ins_code"][atom_index - 1] = ins_code
+    structure.atom_annotations["res_name"][atom_index - 1] = "GLY"
+    structure.atom_annotations["hetero"][atom_index - 1] = False
+    structure.atom_annotations["atom_name"][atom_index - 1] = f"C{atom_index}"
+    structure.atom_annotations["element"][atom_index - 1] = "C"
+    structure.atom_annotations["atom_id"][atom_index - 1] = atom_index
+    structure.atom_annotations["b_factor"][atom_index - 1] = 0.0
+    structure.atom_annotations["occupancy"][atom_index - 1] = 1.0
+    structure.atom_annotations["charge"][atom_index - 1] = 0
+    structure.atom_annotations["sym_id"][atom_index - 1] = ""
+
+  chain = structure["A"]
+  residue = chain[10]
+  assert residue.res_id == 10
+  assert residue.ins_code == ""
+  assert any("multiple residues with residue ID 10" in message for message in caplog.messages)
+
+  assert chain[11].res_id == 11
+  with pytest.raises(KeyError):
+    chain[99]
+
+
+def test_structure_and_chain_iteration_still_work():
+  structure = parse_single_model(PDB_MONO)
+
+  chains = list(structure)
+  assert chains
+  assert chains[0] == structure[chains[0].chain_id]
+
+  residues = list(chains[0])
+  assert residues
+  assert residues[0] == chains[0][residues[0].res_id]
+
+
 def test_select_residues_parsing_and_invert():
   structure = parse_single_model(PDB_NO_H)
   chain = structure.chains()[0].chain_id

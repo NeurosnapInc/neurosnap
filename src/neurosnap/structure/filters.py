@@ -47,10 +47,14 @@ def remove_non_biopolymers(structure: Structure, chain: Optional[str] = None):
 
   Returns:
     ``None``. The input structure is modified in-place.
+
+  Notes:
+    Hetero residues are always removed by this filter, even if their residue
+    names overlap with amino-acid or nucleotide dictionaries such as ``UNK``.
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"remove_non_biopolymers() expects a Structure, found {type(structure).__name__}.")
-  _remove_residues(structure, lambda residue: classify_polymer_residue(residue) is None, chain=chain)
+  _remove_residues(structure, lambda residue: residue.hetero or classify_polymer_residue(residue) is None, chain=chain)
 
 
 def _remove_residues(structure: Structure, predicate: Callable, chain: Optional[str]):

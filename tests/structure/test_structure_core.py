@@ -178,6 +178,14 @@ def test_remove_waters_and_non_biopolymers():
   assert heterogens.empty
 
 
+def test_remove_non_biopolymers_removes_hetero_unk_ligand():
+  structure = parse_single_model("tests/files/dimer_1lig_malformed.pdb")
+  assert not structure.to_dataframe().query("chain == '' and res_id == 0 and res_name == 'UNK'").empty
+
+  remove_non_biopolymers(structure)
+  assert structure.to_dataframe().query("chain == '' and res_id == 0 and res_name == 'UNK'").empty
+
+
 def test_filters_require_structure():
   ensemble = parse_ensemble(PDB_MONO)
   with pytest.raises(TypeError):

@@ -30,9 +30,9 @@ Structure Basics
 
 The :mod:`neurosnap.io` and :mod:`neurosnap.structure` modules provide the
 core structure workflow. Parse local coordinate files into a
-:class:`~neurosnap.structure.structure.StructureEnsemble` or
-:class:`~neurosnap.structure.structure.StructureStack`, then work with
-single-model :class:`~neurosnap.structure.structure.Structure` objects.
+:class:`~neurosnap.structure.StructureEnsemble` or
+:class:`~neurosnap.structure.StructureStack`, then work with
+single-model :class:`~neurosnap.structure.Structure` objects.
 
 .. code-block:: python
 
@@ -46,15 +46,31 @@ single-model :class:`~neurosnap.structure.structure.Structure` objects.
    print("Model IDs:", ensemble.model_ids)
    print("Chains:", [chain.chain_id for chain in structure.chains()])
 
-You can derive sequences directly from chain views.
+You can work with structures either by explicit traversal or by direct
+subscript-based lookup.
 
 .. code-block:: python
 
-   first_chain = structure.chains()[0]
+   for chain in structure:
+     print("Chain:", chain.chain_id)
+     for residue in chain:
+       print("  Residue:", residue.res_id, residue.res_name)
+
+   chain_a = structure["A"]
+   residue_54 = chain_a[54]
+
+   print("Direct chain lookup:", chain_a.chain_id)
+   print("Direct residue lookup:", residue_54.res_id, residue_54.res_name)
+
+You can also derive sequences directly from chain views.
+
+.. code-block:: python
+
+   first_chain = structure["A"]
    print("Protein sequence:", first_chain.sequence(polymer_type="protein"))
 
 Useful structure-level calculations are available directly on the
-:class:`~neurosnap.structure.structure.Structure` object and in
+:class:`~neurosnap.structure.Structure` object and in
 :mod:`neurosnap.structure`.
 
 .. code-block:: python

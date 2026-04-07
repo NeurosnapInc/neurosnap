@@ -138,6 +138,27 @@ class Structure:
     chain_ids = _structure_chain_ids(self)
     return f"<Structure: Models=1 Chains=[{', '.join(chain_ids)}] Atoms={len(self)}>"
 
+  def __getitem__(self, chain_id: str) -> "Chain":
+    """Return a chain view by chain ID.
+
+    Parameters:
+      chain_id: Chain identifier to retrieve.
+
+    Returns:
+      The matching :class:`Chain` view.
+
+    Raises:
+      TypeError: If ``chain_id`` is not a string.
+      KeyError: If the requested chain is not present in the structure.
+    """
+    if not isinstance(chain_id, str):
+      raise TypeError("Structure indices must be chain IDs as strings.")
+
+    for chain in self.chains():
+      if chain.chain_id == chain_id:
+        return chain
+    raise KeyError(f'Chain "{chain_id}" was not found.')
+
   def to_dataframe(self) -> pd.DataFrame:
     """Export the structure as a pandas dataframe.
 

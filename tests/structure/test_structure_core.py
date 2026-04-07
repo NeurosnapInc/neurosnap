@@ -73,6 +73,18 @@ def test_models_chains_and_sequence():
   assert len(sequence) >= 1
 
 
+def test_structure_is_subscriptable_by_chain_id():
+  structure = parse_single_model(PDB_MONO)
+  chain = structure.chains()[0]
+
+  selected_chain = structure[chain.chain_id]
+  assert selected_chain == chain
+  assert selected_chain.chain_id == chain.chain_id
+
+  with pytest.raises(KeyError):
+    structure["missing"]
+
+
 def test_select_residues_parsing_and_invert():
   structure = parse_single_model(PDB_NO_H)
   chain = structure.chains()[0].chain_id

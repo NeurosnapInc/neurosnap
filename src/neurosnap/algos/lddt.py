@@ -8,9 +8,7 @@ from neurosnap.constants.structure import (
   BACKBONE_ATOMS_AA,
   BACKBONE_ATOMS_DNA,
   BACKBONE_ATOMS_RNA,
-  STANDARD_NUCLEOTIDES,
 )
-from neurosnap.sequence.protein import getAA
 from neurosnap.structure import Atom, Residue, Structure
 from neurosnap.structure._common import classify_polymer_residue
 
@@ -140,7 +138,6 @@ def _extract_cb_coords_from_structure(
   structure: Structure,
   *,
   chains: Optional[List[str]] = None,
-  require_standard_aa: bool = False,
 ) -> Dict[SiteKey, Tuple[float, float, float]]:
   """Collect aligned analysis-site coordinates from a structure.
 
@@ -161,24 +158,12 @@ def _extract_cb_coords_from_structure(
 
       polymer_type = _classify_residue_for_lddt(residue)
       if polymer_type is not None:
-        if require_standard_aa:
-          if polymer_type == "protein":
-            try:
-              getAA(resname, non_standard="convert")
-            except ValueError:
-              continue
-          elif resname not in STANDARD_NUCLEOTIDES:
-            continue
-
         atom = _select_polymer_representative_atom(residue, polymer_type)
         if atom is None:
           continue
 
         key = (cid, int(residue.res_id), residue.ins_code, "polymer", "", "")
         coords[key] = (float(atom.coord[0]), float(atom.coord[1]), float(atom.coord[2]))
-        continue
-
-      if require_standard_aa:
         continue
 
       for atom in residue.atoms():
@@ -260,9 +245,17 @@ def calc_lddt(
   R: float = 15.0,
   sep_thresh: int = -1,
   T_set: Sequence[float] = (0.5, 1.0, 2.0, 4.0),
-  require_standard_aa: bool = False,
 ) -> float:
-  """Compute lDDT from distance maps or Neurosnap structure containers.
+  """Compute lDDT from distance maps or single-model Neurosnap structures.
+
+  For structure inputs, lDDT is computed over aligned analysis sites rather
+  than only canonical amino-acid residues. Protein and nucleotide residues,
+  including modified residues recognized from residue chemistry/backbone
+  content, contribute one representative site per residue. Proteins use ``CB``
+  when available and fall back to backbone atoms; nucleotides use a
+  deterministic sugar/phosphate proxy atom. Non-polymer residues such as
+  ligands contribute one site per heavy atom, while waters and hydrogens are
+  ignored.
 
   Args:
     reference: Distance map or single-model structure used as the ground truth.
@@ -272,10 +265,6 @@ def calc_lddt(
     R: Maximum reference distance to consider when defining the L set.
     sep_thresh: Minimum sequence separation between residue pairs.
     T_set: Error thresholds used to compute preserved distance fractions.
-    require_standard_aa: Restrict structure inputs to canonical amino acids and
-      standard nucleotides when True. When False, modified polymer residues are
-      included using polymer-aware proxy atoms and non-polymer residues such as
-      ligands contribute heavy-atom sites.
 
   Returns:
     lDDT score between the reference and prediction. Typical range is [0.0, 1.0],
@@ -299,8 +288,8 @@ def calc_lddt(
     return _calc_lddt_from_maps(reference, prediction, R=R, sep_thresh=sep_thresh, T_set=T_set)
 
   if is_ref_structure and is_pred_structure:
-    ref_cb = _extract_cb_coords_from_structure(reference, chains=chains_ref, require_standard_aa=require_standard_aa)
-    pred_cb = _extract_cb_coords_from_structure(prediction, chains=chains_pred, require_standard_aa=require_standard_aa)
+    ref_cb = _extract_cb_coords_from_structure(reference, chains=chains_ref)
+    pred_cb = _extract_cb_coords_from_structure(prediction, chains=chains_pred)
 
     # Intersect keys to ensure 1:1 residue correspondence
     common_keys = sorted(set(ref_cb.keys()).intersection(pred_cb.keys()), key=lambda x: (x[0], x[1]))

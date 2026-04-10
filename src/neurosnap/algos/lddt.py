@@ -1,21 +1,21 @@
 """Code for LDDT (Local Distance Difference Test) calculation."""
 
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from neurosnap.constants.sequence import AA_RECORDS
 from neurosnap.constants.structure import (
   BACKBONE_ATOMS_AA,
   BACKBONE_ATOMS_DNA,
   BACKBONE_ATOMS_RNA,
   STANDARD_NUCLEOTIDES,
 )
+from neurosnap.sequence.protein import getAA
 from neurosnap.structure import Atom, Residue, Structure
+from neurosnap.structure._common import classify_polymer_residue
 
 _PROTEIN_BACKBONE_FALLBACK = tuple(atom for atom in ("CA", "N", "C") if atom in BACKBONE_ATOMS_AA)
 
-_NUCLEOTIDE_CODE_MAP = {code: (code[1] if len(code) == 2 and code[0] == "D" else code) for code in STANDARD_NUCLEOTIDES}
 _NUCLEOTIDE_BACKBONE_ATOMS = set(BACKBONE_ATOMS_DNA).union(BACKBONE_ATOMS_RNA)
 _NUCLEOTIDE_PREF_BASES = ("C4'", "C3'", "C1'", "C2'", "P", "O4'", "O3'", "O5'")
 _NUCLEOTIDE_ATOM_PRIORITY: List[Tuple[str, ...]] = []
@@ -30,6 +30,10 @@ for base in sorted(_NUCLEOTIDE_BACKBONE_ATOMS):
     names = tuple(dict.fromkeys((base, base.replace("'", "*"))))
     _NUCLEOTIDE_ATOM_PRIORITY.append(names)
     _seen_nuc_bases.add(base)
+
+_WATER_RESIDUE_NAMES = {"HOH", "WAT"}
+_PROTEIN_BACKBONE_NAMES = {atom.upper() for atom in BACKBONE_ATOMS_AA}
+SiteKey = Tuple[str, int, str, str, str, str]
 
 
 # Helpers for metrics calculated using numpy scheme
@@ -80,27 +84,23 @@ def _get_dist_thresh_b_indices(dmap, thresh, comparator):
   return threshed
 
 
-def _aa3_to_aa1(resname: str) -> Optional[str]:
-  """Map a 3-letter amino-acid code to a 1-letter code when possible."""
-  record = AA_RECORDS.get(resname)
-  if record is None:
-    return None
-  if record.code is not None:
-    return record.code
-  if record.standard_equiv_abr:
-    equiv = AA_RECORDS.get(record.standard_equiv_abr)
-    if equiv and equiv.code is not None:
-      return equiv.code
+def _is_hydrogen_atom(atom: Atom) -> bool:
+  element = str(atom.element).strip().upper()
+  if element == "H":
+    return True
+  return atom.atom_name.strip().upper().startswith("H")
+
+
+def _classify_residue_for_lddt(residue: Residue) -> Optional[Literal["protein", "dna", "rna"]]:
+  """Classify standard and modified polymer residues for lDDT site selection."""
+  polymer_type = classify_polymer_residue(residue)
+  if polymer_type is not None:
+    return polymer_type
+
+  atom_names = {atom.atom_name.strip().upper() for atom in residue.atoms()}
+  if len(atom_names.intersection(_PROTEIN_BACKBONE_NAMES)) >= 2:
+    return "protein"
   return None
-
-
-def _nucleotide_to_code(resname: str) -> Optional[str]:
-  """Return simplified single-letter nucleotide code for standard DNA/RNA residues."""
-  return _NUCLEOTIDE_CODE_MAP.get(resname)
-
-
-def _is_nucleotide(resname: str) -> bool:
-  return resname in STANDARD_NUCLEOTIDES
 
 
 def _get_atom(residue: Residue, name: str) -> Optional[Atom]:
@@ -115,18 +115,39 @@ def _get_atom(residue: Residue, name: str) -> Optional[Atom]:
   return None
 
 
+def _select_polymer_representative_atom(residue: Residue, polymer_type: Literal["protein", "dna", "rna"]) -> Optional[Atom]:
+  """Return a deterministic representative atom for a polymer residue."""
+  if polymer_type == "protein":
+    if residue.res_name.strip().upper() != "GLY":
+      atom = _get_atom(residue, "CB")
+      if atom is not None:
+        return atom
+    for atom_name in _PROTEIN_BACKBONE_FALLBACK:
+      atom = _get_atom(residue, atom_name)
+      if atom is not None:
+        return atom
+    return None
+
+  for atom_names in _NUCLEOTIDE_ATOM_PRIORITY:
+    for atom_name in atom_names:
+      atom = _get_atom(residue, atom_name)
+      if atom is not None:
+        return atom
+  return None
+
+
 def _extract_cb_coords_from_structure(
   structure: Structure,
   *,
   chains: Optional[List[str]] = None,
-  require_standard_aa: bool = True,
-) -> Dict[Tuple[str, int], Tuple[float, float, float]]:
-  """Collect per-residue representative coordinates for amino acids and nucleotides.
+  require_standard_aa: bool = False,
+) -> Dict[SiteKey, Tuple[float, float, float]]:
+  """Collect aligned analysis-site coordinates from a structure.
 
   Returns:
-    dict keyed by (chain_id, res_id) -> (x,y,z)
+    dict keyed by a stable site identifier -> (x,y,z)
   """
-  coords: Dict[Tuple[str, int], Tuple[float, float, float]] = {}
+  coords: Dict[SiteKey, Tuple[float, float, float]] = {}
   chain_lookup = {chain.chain_id: chain for chain in structure.chains()}
   chain_ids = [chain.chain_id for chain in structure.chains()] if not chains else list(chains)
   for cid in chain_ids:
@@ -134,49 +155,41 @@ def _extract_cb_coords_from_structure(
     if chain is None:
       continue
     for residue in chain.residues():
-      if residue.hetero:
+      resname = residue.res_name.strip().upper()
+      if resname in _WATER_RESIDUE_NAMES:
         continue
-      resname = residue.res_name
 
-      is_amino = resname in AA_RECORDS
-      is_nucleotide = _is_nucleotide(resname)
-      if not (is_amino or is_nucleotide):
+      polymer_type = _classify_residue_for_lddt(residue)
+      if polymer_type is not None:
+        if require_standard_aa:
+          if polymer_type == "protein":
+            try:
+              getAA(resname, non_standard="convert")
+            except ValueError:
+              continue
+          elif resname not in STANDARD_NUCLEOTIDES:
+            continue
+
+        atom = _select_polymer_representative_atom(residue, polymer_type)
+        if atom is None:
+          continue
+
+        key = (cid, int(residue.res_id), residue.ins_code, "polymer", "", "")
+        coords[key] = (float(atom.coord[0]), float(atom.coord[1]), float(atom.coord[2]))
         continue
 
       if require_standard_aa:
-        if is_amino:
-          if _aa3_to_aa1(resname) is None:
-            continue
-        elif _nucleotide_to_code(resname) is None:
-          continue
-
-      atom = None
-      if is_amino:
-        if resname != "GLY":
-          atom = _get_atom(residue, "CB")
-        if atom is None:
-          for atom_name in _PROTEIN_BACKBONE_FALLBACK:
-            atom = _get_atom(residue, atom_name)
-            if atom is not None:
-              break
-      else:
-        for atom_names in _NUCLEOTIDE_ATOM_PRIORITY:
-          for atom_name in atom_names:
-            atom = _get_atom(residue, atom_name)
-            if atom is not None:
-              break
-          if atom is not None:
-            break
-
-      if atom is None:
         continue
 
-      key = (cid, residue.res_id)  # (chain, residue sequence number)
-      coords[key] = (float(atom.coord[0]), float(atom.coord[1]), float(atom.coord[2]))
+      for atom in residue.atoms():
+        if _is_hydrogen_atom(atom):
+          continue
+        key = (cid, int(residue.res_id), residue.ins_code, "nonpolymer", resname, atom.atom_name.strip().upper())
+        coords[key] = (float(atom.coord[0]), float(atom.coord[1]), float(atom.coord[2]))
   return coords
 
 
-def _coords_to_distmat(ordered_keys: List[Tuple[str, int]], coord_map: Dict[Tuple[str, int], Tuple[float, float, float]]) -> np.ndarray:
+def _coords_to_distmat(ordered_keys: List[SiteKey], coord_map: Dict[SiteKey, Tuple[float, float, float]]) -> np.ndarray:
   """Build an NxN Euclidean distance matrix from an ordered list of residue keys and a coord map."""
   if not ordered_keys:
     return np.empty((0, 0))
@@ -247,7 +260,7 @@ def calc_lddt(
   R: float = 15.0,
   sep_thresh: int = -1,
   T_set: Sequence[float] = (0.5, 1.0, 2.0, 4.0),
-  require_standard_aa: bool = True,
+  require_standard_aa: bool = False,
 ) -> float:
   """Compute lDDT from distance maps or Neurosnap structure containers.
 
@@ -259,7 +272,10 @@ def calc_lddt(
     R: Maximum reference distance to consider when defining the L set.
     sep_thresh: Minimum sequence separation between residue pairs.
     T_set: Error thresholds used to compute preserved distance fractions.
-    require_standard_aa: Skip residues with unknown amino-acid or nucleotide codes when True.
+    require_standard_aa: Restrict structure inputs to canonical amino acids and
+      standard nucleotides when True. When False, modified polymer residues are
+      included using polymer-aware proxy atoms and non-polymer residues such as
+      ligands contribute heavy-atom sites.
 
   Returns:
     lDDT score between the reference and prediction. Typical range is [0.0, 1.0],

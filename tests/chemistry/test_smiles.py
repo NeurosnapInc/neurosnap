@@ -3,7 +3,16 @@ from pathlib import Path
 import pytest
 from rdkit import Chem
 
-from neurosnap.chemistry import sdf_to_smiles, smiles_to_sdf, validate_smiles
+from neurosnap.chemistry import (
+  canonicalize_smiles,
+  largest_fragment,
+  neutralize_molecule,
+  remove_salts,
+  sdf_to_smiles,
+  smiles_to_sdf,
+  standardize_molecule,
+  validate_smiles,
+)
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -64,3 +73,38 @@ def test_sdf_to_smiles_reads_valid_list():
 )
 def test_validate_smiles_various(txt, expected):
   assert validate_smiles(txt) is expected
+
+
+def test_canonicalize_smiles_returns_canonical_form():
+  assert canonicalize_smiles("OC(C)C") == "CC(C)O"
+
+
+def test_canonicalize_smiles_invalid_raises():
+  with pytest.raises(ValueError):
+    canonicalize_smiles("not-a-smiles")
+
+
+def test_standardize_molecule_returns_rdkit_mol():
+  mol = Chem.MolFromSmiles("C[N+](=O)[O-]")
+  standardized = standardize_molecule(mol)
+  assert isinstance(standardized, Chem.Mol)
+  assert Chem.MolToSmiles(standardized) == "C[N+](=O)[O-]"
+  assert standardized is not mol
+
+
+def test_neutralize_molecule_removes_supported_charge():
+  mol = Chem.MolFromSmiles("C[NH+](C)C")
+  neutral = neutralize_molecule(mol)
+  assert Chem.MolToSmiles(neutral) == "CN(C)C"
+
+
+def test_largest_fragment_keeps_main_component():
+  mol = Chem.MolFromSmiles("CCO.[Na+]")
+  fragment = largest_fragment(mol)
+  assert Chem.MolToSmiles(fragment) == "CCO"
+
+
+def test_remove_salts_removes_common_counterion():
+  mol = Chem.MolFromSmiles("CC(=O)[O-].[Na+]")
+  stripped = remove_salts(mol)
+  assert Chem.MolToSmiles(stripped) == "CC(=O)[O-]"

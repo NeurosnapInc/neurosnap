@@ -13,6 +13,7 @@ Subpackages
    :maxdepth: 4
 
    neurosnap.algos
+   neurosnap.chemistry
    neurosnap.constants
    neurosnap.database
    neurosnap.io
@@ -26,6 +27,4 @@ Submodules
    :maxdepth: 4
 
    neurosnap.api
-   neurosnap.chemicals
-   neurosnap.conformers
    neurosnap.log

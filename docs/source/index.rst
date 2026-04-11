@@ -53,8 +53,8 @@ Documentation Map
 * `API client <neurosnap.api.html>`_
 * `Structure utilities <neurosnap.structure.html>`_
 * `Sequence alignment utilities <neurosnap.sequence.align.html>`_
-* `Chemical utilities <neurosnap.chemicals.html>`_
-* `Conformer generation <neurosnap.conformers.html>`_
+* `Chemistry utilities <neurosnap.chemistry.html>`_
+* `Conformer generation <neurosnap.chemistry.conformers.html>`_
 * `Nucleotide utilities <neurosnap.sequence.nucleotide.html>`_
 * `Constants and residue metadata <neurosnap.constants.html>`_
 * `Rendering utilities <neurosnap.structure.rendering.html>`_

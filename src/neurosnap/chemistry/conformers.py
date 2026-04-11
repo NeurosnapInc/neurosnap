@@ -1,9 +1,7 @@
-"""
-Provides functions and classes related to processing and generating conformers.
-"""
+"""Provides functions and classes related to processing and generating conformers."""
 
 import os
-from typing import Dict, Tuple, Optional, Any
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -30,7 +28,6 @@ def find_LCS(mol: Chem.rdchem.Mol) -> Chem.rdchem.Mol:
 
   """
   logger.info("Finding largest common substructure (LCS) for clustering")
-  # Convert the molecule to a list of molecules (each conformer treated as a separate molecule)
   conformer_mols = []
   for conf in mol.GetConformers():
     new_mol = Chem.Mol(mol)
@@ -38,11 +35,8 @@ def find_LCS(mol: Chem.rdchem.Mol) -> Chem.rdchem.Mol:
     new_mol.AddConformer(conf, assignId=True)
     conformer_mols.append(new_mol)
 
-  # Perform MCS (Maximum Common Substructure) search
   mcs_result = rdFMCS.FindMCS(conformer_mols, completeRingsOnly=True, ringMatchesRingOnly=True)
   core = Chem.MolFromSmarts(mcs_result.smartsString)
-
-  # Check if a core substructure was found
   assert core is not None and core.GetNumAtoms(), "No core substructure detected. Aligning using first conformer."
 
   logger.debug("Core substructure detected. Aligning using core.")
@@ -66,7 +60,7 @@ def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", percentile: float = 1
 
   """
   logger.info(f"Minimizing energy of all conformers using {method}")
-  energies = {}  # keys are conformer IDs, values are calculated energies.
+  energies = {}
   for i in range(mol.GetNumConformers()):
     if method == "UFF":
       AllChem.UFFOptimizeMolecule(mol, confId=i)
@@ -88,20 +82,18 @@ def minimize(mol: Chem.rdchem.Mol, method: str = "MMFF94", percentile: float = 1
       continue
     energies[i] = ff.CalcEnergy()
 
-  # Determine the energy threshold based on the specified percentile
   energy_values = list(energies.values())
   energy_threshold = np.percentile(energy_values, percentile)
 
-  # Filter out conformers above the energy threshold
-  mol_filtered = Chem.Mol(mol)  # Copy the molecule structure
-  mol_filtered.RemoveAllConformers()  # Remove all conformers from the copy
+  mol_filtered = Chem.Mol(mol)
+  mol_filtered.RemoveAllConformers()
   energies_filtered = {}
   num_filtered = 0
   for conf_id, energy in energies.items():
     if energy <= energy_threshold:
       num_filtered += 1
       conformer = mol.GetConformer(conf_id)
-      new_conf_id = mol_filtered.AddConformer(conformer, assignId=True)  # Add the filtered conformer to the new molecule
+      new_conf_id = mol_filtered.AddConformer(conformer, assignId=True)
       energies_filtered[new_conf_id] = energy
 
   logger.info(f"Filtered {num_filtered:,}/{len(energy_values):,} conformers within the lowest {percentile}% of energies.")
@@ -138,7 +130,6 @@ def generate(
       A dataframe with all conformer statistics. Note if energy minimization is disabled or fails then energy column will consist of None values.
 
   """
-  ### parse input and construct corresponding RDkit mol object
   my_mol = None
   if isinstance(input_mol, rdkit.Chem.rdchem.Mol):
     my_mol = input_mol
@@ -146,12 +137,12 @@ def generate(
     if input_mol.endswith(".pdb"):
       my_mol = Chem.MolFromPDBFile(input_mol)
     elif input_mol.endswith(".sdf"):
-      for mol in Chem.SDMolSupplier(input_mol):  # get first valid molecule if exists
+      for mol in Chem.SDMolSupplier(input_mol):
         if mol is not None:
           my_mol = mol
           break
       assert my_mol is not None, "Unable to find a valid molecule in the provided SDF file."
-    else:  # assume smiles
+    else:
       my_mol = Chem.MolFromSmiles(input_mol)
       assert my_mol is not None, f"Invalid smiles string provided {input_mol}"
   else:
@@ -159,60 +150,49 @@ def generate(
       "Invalid input type for input_mol. Input molecule can be a path to a molecule file, a SMILES string, or an instance of rdkit.Chem.rdchem.Mol"
     )
 
-  # Add hydrogens to molecule to generate a more accurate 3D structure
   my_mol = Chem.AddHs(my_mol)
 
-  # Check if the number of atoms exceeds max_atoms
   if my_mol.GetNumAtoms() > max_atoms:
     raise ValueError(
       f"Input molecule exceeds the maximum allowed atoms ({max_atoms}). It has {my_mol.GetNumAtoms()} atoms. For proteins try using a different service such as the AFcluster and AlphaFlow tools on Neurosnap."
     )
 
-  ### Generate 3D conformers
   logger.debug(f"Generating {num_confs:,} 3D conformers.")
   params = AllChem.ETKDGv3()
-  params.numThreads = 0  # Will use all available CPU cores
-  params.optimizerForceTol = 0.0001  # Indirectly increases embedding attempts
-  params.useRandomCoords = True  # Fallback to random coordinates if necessary
-  params.pruneRmsThresh = 0.1  # Allow some deviation to increase conformer count
-  rdDistGeom.EmbedMultipleConfs(my_mol, numConfs=num_confs, params=params)  # NOTE: maxAttempts=100 was removed as does not work with ETKDGv3
+  params.numThreads = 0
+  params.optimizerForceTol = 0.0001
+  params.useRandomCoords = True
+  params.pruneRmsThresh = 0.1
+  rdDistGeom.EmbedMultipleConfs(my_mol, numConfs=num_confs, params=params)
   logger.info(f"Generated {my_mol.GetNumConformers():,} 3D conformers.")
 
-  ### Minimize energy of each conformer
   energies = {}
   if min_method:
-    # if min_method is set to auto then try a variety of methods until one succeeds
     if min_method == "auto":
       for method in ["MMFF94", "UFF", "MMFF94s"]:
         try:
           my_mol, energies = minimize(my_mol, method=method)
           break
-        except:
+        except Exception:
           pass
     else:
       my_mol, energies = minimize(my_mol, method=min_method)
 
-  ### Clustering
-  ## Calculate the RMSD matrix between all pairs of conformers
   logger.debug("Calculating RMSD matrix between all conformer pairs")
   num_conformers = my_mol.GetNumConformers()
-  my_mol_nh = Chem.RemoveHs(my_mol)  # remove hydrogens as it interferes with following steps
+  my_mol_nh = Chem.RemoveHs(my_mol)
   rmslist = AllChem.GetConformerRMSMatrix(my_mol_nh)
   print(rmslist)
 
-  ## Perform clustering using Butina approach
-  # Calculate the dynamic threshold based on molecule size (distance threshold in Å for Butina)
   num_heavy_atoms = my_mol.GetNumHeavyAtoms()
-  c = 0.2  # Constant, can be adjusted based on needs
+  c = 0.2
   threshold = c * np.sqrt(num_heavy_atoms)
   logger.debug(f"Dynamic RMSD threshold: {threshold:.2f} Å")
 
-  # perform clustering
   logger.debug(f"Clustering {num_conformers:,} conformers.")
   clusters = Butina.ClusterData(rmslist, num_conformers, threshold, isDistData=True, reordering=True)
   logger.debug(f"Produced {len(clusters):,} clusters.")
 
-  # get most favorable representatives for each cluster using calculated energy
   output = {
     "conformer_id": [],
     "cluster_id": [],
@@ -227,7 +207,7 @@ def generate(
         if energies[cid] < best_energy:
           best_cid = cid
           best_energy = energies[cid]
-    else:  # if no min_method / energies available just take the first element in the cluster and set energy to None
+    else:
       best_cid = cluster[0]
       best_energy = None
 
@@ -241,12 +221,11 @@ def generate(
   logger.info(f"Selected {len(df)} unique conformers.")
   print(df)
 
-  ## Write output
-  if write_multi:  # write to single SDF file
+  if write_multi:
     with Chem.SDWriter(f"{output_name}.sdf") as w:
       for conf_id in output["conformer_id"]:
         w.write(my_mol, confId=conf_id)
-  else:  # write to single separate SDF files
+  else:
     os.makedirs(output_name, exist_ok=True)
     for conf_id in output["conformer_id"]:
       with Chem.SDWriter(os.path.join(output_name, f"conformer_{conf_id}.sdf")) as w:

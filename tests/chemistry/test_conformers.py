@@ -4,14 +4,14 @@ import pandas as pd
 import pytest
 import numpy as np
 
-from neurosnap import conformers
+from neurosnap.chemistry import generate
 
 
 @pytest.mark.slow
 def test_generate_writes_clustered_conformers(tmp_path: Path):
   output_base = tmp_path / "aspirin_confs"
 
-  df = conformers.generate(
+  df = generate(
     "CC(=O)OC1=CC=CC=C1C(=O)O",
     output_name=str(output_base),
     num_confs=500,
@@ -46,7 +46,7 @@ def test_generate_writes_clustered_conformers(tmp_path: Path):
 def test_generate_with_force_fields(tmp_path: Path, smiles: str, min_method: str):
   out_dir = tmp_path / f"{min_method.lower()}_confs"
 
-  df = conformers.generate(
+  df = generate(
     smiles,
     output_name=str(out_dir),
     num_confs=25,

@@ -9,9 +9,9 @@ import pytest
 from neurosnap.io.mmcif import save_cif
 from neurosnap.io.pdb import parse_pdb, save_pdb
 from neurosnap.io.sdf import parse_sdf, save_sdf
-from neurosnap.structure import StructureEnsemble, StructureStack, extract_non_biopolymers
+from neurosnap.structure import StructureEnsemble, StructureStack, extract_non_biopolymers, fix_nucleic_termini
 
-from tests._structure_test_utils import PDB_NO_H, make_structure, parse_single_model
+from tests._structure_test_utils import FILES as TEST_FILES, PDB_NO_H, make_structure, parse_single_model
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -27,6 +27,19 @@ def test_save_and_reload_pdb(tmp_path):
   reloaded = parse_single_model(output_pdb)
   assert len(reloaded) == len(structure)
   assert [chain.chain_id for chain in reloaded.chains()] == [chain.chain_id for chain in structure.chains()]
+
+
+def test_fix_nucleic_termini_noop_roundtrips_protein_with_zinc(tmp_path, caplog):
+  structure = parse_pdb(TEST_FILES / "protein_with_zinc_ions.pdb", return_type="ensemble").first()
+  output_pdb = tmp_path / "zn_noop.pdb"
+
+  fix_nucleic_termini(structure)
+  save_pdb(structure, output_pdb)
+  reloaded = parse_pdb(output_pdb, return_type="ensemble").first()
+
+  assert len(reloaded) == len(structure)
+  assert list(reloaded.atom_annotations["element"]) == list(structure.atom_annotations["element"])
+  assert any("No nucleotide residues were found while running fix_nucleic_termini()" in message for message in caplog.messages)
 
 
 def test_save_and_reload_mmcif(tmp_path):

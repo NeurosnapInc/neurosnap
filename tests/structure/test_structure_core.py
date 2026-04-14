@@ -285,6 +285,24 @@ def test_fix_nucleic_termini_optionally_strips_3prime_and_gap_starts_new_segment
   assert atom_names.count("C1'") == 3
 
 
+def test_fix_nucleic_termini_warns_and_leaves_non_nucleic_structure_unchanged(caplog):
+  structure = _make_structure_from_records(
+    [
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "N", "element": "N"},
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 201, "res_name": "ZN", "atom_name": "ZN", "element": "ZN", "hetero": True},
+    ]
+  )
+  original_atom_names = structure.atom_annotations["atom_name"].copy()
+  original_elements = structure.atom_annotations["element"].copy()
+
+  fix_nucleic_termini(structure)
+
+  assert np.array_equal(structure.atom_annotations["atom_name"], original_atom_names)
+  assert np.array_equal(structure.atom_annotations["element"], original_elements)
+  assert any("No nucleotide residues were found while running fix_nucleic_termini()" in message for message in caplog.messages)
+
+
 def test_remove_non_biopolymers_removes_hetero_unk_ligand():
   structure = parse_single_model("tests/files/dimer_1lig_malformed.pdb")
   assert not structure.to_dataframe().query("chain == '' and res_id == 0 and res_name == 'UNK'").empty

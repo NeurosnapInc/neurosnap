@@ -1,8 +1,12 @@
 """Structure- and residue-level constants."""
 
+### Nucleotide Constants
+# 5' terminal atoms
+FIVE_PRIME_TERMINAL_ATOMS = {"P", "OP1", "OP2", "OP3", "O1P", "O2P", "O3P"}
+# 3' terminal atoms
+THREE_PRIME_TERMINAL_ATOMS = {"O3P", "OP3"}
+
 ## Backbone Atoms
-# Names of atoms that are part of a protein's backbone structure
-BACKBONE_ATOMS_AA = ("N", "CA", "C")
 # Names of atoms that are part of a DNA backbone structure
 BACKBONE_ATOMS_DNA = (
   # Phosphorus
@@ -36,6 +40,12 @@ NUC_RNA_CODES = {"A", "U", "C", "G"}
 # Codes for standard nucleotides (both RNA and DNA)
 STANDARD_NUCLEOTIDES = NUC_DNA_CODES.union(NUC_RNA_CODES)
 
+
+### Protein Constants
+## Backbone Atoms
+# Names of atoms that are part of a protein's backbone structure
+BACKBONE_ATOMS_AA = ("N", "CA", "C")
+
 # List of hydrophobic residues
 HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
 
@@ -47,4 +57,6 @@ __all__ = [
   "NUC_DNA_CODES",
   "NUC_RNA_CODES",
   "STANDARD_NUCLEOTIDES",
+  "FIVE_PRIME_TERMINAL_ATOMS",
+  "THREE_PRIME_TERMINAL_ATOMS",
 ]

@@ -4,12 +4,12 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from neurosnap.constants.structure import FIVE_PRIME_TERMINAL_ATOMS, THREE_PRIME_TERMINAL_ATOMS
+
 from ._common import classify_polymer_residue, filter_structure_atoms
 from .structure import Structure
 
 _PHOSPHATE_RENAME_MAP = {"O1P": "OP1", "O2P": "OP2"}
-_FIVE_PRIME_TERMINAL_ATOMS = {"P", "OP1", "OP2", "OP3", "O1P", "O2P", "O3P"}
-_THREE_PRIME_TERMINAL_ATOMS = {"O3P", "OP3"}
 
 
 def remove_chains(structure: Structure, predicate: Callable):
@@ -178,12 +178,12 @@ def fix_nucleic_termini(structure: Structure, strip_3prime: bool = False, chain:
         if segment_start is not None:
           for atom_index in segment_start.atom_indices():
             atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
-            if atom_name in _FIVE_PRIME_TERMINAL_ATOMS:
+            if atom_name in FIVE_PRIME_TERMINAL_ATOMS:
               keep_mask[atom_index] = False
           if strip_3prime and segment_end is not None:
             for atom_index in segment_end.atom_indices():
               atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
-              if atom_name in _THREE_PRIME_TERMINAL_ATOMS:
+              if atom_name in THREE_PRIME_TERMINAL_ATOMS:
                 keep_mask[atom_index] = False
 
         segment_start = None
@@ -196,12 +196,12 @@ def fix_nucleic_termini(structure: Structure, strip_3prime: bool = False, chain:
         if segment_start is not None:
           for atom_index in segment_start.atom_indices():
             atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
-            if atom_name in _FIVE_PRIME_TERMINAL_ATOMS:
+            if atom_name in FIVE_PRIME_TERMINAL_ATOMS:
               keep_mask[atom_index] = False
           if strip_3prime and segment_end is not None:
             for atom_index in segment_end.atom_indices():
               atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
-              if atom_name in _THREE_PRIME_TERMINAL_ATOMS:
+              if atom_name in THREE_PRIME_TERMINAL_ATOMS:
                 keep_mask[atom_index] = False
         segment_start = residue
 
@@ -211,12 +211,12 @@ def fix_nucleic_termini(structure: Structure, strip_3prime: bool = False, chain:
     if segment_start is not None:
       for atom_index in segment_start.atom_indices():
         atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
-        if atom_name in _FIVE_PRIME_TERMINAL_ATOMS:
+        if atom_name in FIVE_PRIME_TERMINAL_ATOMS:
           keep_mask[atom_index] = False
       if strip_3prime and segment_end is not None:
         for atom_index in segment_end.atom_indices():
           atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
-          if atom_name in _THREE_PRIME_TERMINAL_ATOMS:
+          if atom_name in THREE_PRIME_TERMINAL_ATOMS:
             keep_mask[atom_index] = False
 
   if not np.all(keep_mask):

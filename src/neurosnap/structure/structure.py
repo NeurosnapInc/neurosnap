@@ -135,8 +135,10 @@ class Structure:
 
   def __repr__(self) -> str:
     """Return a compact string summary of the structure."""
-    chain_ids = _structure_chain_ids(self)
-    return f"<Structure: Models=1 Chains=[{', '.join(chain_ids)}] Atoms={len(self)}>"
+    chains = self.chains()
+    chain_ids = [chain.chain_id if chain.chain_id else "<blank>" for chain in chains]
+    residue_count = sum(len(chain.residues()) for chain in chains)
+    return f"<Structure: Chains=[{','.join(chain_ids)}] Residues={residue_count} Atoms={len(self)}>"
 
   def __iter__(self) -> Iterator["Chain"]:
     """Iterate over chains in atom-table order."""

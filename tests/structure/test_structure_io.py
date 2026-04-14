@@ -42,6 +42,14 @@ def test_fix_nucleic_termini_noop_roundtrips_protein_with_zinc(tmp_path, caplog)
   assert any("No nucleotide residues were found while running fix_nucleic_termini()" in message for message in caplog.messages)
 
 
+def test_parse_pdb_infers_missing_hydrogen_elements_from_processed_pdb(caplog):
+  structure = parse_pdb(TEST_FILES / "protein_with_zinc_ions_missing_elements_gmx.pdb", return_type="ensemble").first()
+
+  assert len(structure) > 0
+  assert any(element == "H" for element in structure.atom_annotations["element"])
+  assert any("Missing element assignment at line 4; inferred element \"H\"" in message for message in caplog.messages)
+
+
 def test_save_and_reload_mmcif(tmp_path):
   structure = parse_single_model(PDB_NO_H)
   output_cif = tmp_path / "out.cif"

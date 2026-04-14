@@ -38,7 +38,7 @@ def remove_chains(structure: Structure, predicate: Callable):
   filter_structure_atoms(structure, keep_mask)
 
 
-def remove_residues(structure: Structure, predicate: Callable, chain: Optional[str]):
+def remove_residues(structure: Structure, predicate: Callable,*, chain: Optional[str]):
   """Remove residues from a structure in-place when they match a predicate.
 
   Parameters:
@@ -63,7 +63,7 @@ def remove_residues(structure: Structure, predicate: Callable, chain: Optional[s
   filter_structure_atoms(structure, keep_mask)
 
 
-def remove_atoms(structure: Structure, predicate: Callable, chain: Optional[str] = None):
+def remove_atoms(structure: Structure, predicate: Callable, *, chain: Optional[str] = None):
   """Remove atoms from a structure in-place when they match a predicate.
 
   Parameters:
@@ -92,7 +92,7 @@ def remove_atoms(structure: Structure, predicate: Callable, chain: Optional[str]
   filter_structure_atoms(structure, keep_mask)
 
 
-def remove_waters(structure: Structure, chain: Optional[str] = None):
+def remove_waters(structure: Structure, *, chain: Optional[str] = None):
   """Remove water residues from a structure in-place.
 
   Parameters:
@@ -107,7 +107,7 @@ def remove_waters(structure: Structure, chain: Optional[str] = None):
   remove_residues(structure, lambda residue: residue.res_name.strip().upper() in {"WAT", "HOH"}, chain=chain)
 
 
-def remove_nucleotides(structure: Structure, chain: Optional[str] = None):
+def remove_nucleotides(structure: Structure, *, chain: Optional[str] = None):
   """Remove DNA and RNA residues from a structure in-place.
 
   Parameters:
@@ -122,7 +122,7 @@ def remove_nucleotides(structure: Structure, chain: Optional[str] = None):
   remove_residues(structure, lambda residue: classify_polymer_residue(residue) in {"dna", "rna"}, chain=chain)
 
 
-def remove_non_biopolymers(structure: Structure, chain: Optional[str] = None):
+def remove_non_biopolymers(structure: Structure, *, chain: Optional[str] = None):
   """Remove non-protein and non-nucleotide residues from a structure in-place.
 
   Parameters:

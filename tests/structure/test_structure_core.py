@@ -12,6 +12,8 @@ from neurosnap.structure import (
   calculate_surface_area,
   fix_nucleic_termini,
   get_backbone,
+  remove_atoms,
+  remove_chains,
   remove_non_biopolymers,
   remove_waters,
   select_residues,
@@ -206,6 +208,39 @@ def test_remove_waters_and_non_biopolymers():
   assert heterogens.empty
 
 
+def test_remove_chains_removes_matching_chain():
+  structure = _make_structure_from_records(
+    [
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "N", "element": "N"},
+      {"chain_id": "B", "res_id": 1, "res_name": "GLY", "atom_name": "CA", "element": "C"},
+      {"chain_id": "B", "res_id": 1, "res_name": "GLY", "atom_name": "N", "element": "N"},
+    ]
+  )
+
+  remove_chains(structure, lambda chain_view: chain_view.chain_id == "B")
+
+  assert structure.chain_ids() == ["A"]
+  assert set(structure.to_dataframe()["chain"]) == {"A"}
+
+
+def test_remove_atoms_removes_matching_atoms_with_optional_chain_scope():
+  structure = _make_structure_from_records(
+    [
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "N", "element": "N"},
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "CA", "element": "C"},
+      {"chain_id": "B", "res_id": 1, "res_name": "GLY", "atom_name": "N", "element": "N"},
+      {"chain_id": "B", "res_id": 1, "res_name": "GLY", "atom_name": "CA", "element": "C"},
+    ]
+  )
+
+  remove_atoms(structure, lambda atom: atom.atom_name.strip().upper() == "N", chain="A")
+
+  dataframe = structure.to_dataframe()
+  assert dataframe.query("chain == 'A'")["atom_name"].tolist() == ["CA"]
+  assert sorted(dataframe.query("chain == 'B'")["atom_name"].tolist()) == ["CA", "N"]
+
+
 def test_fix_nucleic_termini_normalizes_and_strips_terminal_atoms():
   structure = _make_structure_from_records(
     [
@@ -266,6 +301,10 @@ def test_filters_require_structure():
     remove_non_biopolymers(ensemble)
   with pytest.raises(TypeError):
     fix_nucleic_termini(ensemble)
+  with pytest.raises(TypeError):
+    remove_chains(ensemble, lambda chain_view: True)
+  with pytest.raises(TypeError):
+    remove_atoms(ensemble, lambda atom: True)
 
 
 def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():

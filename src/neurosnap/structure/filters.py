@@ -12,6 +12,31 @@ _FIVE_PRIME_TERMINAL_ATOMS = {"P", "OP1", "OP2", "OP3", "O1P", "O2P", "O3P"}
 _THREE_PRIME_TERMINAL_ATOMS = {"O3P", "OP3"}
 
 
+def remove_chains(structure: Structure, predicate: Callable):
+  """Remove chains from a structure in-place when they match a predicate.
+
+  Parameters:
+    structure: Input :class:`Structure`.
+    predicate: Callable that accepts a chain view and returns ``True`` when
+      that chain should be removed.
+
+  Returns:
+    ``None``. The input structure is modified in-place.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"remove_chains() expects a Structure, found {type(structure).__name__}.")
+
+  keep_mask = np.ones(len(structure), dtype=bool)
+  for chain_view in structure.chains():
+    if not predicate(chain_view):
+      continue
+    for residue in chain_view.residues():
+      for atom_index in residue.atom_indices():
+        keep_mask[atom_index] = False
+
+  filter_structure_atoms(structure, keep_mask)
+
+
 def remove_residues(structure: Structure, predicate: Callable, chain: Optional[str]):
   """Remove residues from a structure in-place when they match a predicate.
 
@@ -33,6 +58,35 @@ def remove_residues(structure: Structure, predicate: Callable, chain: Optional[s
         continue
       for atom_index in residue.atom_indices():
         keep_mask[atom_index] = False
+
+  filter_structure_atoms(structure, keep_mask)
+
+
+def remove_atoms(structure: Structure, predicate: Callable, chain: Optional[str] = None):
+  """Remove atoms from a structure in-place when they match a predicate.
+
+  Parameters:
+    structure: Input :class:`Structure`.
+    predicate: Callable that accepts an atom view and returns ``True`` when
+      that atom should be removed.
+    chain: Optional chain ID to restrict atom removal to.
+
+  Returns:
+    ``None``. The input structure is modified in-place.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"remove_atoms() expects a Structure, found {type(structure).__name__}.")
+  if chain is not None and chain not in structure.chain_ids():
+    raise ValueError(f'Chain "{chain}" was not found in the structure.')
+
+  keep_mask = np.ones(len(structure), dtype=bool)
+  for chain_view in structure.chains():
+    if chain is not None and chain_view.chain_id != chain:
+      continue
+    for residue in chain_view.residues():
+      for atom, atom_index in zip(residue.atoms(), residue.atom_indices()):
+        if predicate(atom):
+          keep_mask[atom_index] = False
 
   filter_structure_atoms(structure, keep_mask)
 

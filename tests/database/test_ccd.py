@@ -30,26 +30,25 @@ def ccd_payload():
   }
 
 
-def test_get_ccd_entries_downloads_and_uses_cache(monkeypatch, tmp_path: Path, ccd_payload):
+@pytest.mark.integration
+def test_get_ccd_entries_downloads_and_uses_cache(tmp_path: Path):
+  # NOTE:
+  # This test intentionally performs a real network request instead of mocking
+  # requests.get. The goal is to catch upstream payload/schema changes from the
+  # live CCD entries endpoint. Do not replace this with a fake response.
   cache = tmp_path / "ccd_entries.json"
-  called = {"count": 0}
-
-  def fake_get(url, timeout=None):
-    called["count"] += 1
-    assert "entries.json" in url
-    return _MockCCDResponse(ccd_payload)
-
-  monkeypatch.setattr("neurosnap.database.ccd.requests.get", fake_get)
-
   entries = get_ccd_entries(cache_path=str(cache))
-  assert set(entries) == {"000", "ATP", "EOH"}
+  cache_mtime_ns = cache.stat().st_mtime_ns
+
+  assert "ATP" in entries
+  assert "EOH" in entries
   assert isinstance(entries["ATP"], CCD)
   assert cache.exists()
-  assert called["count"] == 1
 
   entries_2 = get_ccd_entries(cache_path=str(cache))
-  assert entries_2["EOH"].smiles == "CCO"
-  assert called["count"] == 1
+  assert entries_2["ATP"].code == "ATP"
+  assert entries_2["EOH"].smiles
+  assert cache.stat().st_mtime_ns == cache_mtime_ns
 
 
 def test_get_ccd_entries_returns_ccd_objects(monkeypatch, tmp_path: Path, ccd_payload):

@@ -2,7 +2,7 @@
 
 from .analysis import calculate_protein_volume, calculate_surface_area, ca_distance_matrix, calculate_distance_matrix, extract_non_biopolymers, get_backbone
 from .compare import align, calculate_rmsd
-from .filters import remove_non_biopolymers, remove_nucleotides, remove_waters
+from .filters import fix_nucleic_termini, remove_non_biopolymers, remove_nucleotides, remove_waters
 from .interface import calculate_bsa, find_contacts, find_interface_contacts, find_interface_residues, find_non_interface_hydrophobic_patches
 from .interactions import (
   calculate_hydrogen_bonds,
@@ -44,6 +44,7 @@ __all__ = [
   "animate_frames",
   "calculate_surface_area",
   "calculate_protein_volume",
+  "fix_nucleic_termini",
   "remove_waters",
   "remove_nucleotides",
   "remove_non_biopolymers",

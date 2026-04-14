@@ -10,6 +10,7 @@ from neurosnap.structure import (
   calculate_distance_matrix,
   calculate_protein_volume,
   calculate_surface_area,
+  fix_nucleic_termini,
   get_backbone,
   remove_non_biopolymers,
   remove_waters,
@@ -37,6 +38,33 @@ def _make_two_atom_structure(elements, coords, hetero=None):
     structure.atom_annotations["hetero"][atom_index - 1] = is_hetero
     structure.atom_annotations["atom_name"][atom_index - 1] = f"{element}{atom_index}"
     structure.atom_annotations["element"][atom_index - 1] = element
+    structure.atom_annotations["atom_id"][atom_index - 1] = atom_index
+    structure.atom_annotations["b_factor"][atom_index - 1] = 0.0
+    structure.atom_annotations["occupancy"][atom_index - 1] = 1.0
+    structure.atom_annotations["charge"][atom_index - 1] = 0
+    structure.atom_annotations["sym_id"][atom_index - 1] = ""
+
+  structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+  return structure
+
+
+def _make_structure_from_records(records):
+  structure = Structure(remove_annotations=False)
+  atom_count = len(records)
+  structure.atoms = np.zeros(atom_count, dtype=structure._dtype_atoms)
+  structure.atom_annotations = np.zeros(atom_count, dtype=structure._dtype_atom_annotations)
+
+  for atom_index, record in enumerate(records, start=1):
+    structure.atoms["x"][atom_index - 1] = float(atom_index)
+    structure.atoms["y"][atom_index - 1] = 0.0
+    structure.atoms["z"][atom_index - 1] = 0.0
+    structure.atom_annotations["chain_id"][atom_index - 1] = record.get("chain_id", "A")
+    structure.atom_annotations["res_id"][atom_index - 1] = record["res_id"]
+    structure.atom_annotations["ins_code"][atom_index - 1] = record.get("ins_code", "")
+    structure.atom_annotations["res_name"][atom_index - 1] = record["res_name"]
+    structure.atom_annotations["hetero"][atom_index - 1] = record.get("hetero", False)
+    structure.atom_annotations["atom_name"][atom_index - 1] = record["atom_name"]
+    structure.atom_annotations["element"][atom_index - 1] = record.get("element", record["atom_name"][0])
     structure.atom_annotations["atom_id"][atom_index - 1] = atom_index
     structure.atom_annotations["b_factor"][atom_index - 1] = 0.0
     structure.atom_annotations["occupancy"][atom_index - 1] = 1.0
@@ -178,6 +206,50 @@ def test_remove_waters_and_non_biopolymers():
   assert heterogens.empty
 
 
+def test_fix_nucleic_termini_normalizes_and_strips_terminal_atoms():
+  structure = _make_structure_from_records(
+    [
+      {"res_id": 1, "res_name": "A", "atom_name": "P", "element": "P"},
+      {"res_id": 1, "res_name": "A", "atom_name": "O1P", "element": "O"},
+      {"res_id": 1, "res_name": "A", "atom_name": "O2P", "element": "O"},
+      {"res_id": 1, "res_name": "A", "atom_name": "C1'", "element": "C"},
+      {"res_id": 2, "res_name": "U", "atom_name": "P", "element": "P"},
+      {"res_id": 2, "res_name": "U", "atom_name": "O1P", "element": "O"},
+      {"res_id": 2, "res_name": "U", "atom_name": "C1'", "element": "C"},
+    ]
+  )
+
+  fix_nucleic_termini(structure)
+
+  atom_names = structure.to_dataframe()["atom_name"].tolist()
+  assert "O1P" not in atom_names
+  assert "O2P" not in atom_names
+  assert atom_names.count("P") == 1
+  assert atom_names.count("OP1") == 1
+  assert atom_names.count("C1'") == 2
+
+
+def test_fix_nucleic_termini_optionally_strips_3prime_and_gap_starts_new_segment():
+  structure = _make_structure_from_records(
+    [
+      {"res_id": 1, "res_name": "A", "atom_name": "C1'", "element": "C"},
+      {"res_id": 2, "res_name": "U", "atom_name": "O3P", "element": "O"},
+      {"res_id": 2, "res_name": "U", "atom_name": "C1'", "element": "C"},
+      {"res_id": 4, "res_name": "G", "atom_name": "P", "element": "P"},
+      {"res_id": 4, "res_name": "G", "atom_name": "OP3", "element": "O"},
+      {"res_id": 4, "res_name": "G", "atom_name": "C1'", "element": "C"},
+    ]
+  )
+
+  fix_nucleic_termini(structure, strip_3prime=True)
+
+  atom_names = structure.to_dataframe()["atom_name"].tolist()
+  assert "P" not in atom_names
+  assert "OP3" not in atom_names
+  assert "O3P" not in atom_names
+  assert atom_names.count("C1'") == 3
+
+
 def test_remove_non_biopolymers_removes_hetero_unk_ligand():
   structure = parse_single_model("tests/files/dimer_1lig_malformed.pdb")
   assert not structure.to_dataframe().query("chain == '' and res_id == 0 and res_name == 'UNK'").empty
@@ -192,6 +264,8 @@ def test_filters_require_structure():
     remove_waters(ensemble)
   with pytest.raises(TypeError):
     remove_non_biopolymers(ensemble)
+  with pytest.raises(TypeError):
+    fix_nucleic_termini(ensemble)
 
 
 def test_get_backbone_and_distance_matrix_and_center_of_mass_and_rg():

@@ -7,6 +7,10 @@ import numpy as np
 from ._common import classify_polymer_residue, filter_structure_atoms
 from .structure import Structure
 
+_PHOSPHATE_RENAME_MAP = {"O1P": "OP1", "O2P": "OP2"}
+_FIVE_PRIME_TERMINAL_ATOMS = {"P", "OP1", "OP2", "OP3", "O1P", "O2P", "O3P"}
+_THREE_PRIME_TERMINAL_ATOMS = {"O3P", "OP3"}
+
 
 def remove_waters(structure: Structure, chain: Optional[str] = None):
   """Remove water residues from a structure in-place.
@@ -70,3 +74,86 @@ def _remove_residues(structure: Structure, predicate: Callable, chain: Optional[
         keep_mask[atom_index] = False
 
   filter_structure_atoms(structure, keep_mask)
+
+
+def fix_nucleic_termini(structure: Structure, strip_3prime: bool = False, chain: Optional[str] = None):
+  """Normalize nucleotide phosphate names and strip terminal phosphate atoms.
+
+  Parameters:
+    structure: Input :class:`Structure`.
+    strip_3prime: If ``True``, also remove ``O3P`` and ``OP3`` from 3' termini.
+    chain: Optional chain ID to restrict processing to.
+
+  Returns:
+    ``None``. The input structure is modified in-place.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"fix_nucleic_termini() expects a Structure, found {type(structure).__name__}.")
+  if chain is not None and chain not in structure.chain_ids():
+    raise ValueError(f'Chain "{chain}" was not found in the structure.')
+
+  keep_mask = np.ones(len(structure), dtype=bool)
+
+  for atom_index in range(len(structure)):
+    atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
+    renamed_atom_name = _PHOSPHATE_RENAME_MAP.get(atom_name)
+    if renamed_atom_name is not None:
+      structure.atom_annotations["atom_name"][atom_index] = renamed_atom_name
+
+  for chain_view in structure.chains():
+    if chain is not None and chain_view.chain_id != chain:
+      continue
+
+    segment_start = None
+    segment_end = None
+    previous_nucleic_residue_id = None
+
+    for residue in chain_view.residues():
+      is_nucleic = classify_polymer_residue(residue) in {"dna", "rna"}
+      if not is_nucleic:
+        if segment_start is not None:
+          for atom_index in segment_start.atom_indices():
+            atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
+            if atom_name in _FIVE_PRIME_TERMINAL_ATOMS:
+              keep_mask[atom_index] = False
+          if strip_3prime and segment_end is not None:
+            for atom_index in segment_end.atom_indices():
+              atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
+              if atom_name in _THREE_PRIME_TERMINAL_ATOMS:
+                keep_mask[atom_index] = False
+
+        segment_start = None
+        segment_end = None
+        previous_nucleic_residue_id = None
+        continue
+
+      residue_id = residue.res_id
+      if segment_start is None or previous_nucleic_residue_id is None or residue_id - previous_nucleic_residue_id > 1:
+        if segment_start is not None:
+          for atom_index in segment_start.atom_indices():
+            atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
+            if atom_name in _FIVE_PRIME_TERMINAL_ATOMS:
+              keep_mask[atom_index] = False
+          if strip_3prime and segment_end is not None:
+            for atom_index in segment_end.atom_indices():
+              atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
+              if atom_name in _THREE_PRIME_TERMINAL_ATOMS:
+                keep_mask[atom_index] = False
+        segment_start = residue
+
+      segment_end = residue
+      previous_nucleic_residue_id = residue_id
+
+    if segment_start is not None:
+      for atom_index in segment_start.atom_indices():
+        atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
+        if atom_name in _FIVE_PRIME_TERMINAL_ATOMS:
+          keep_mask[atom_index] = False
+      if strip_3prime and segment_end is not None:
+        for atom_index in segment_end.atom_indices():
+          atom_name = structure.atom_annotations["atom_name"][atom_index].strip().upper()
+          if atom_name in _THREE_PRIME_TERMINAL_ATOMS:
+            keep_mask[atom_index] = False
+
+  if not np.all(keep_mask):
+    filter_structure_atoms(structure, keep_mask)

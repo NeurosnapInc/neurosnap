@@ -5,6 +5,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from neurosnap.constants.structure import FIVE_PRIME_TERMINAL_ATOMS, THREE_PRIME_TERMINAL_ATOMS
+from neurosnap.log import logger
 
 from ._common import classify_polymer_residue, filter_structure_atoms
 from .structure import Structure
@@ -155,6 +156,21 @@ def fix_nucleic_termini(structure: Structure, strip_3prime: bool = False, chain:
     raise TypeError(f"fix_nucleic_termini() expects a Structure, found {type(structure).__name__}.")
   if chain is not None and chain not in structure.chain_ids():
     raise ValueError(f'Chain "{chain}" was not found in the structure.')
+
+  nucleic_residues_found = False
+  for chain_view in structure.chains():
+    if chain is not None and chain_view.chain_id != chain:
+      continue
+    for residue in chain_view.residues():
+      if classify_polymer_residue(residue) in {"dna", "rna"}:
+        nucleic_residues_found = True
+        break
+    if nucleic_residues_found:
+      break
+
+  if not nucleic_residues_found:
+    logger.warning("No nucleotide residues were found while running fix_nucleic_termini(); leaving the structure unchanged.")
+    return
 
   keep_mask = np.ones(len(structure), dtype=bool)
 

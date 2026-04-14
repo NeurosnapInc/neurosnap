@@ -13,7 +13,17 @@ _THREE_PRIME_TERMINAL_ATOMS = {"O3P", "OP3"}
 
 
 def remove_residues(structure: Structure, predicate: Callable, chain: Optional[str]):
-  """Remove residues that satisfy a predicate from a single-model structure."""
+  """Remove residues from a structure in-place when they match a predicate.
+
+  Parameters:
+    structure: Input :class:`Structure`.
+    predicate: Callable that accepts a residue view and returns ``True`` when
+      that residue should be removed.
+    chain: Optional chain ID to restrict residue removal to.
+
+  Returns:
+    ``None``. The input structure is modified in-place.
+  """
   keep_mask = np.ones(len(structure), dtype=bool)
   for chain_view in structure.chains():
     if chain is not None and chain_view.chain_id != chain:

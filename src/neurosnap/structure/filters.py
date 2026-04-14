@@ -12,6 +12,21 @@ _FIVE_PRIME_TERMINAL_ATOMS = {"P", "OP1", "OP2", "OP3", "O1P", "O2P", "O3P"}
 _THREE_PRIME_TERMINAL_ATOMS = {"O3P", "OP3"}
 
 
+def remove_residues(structure: Structure, predicate: Callable, chain: Optional[str]):
+  """Remove residues that satisfy a predicate from a single-model structure."""
+  keep_mask = np.ones(len(structure), dtype=bool)
+  for chain_view in structure.chains():
+    if chain is not None and chain_view.chain_id != chain:
+      continue
+    for residue in chain_view.residues():
+      if not predicate(residue):
+        continue
+      for atom_index in residue.atom_indices():
+        keep_mask[atom_index] = False
+
+  filter_structure_atoms(structure, keep_mask)
+
+
 def remove_waters(structure: Structure, chain: Optional[str] = None):
   """Remove water residues from a structure in-place.
 
@@ -24,7 +39,7 @@ def remove_waters(structure: Structure, chain: Optional[str] = None):
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"remove_waters() expects a Structure, found {type(structure).__name__}.")
-  _remove_residues(structure, lambda residue: residue.res_name.strip().upper() in {"WAT", "HOH"}, chain=chain)
+  remove_residues(structure, lambda residue: residue.res_name.strip().upper() in {"WAT", "HOH"}, chain=chain)
 
 
 def remove_nucleotides(structure: Structure, chain: Optional[str] = None):
@@ -39,7 +54,7 @@ def remove_nucleotides(structure: Structure, chain: Optional[str] = None):
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"remove_nucleotides() expects a Structure, found {type(structure).__name__}.")
-  _remove_residues(structure, lambda residue: classify_polymer_residue(residue) in {"dna", "rna"}, chain=chain)
+  remove_residues(structure, lambda residue: classify_polymer_residue(residue) in {"dna", "rna"}, chain=chain)
 
 
 def remove_non_biopolymers(structure: Structure, chain: Optional[str] = None):
@@ -58,22 +73,7 @@ def remove_non_biopolymers(structure: Structure, chain: Optional[str] = None):
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"remove_non_biopolymers() expects a Structure, found {type(structure).__name__}.")
-  _remove_residues(structure, lambda residue: residue.hetero or classify_polymer_residue(residue) is None, chain=chain)
-
-
-def _remove_residues(structure: Structure, predicate: Callable, chain: Optional[str]):
-  """Remove residues that satisfy a predicate from a single-model structure."""
-  keep_mask = np.ones(len(structure), dtype=bool)
-  for chain_view in structure.chains():
-    if chain is not None and chain_view.chain_id != chain:
-      continue
-    for residue in chain_view.residues():
-      if not predicate(residue):
-        continue
-      for atom_index in residue.atom_indices():
-        keep_mask[atom_index] = False
-
-  filter_structure_atoms(structure, keep_mask)
+  remove_residues(structure, lambda residue: residue.hetero or classify_polymer_residue(residue) is None, chain=chain)
 
 
 def fix_nucleic_termini(structure: Structure, strip_3prime: bool = False, chain: Optional[str] = None):

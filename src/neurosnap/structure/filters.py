@@ -141,7 +141,7 @@ def remove_non_biopolymers(structure: Structure, chain: Optional[str] = None):
   remove_residues(structure, lambda residue: residue.hetero or classify_polymer_residue(residue) is None, chain=chain)
 
 
-def fix_nucleic_termini(structure: Structure, strip_3prime: bool = False, chain: Optional[str] = None):
+def fix_nucleic_termini(structure: Structure, *, strip_3prime: bool = False, chain: Optional[str] = None):
   """Normalize nucleotide phosphate names and strip terminal phosphate atoms.
 
   Parameters:

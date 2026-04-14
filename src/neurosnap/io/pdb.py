@@ -15,6 +15,7 @@ from typing import Dict, Iterable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
+from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.log import logger
 from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
 
@@ -654,6 +655,7 @@ def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRe
   """
   try:
     atom_id = int(line[6:11].strip())
+    atom_name_field = line[12:16]
     atom_name = line[12:16].strip()
     altloc = line[16].strip()
     res_name = line[17:20].strip()
@@ -674,7 +676,11 @@ def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRe
   if not res_name:
     raise ValueError(f"Missing residue name at line {line_number}.")
   if not element:
-    raise ValueError(f"Missing element assignment at line {line_number}.")
+    inferred_element = _infer_element_from_atom_name_field(atom_name_field)
+    if inferred_element is None:
+      raise ValueError(f"Missing element assignment at line {line_number}.")
+    logger.warning('Missing element assignment at line %s; inferred element "%s" from atom name "%s".', line_number, inferred_element, atom_name)
+    element = inferred_element
 
   charge = _parse_charge(line[78:80], line_number)
   hetero = record_type == "HETATM"
@@ -699,6 +705,29 @@ def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRe
     altloc=altloc,
     atom_key=atom_key,
   )
+
+
+def _infer_element_from_atom_name_field(atom_name_field: str) -> Optional[str]:
+  """Infer an element symbol from the raw 4-character PDB atom-name field."""
+  if not atom_name_field.strip():
+    return None
+
+  if atom_name_field[0].isdigit():
+    candidate = atom_name_field[1:2].strip().title()
+    return candidate if candidate in ATOMIC_MASSES else None
+
+  if atom_name_field[0] == " ":
+    candidate = atom_name_field[1:2].strip().title()
+    return candidate if candidate in ATOMIC_MASSES else None
+
+  candidate = atom_name_field[:2].strip().title()
+  if candidate in ATOMIC_MASSES:
+    return candidate.upper()
+
+  candidate = atom_name_field[:1].strip().title()
+  if candidate in ATOMIC_MASSES:
+    return candidate.upper()
+  return None
 
 
 def _parse_conect_record(line: str, line_number: int, malformed_conect: ConectErrorMode) -> Optional[Tuple[int, List[int], int]]:

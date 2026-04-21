@@ -1,19 +1,21 @@
 """Structured WoLF PSORT localization prediction API.
 
-This submodule provides the public Python interface for the pure-Python WoLF
-PSORT port bundled in :mod:`neurosnap.algos.wolfpsort`. It exposes helpers for
-computing the WoLF PSORT feature vector and for running the bundled fungi,
-animal, and plant localization models with dictionary or DataFrame outputs.
+This submodule provides the public Python interface for the WoLF PSORT-style
+localization workflow bundled in :mod:`neurosnap.algos.wolfpsort`. It exposes
+helpers for computing the model feature vector and for running the bundled
+fungi, animal, and plant localization models with dictionary or DataFrame
+outputs.
 
-The implementation in this package was ported from the original WoLF PSORT
-command-line distribution by Paul Horton and Kenta Nakai. The reference code
-used for the port came from the public WoLF PSORT source distribution rehosted
-at:
+This implementation was developed as a distinct Python reimplementation for the
+academic community, while drawing technical reference and attribution from the
+original WoLF PSORT project by Paul Horton and Kenta Nakai. The referenced
+project materials consulted during development are available from the public
+WoLF PSORT source distribution rehosted at:
 
   https://github.com/fmaguire/WoLFPSort
 
-Original project materials in that distribution include the historical PSORT /
-WoLF PSORT feature extraction code, bundled model data, and license notices.
+That distribution includes the historical PSORT / WoLF PSORT command-line code,
+model assets, and accompanying project notices.
 """
 
 from __future__ import annotations

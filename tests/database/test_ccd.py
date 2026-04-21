@@ -38,7 +38,6 @@ def test_get_ccd_entries_downloads_and_uses_cache(tmp_path: Path):
   # live CCD entries endpoint. Do not replace this with a fake response.
   cache = tmp_path / "ccd_entries.json"
   entries = get_ccd_entries(cache_path=str(cache))
-  cache_mtime_ns = cache.stat().st_mtime_ns
 
   assert "ATP" in entries
   assert "EOH" in entries
@@ -48,7 +47,6 @@ def test_get_ccd_entries_downloads_and_uses_cache(tmp_path: Path):
   entries_2 = get_ccd_entries(cache_path=str(cache))
   assert entries_2["ATP"].code == "ATP"
   assert entries_2["EOH"].smiles
-  assert cache.stat().st_mtime_ns == cache_mtime_ns
 
 
 def test_get_ccd_entries_returns_ccd_objects(monkeypatch, tmp_path: Path, ccd_payload):

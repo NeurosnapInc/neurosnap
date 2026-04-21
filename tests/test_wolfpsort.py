@@ -1,12 +1,63 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Iterator
 
 from neurosnap.algos.wolfpsort import WoLFPSortPredictor, compute_features_dataframe, predict_localization
 
 
-TEST_FASTA = Path("WoLFPSort/bin/testQuery.fasta")
+TEST_SEQUENCES = [
+  (
+    "RCC1_YEAST",
+    (
+      "MVKRTVATNGDASGAHRAKKMSKTHASHIINAQEDYKHMYLSVQPLDIFCWGTGSMCELG"
+      "LGPLAKNKEVKRPRLNPFLPRDEAKIISFAVGGMHTLALDEESNVWSWGCNDVGALGRDT"
+      "SNAKEQLKDMDADDSSDDEDGDLNELESTPAKIPRESFPPLAEGHKVVQLAATDNMSCAL"
+      "FSNGEVYAWGTFRCNEGILGFYQDKIKIQKTPWKVPTFSKYNIVQLAPGKDHILFLDEEG"
+      "MVFAWGNGQQNQLGRKVMERFRLKTLDPRPFGLRHVKYIASGENHCFALTKDNKLVSWGL"
+      "NQFGQCGVSEDVEDGALVTKPKRLALPDNVVIRSIAAGEHHSLILSQDGDLYSCGRLDMF"
+      "EVGIPKDNLPEYTYKDVHGKARAVPLPTKLNNVPKFKSVAAGSHHSVAVAQNGIAYSWGF"
+      "GETYAVGLGPFEDDTEVPTRIKNTATQDHNIILVGCGGQFSVSGGVKLSDEDAEKRADEM"
+      "DD"
+    ),
+  ),
+  (
+    "RCL1_YEAST",
+    (
+      "MSSSAPKYTTFQGSQNFRLRIVLATLSGKPIKIEKIRSGDLNPGLKDYEVSFLRLIESVT"
+      "NGSVIEISYTGTTVIYRPGIIVGGASTHICPSSKPVGYFVEPMLYLAPFSKKKFSILFKG"
+      "ITASHNDAGIEAIKWGLMPVMEKFGVRECALHTLKRGSPPLGGGEVHLVVDSLIAQPITM"
+      "HEIDRPIISSITGVAYSTRVSPSLVNRMIDGAKKVLKNLQCEVNITADVWRGENSGKSPG"
+      "WGITLVAQSKQKGWSYFAEDIGDAGSIPEELGEKVACQLLEEISKSAAVGRNQLPLAIVY"
+      "MVIGKEDIGRLRINKEQIDERFIILLRDIKKIFNTEVFLKPVDEADNEDMIATIKGIGFT"
+      "NTSKKIA"
+    ),
+  ),
+  (
+    "RT04_YEAST",
+    (
+      "MQRHVFARNFRRLSLLRNPSLTKRFQSSASGAANTPNNNDEVMLLQQKLLYDEIRSELKS"
+      "LSQVPEDEILPELKKSLEQDKLSDKEQQLEAELSDFFRNYALLNKLFDSKTLDGQSSTTT"
+      "AAATPTKPYPNLIPSANDKPYSSQELFLRQLNHSMRTAKLGATISKVYYPHKDIFYPPLP"
+      "ENITVESLMSAGVHLGQSTSLWRSSTQSYIYGEYKGIHIIDLNQTLSYLKRAAKVVEGVS"
+      "ESGGIILFLGTRQGQKRGLEEAAKKTHGYYVSTRWIPGTLTNSTEISGIWEKQEIDSNDN"
+      "PTERALSPNETSKQVKPDLLVVLNPTENRNALLEAIKSRVPTIAIIDTDSEPSLVTYPIP"
+      "GNDDSLRSVNFLLGVLARAGQRGLQNRLARNNEK"
+    ),
+  ),
+  (
+    "EF1A_ASHGO",
+    (
+      "MGKEKTHVNVVVIGHVDSGKSTTTGHLIYKCGGIDKRTIEKFEKEAAELGKGSFKYAWVL"
+      "DKLKAERERGITIDIALWKFETPKYHVTVIDAPGHRDFIKNMITGTSQADCAILIIAGGV"
+      "GEFEAGISKDGQTREHALLAYTLGVKQLIVAINKMDSVKWDESRYQEIVKETSNFIKKVG"
+      "YNPKTVPFVPISGWNGDNMIEATTNAPWYKGWEKETKAGAVKGKTLLEAIDAIEPPVRPT"
+      "DKALRLPLQDVYKIGGIGTVPVGRVETGVIKPGMVVTFAPSGVTTEVKSVEMHHEQLEEG"
+      "VPGDNVGFNVKNVSVKEIRRGNVCGDSKNDPPKAAESFNATVIVLNHPGQISAGYSPVLD"
+      "CHTAHIACKFDELLEKNDRRTGKKLEDSPKFLKAGDAAMVKFVPSKPMCVEAFTDYPPLG"
+      "RFAVRDMRQTVAVGVIKSVVKSDKAGKVTKAAQKAGKK"
+    ),
+  ),
+]
 
 EXPECTED_FEATURE_ROWS = """
 RCC1_YEAST 0.0788381742738589 0.0394190871369295 0.0497925311203319 0.0767634854771784 0.0186721991701245 0.033195020746888 0.0601659751037344 0.0912863070539419 0.0311203319502075 0.04149377593361 0.0829875518672199 0.0726141078838174 0.0228215767634855 0.0394190871369295 0.0477178423236514 0.0622406639004149 0.0435684647302905 0.016597510373444 0.0228215767634855 0.0684647302904564 482 0 3.60517647058823 5 0 0 3 0 1 0 -8.09 0 0 0 0 0 0 0 1 -3.3 -2.9 3 27 -3.04593201751494 0 0.0278 0 -4.4 0 0 0 0 0 0 0 0
@@ -38,23 +89,7 @@ EXPECTED_REGRESSION_SCORES = {
 
 
 def _load_test_sequences() -> list[tuple[str, str]]:
-  sequences: list[tuple[str, str]] = []
-  current_id = None
-  seq_lines: list[str] = []
-  for raw_line in TEST_FASTA.read_text().splitlines():
-    line = raw_line.strip()
-    if not line:
-      continue
-    if line.startswith(">"):
-      if current_id is not None:
-        sequences.append((current_id, "".join(seq_lines)))
-      current_id = line[1:].split(None, 1)[0]
-      seq_lines = []
-    else:
-      seq_lines.append(line)
-  if current_id is not None:
-    sequences.append((current_id, "".join(seq_lines)))
-  return sequences
+  return list(TEST_SEQUENCES)
 
 
 def _test_sequence_iterator() -> Iterator[tuple[str, str]]:
@@ -78,7 +113,7 @@ def test_feature_dataframe_matches_reference_rows():
     expected_values = expected[row["id"]]
     assert len(actual_values) == len(expected_values)
     for actual, target in zip(actual_values, expected_values):
-        assert abs(actual - target) < 1e-12
+      assert abs(actual - target) < 1e-12
 
 
 def test_prediction_scores_match_published_regression_examples():
@@ -93,12 +128,31 @@ def test_prediction_scores_match_published_regression_examples():
 
 def test_public_dataframe_api_returns_structured_scores():
   df = predict_localization(_test_sequence_iterator(), organism_type="fungi", as_dataframe=True)
-  assert set(["id", "predicted_class", "top_class", "top_score", "scores_by_class"]).issubset(df.columns)
+  assert set(["id", "predicted_class", "predicted_label", "top_class", "top_label", "top_score", "scores_by_class", "scores_by_label"]).issubset(
+    df.columns
+  )
   features_df = compute_features_dataframe(_test_sequence_iterator())
   assert len(df) == len(features_df) == 4
 
 
 def test_public_prediction_dict_output_is_minimal_by_default():
   rows = predict_localization(_test_sequence_iterator(), organism_type="fungi", as_dataframe=False)
-  assert set(rows[0]) == {"id", "predicted_class", "ranked_classes", "scores_by_class", "best_overall_k"}
+  assert set(rows[0]) == {
+    "id",
+    "predicted_class",
+    "predicted_label",
+    "ranked_classes",
+    "ranked_labels",
+    "scores_by_class",
+    "scores_by_label",
+    "best_overall_k",
+  }
   assert "description" not in rows[0]
+
+
+def test_prediction_output_includes_human_readable_labels():
+  row = predict_localization(_test_sequence_iterator(), organism_type="fungi", as_dataframe=False)[0]
+  assert row["predicted_class"] == "nucl"
+  assert row["predicted_label"] == "Nuclear"
+  assert row["ranked_labels"][1][0] == "Mitochondrial / Nuclear"
+  assert row["scores_by_label"]["Nuclear"] == row["scores_by_class"]["nucl"]

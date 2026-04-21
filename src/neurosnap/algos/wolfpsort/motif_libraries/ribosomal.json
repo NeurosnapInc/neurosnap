@@ -1,0 +1,289 @@
+{
+  "name": "PROSITE ribosomal protein motifs",
+  "motifs": [
+    {
+      "description": "Ribosomal protein L2 signature (PS00467)",
+      "pattern": "P.{2}RG[STAIV]{2}.N[APK].[DE]"
+    },
+    {
+      "description": "Ribosomal protein L3 signature (PS00474)",
+      "pattern": "F.{6}[DN].{2}[AGS].[ST].G[KRH]G.{2}G.{3}R"
+    },
+    {
+      "description": "Ribosomal protein L5 signature (PS00358)",
+      "pattern": "[LIVM].{2}[LIVM][STAC][GE][QV].{2}[LIVMA].[STC].[STAG][KR].[STA]"
+    },
+    {
+      "description": "Ribosomal protein L6 signature 1 (PS00525)",
+      "pattern": "[PS][DENS].YK[GA]KG[LIVM]"
+    },
+    {
+      "description": "Ribosomal protein L6 signature 2 (PS00700)",
+      "pattern": "Q.{3}[LIVM].{2}[KR].{2}R.F.DG[LIVM]Y[LIVM].{2}[KR]"
+    },
+    {
+      "description": "Ribosomal protein L9 signature (PS00651)",
+      "pattern": "G.{2}G.{4}V.{2}G[FY].{2}N[FY]L.{3}G.[GA].{3}[STN]"
+    },
+    {
+      "description": "Ribosomal protein L10 signature (PS01109)",
+      "pattern": "[DEH].{2}G[LIVMF][STN][VA].[DEQK][LIVMA].{2}[LM]R"
+    },
+    {
+      "description": "Ribosomal protein L11 signature (PS00359)",
+      "pattern": "[RKN].[LIVM].G[ST].{2}[SNQ][LIVM]G.{2}[LIVM].{0,1}[DENG]"
+    },
+    {
+      "description": "Ribosomal protein L13 signature (PS00783)",
+      "pattern": "[LIVM][KRV]GM[LV][PS].{4,5}[GS][QEKR].{5}[LIVM].[AV][LFY].G"
+    },
+    {
+      "description": "Ribosomal protein L14 signature (PS00049)",
+      "pattern": "A[LIV]{3}.{9,10}[DNS]G.{4}[FY].{2}[NT].{2}V[LIV]"
+    },
+    {
+      "description": "Ribosomal protein L15 signature (PS00475)",
+      "pattern": "K[LIVM]{2}.{2}G.[LIVM].{3,4}[LIVM].[LIVMF].{4}[LIVMF][ST].{2}A.{3}[LIVM].{3}G"
+    },
+    {
+      "description": "Ribosomal protein L16 signature 1 (PS00586)",
+      "pattern": "[KR]R.[GSC][KQV][LIVM]W[LIVM][KR][LIVM][LFY][AP]"
+    },
+    {
+      "description": "Ribosomal protein L16 signature 2 (PS00701)",
+      "pattern": "RMG.[GR]KG.{4}[FWK]"
+    },
+    {
+      "description": "Ribosomal protein L19 signature (PS01015)",
+      "pattern": "R[KR]G.VR[KR]AKLYYLR[ED]"
+    },
+    {
+      "description": "Ribosomal protein L20 signature (PS00937)",
+      "pattern": "K.{3}[KR].[LIVM]WI[STNALV]R[LIVM]N.{3}[RK]"
+    },
+    {
+      "description": "Ribosomal protein L22 signature (PS00464)",
+      "pattern": "[RKQN].{4}[RH][GAS].G[KRQS].{9}[HDN][LIVM].[LIVMS].[LIVM]"
+    },
+    {
+      "description": "Ribosomal protein L23 signature (PS00050)",
+      "pattern": "[RK]{2}[AM][IVFYT][IV][RKT]L[STANQK].{7}[LIVMFT]"
+    },
+    {
+      "description": "Ribosomal protein L24 signature (PS01108)",
+      "pattern": "V.[LIVM][LIVMA][STA][GS].{2}[KR].{3}G.[LIVMA]"
+    },
+    {
+      "description": "Ribosomal protein L27 signature (PS00831)",
+      "pattern": "G.[LIVM]{2}.RQRG.{5}G"
+    },
+    {
+      "description": "Ribosomal protein L29 signature (PS00579)",
+      "pattern": "[KRNQS].{3}[LIVMFYA][KRS].[LIVMFYT][KR]{2}[DESTAN][LIVM]A[RC]"
+    },
+    {
+      "description": "Ribosomal protein L30 signature (PS00634)",
+      "pattern": "[LIVM][LIVMT].{2}[RKAP][GS].{6,8}[KDN].{3}[LIVMT][LIVM].{2}[LIVMF].[LIVM].{2}[LIVMT].{3}[LIVMT]"
+    },
+    {
+      "description": "Ribosomal protein L31 signature (PS01143)",
+      "pattern": "C[SG].CHPF[FY]TG[KR]Q[KR]"
+    },
+    {
+      "description": "Ribosomal protein L33 signature (PS00582)",
+      "pattern": "Y.[ST].[KR][NS][KRS].{3}[PA].{1,2}[LIVM]E.{2}K[FY]"
+    },
+    {
+      "description": "Ribosomal protein L34 signature (PS00784)",
+      "pattern": "KRT[FYW]QP.{3}[KR][RH].[KR].{2}GF.{2}RM"
+    },
+    {
+      "description": "Ribosomal protein L35 signature (PS00936)",
+      "pattern": "K[LIVM]KT.{2}[GA].{2}KR[LIVMFY][KR]"
+    },
+    {
+      "description": "Ribosomal protein L36 signature (PS00828)",
+      "pattern": "C.{2}C.{2}[LIVM].R.{3}[LIVMN].[LIVM].C.{3,4}[KR]H.Q.Q"
+    },
+    {
+      "description": "Ribosomal protein L1e signature (PS00939)",
+      "pattern": "AG.{2}T.AES[FYWQ]G[ST]GR"
+    },
+    {
+      "description": "Ribosomal protein L7Ae signature (PS01082)",
+      "pattern": "[CA].{4}VP[FY].{2}[LIVM].[GSQ][KRQ].{2}LG"
+    },
+    {
+      "description": "Ribosomal protein L13e signature (PS01104)",
+      "pattern": "[KR]Y.{2}K[LIVM]R[TA]G[KR]GF[ST]L.E"
+    },
+    {
+      "description": "Ribosomal protein L18e signature (PS01106)",
+      "pattern": "S[KR].{2}R.P[LIVM]S[LIVM]SR[LIVM]"
+    },
+    {
+      "description": "Ribosomal protein L19e signature (PS00526)",
+      "pattern": "R.[KR].{5}[KR].{3}[KRH].{2}G.G.R.G.{3}AR.{3}[KQ].{2}W.{7}R.{2}L.{3}R"
+    },
+    {
+      "description": "Ribosomal protein L24e signature (PS01073)",
+      "pattern": "[FY].G.{2}I.PG.G.{2}[FY].[KRH].D"
+    },
+    {
+      "description": "Ribosomal protein L27e signature (PS01107)",
+      "pattern": "GKN.WFF.KLRF\\$"
+    },
+    {
+      "description": "Ribosomal protein L30e signature 1 (PS00709)",
+      "pattern": "[STA].{5}G.[QKR].{2}[LIVM][KQT].{2}[KR].G.{2}K.[LIVM]{3}"
+    },
+    {
+      "description": "Ribosomal protein L30e signature 2 (PS00993)",
+      "pattern": "[DE]LG[STA].{2}G[KR].{6}[LIVM].[LIVM].[DEN].G"
+    },
+    {
+      "description": "Ribosomal protein L31E signature (PS01144)",
+      "pattern": "VR[LIVM].{3}[LIVM]N.A.W.[KR]G"
+    },
+    {
+      "description": "Ribosomal protein L32e signature (PS00580)",
+      "pattern": "F.R.{4}[KR].{2}[KR][LIVM].{3}WR[KR]P.G"
+    },
+    {
+      "description": "Ribosomal protein L34E signature 1 (PS01145)",
+      "pattern": "QR[LIVM]T.[KR]{3}.{2}Y.T.SN"
+    },
+    {
+      "description": "Ribosomal protein L34E signature 2 (PS01146)",
+      "pattern": "RI.RAF[LIVM]{2}[DE]{2}QK[LIVM]{2}"
+    },
+    {
+      "description": "Ribosomal protein L35Ae signature (PS01105)",
+      "pattern": "GK[LIVM].R.HG.{2}G.V.A.F.{3}LP"
+    },
+    {
+      "description": "Ribosomal protein L37e signature (PS01077)",
+      "pattern": "GT.S.G.[KR].{3}[ST]H.{2}C.RCG"
+    },
+    {
+      "description": "Ribosomal protein L46e signature (PS00051)",
+      "pattern": "N.{2}RR[NH]WRR"
+    },
+    {
+      "description": "Ribosomal protein S2 signature 1 (PS00962)",
+      "pattern": "[LIVMFA].{2}[LIVMFYC]{2}.[STAC][GSTANER][STALV][HY][LIVMF]G"
+    },
+    {
+      "description": "Ribosomal protein S2 signature 2 (PS00963)",
+      "pattern": "P.{2}[LIVMF]{2}[LIVMS].[GDN].{3}[DENL].{3}[LIVM].E.{4}[GNQR][LIVM][AP]"
+    },
+    {
+      "description": "Ribosomal protein S3 signature 1 (PS00548)",
+      "pattern": "[LIVMF][RE].G.{2}[KRQA].{3}[DNSA].{2}[FYW][SANV][NQDER]"
+    },
+    {
+      "description": "Ribosomal protein S3 signature 2 (PS00734)",
+      "pattern": "[GQR]R[LIVM].G.E[LIVM]A[KR][LIVMSTAR]E"
+    },
+    {
+      "description": "Ribosomal protein S4 signature (PS00632)",
+      "pattern": "[LIVM][DE].RL.{3}[LIVM][VMFYH][KR].{3}[AGTCF].[ST].{3}[SAI][KR].[LIVMF]{2}"
+    },
+    {
+      "description": "Ribosomal protein S5 signature (PS00585)",
+      "pattern": "G[KRQ].{3}[FY].[ACV].{2}[LIVMA][LIVM][AG][DN].{2}G.[LIVM]G.[SAG].{5,6}[DEQ][LIVM].{2}A[LIVM]"
+    },
+    {
+      "description": "Ribosomal protein S6 signature (PS01048)",
+      "pattern": "[WL]G.[KR].LAY.I"
+    },
+    {
+      "description": "Ribosomal protein S7 signature (PS00052)",
+      "pattern": "[DENSK].[LIVME].{3}[LIVMFT]{2}.{6}GK[KR].{5}[LIVMF]{2}.{2}[STA]"
+    },
+    {
+      "description": "Ribosomal protein S8 signature (PS00053)",
+      "pattern": "[GE].{2}[LIV]{2}[STY]T.{2}G[LIVM]{2}.{4}A[KRHA]"
+    },
+    {
+      "description": "Ribosomal protein S9 signature (PS00360)",
+      "pattern": "GGG.{2}[GSA]Q.{2}[SA].{3}[GSA].[STA][KR][GSA]L"
+    },
+    {
+      "description": "Ribosomal protein S10 signature (PS00361)",
+      "pattern": "[AV].{3}[GDNS][LIVMSTA].{3}GP[LIVM].[LIVM]PT"
+    },
+    {
+      "description": "Ribosomal protein S11 signature (PS00054)",
+      "pattern": "[DNE]VTP.[PA].[DN]"
+    },
+    {
+      "description": "Ribosomal protein S12 signature (PS00055)",
+      "pattern": "[RK].PNS[AR].R"
+    },
+    {
+      "description": "Ribosomal protein S13 signature (PS00646)",
+      "pattern": "[KRQ]G[LIVMFY]RH.{2}[GSN].{2}[LIVMC]RGQ"
+    },
+    {
+      "description": "Ribosomal protein S14 signature (PS00527)",
+      "pattern": "[RP].{0,1}C.{11,12}[LIVMF].[LIVMF][SC][RG].{3}[RN]"
+    },
+    {
+      "description": "Ribosomal protein S15 signature (PS00362)",
+      "pattern": "[LIVM].{2}H[LIVMFY].{5}D.{2}[SAGN].{3}[LF].{9}[LIVM].{2}Y"
+    },
+    {
+      "description": "Ribosomal protein S16 signature (PS00732)",
+      "pattern": "[LIVM].[LIVM]RL[ASK]R.G[AR]"
+    },
+    {
+      "description": "Ribosomal protein S17 signature (PS00056)",
+      "pattern": "GD.[LIV].[LIV].[QEK].[RK]P[LIV]S"
+    },
+    {
+      "description": "Ribosomal protein S18 signature (PS00057)",
+      "pattern": "I[DY]Y.{2}[LIVM].{2}[LIVM].{2}[FY][LIVM][ST][DE].GK[LIVM]{2}.{2}R[LIVM]"
+    },
+    {
+      "description": "Ribosomal protein S19 signature (PS00323)",
+      "pattern": "[STDN]G[KRQM].{6}[LIVM].{4}[LIVM][GS].{2}[LF][GA]EF.{2}[ST]"
+    },
+    {
+      "description": "Ribosomal protein S4e signature (PS00528)",
+      "pattern": "H.KR[LIVM][SAN].P.{2}W.[LIVM].[KR]"
+    },
+    {
+      "description": "Ribosomal protein S6e signature (PS00578)",
+      "pattern": "[LIVM][STAM]GG.D.{2}G.PM"
+    },
+    {
+      "description": "Ribosomal protein S7e signature (PS00948)",
+      "pattern": "RLVRELEKKFSGKH"
+    },
+    {
+      "description": "Ribosomal protein S17e signature (PS00712)",
+      "pattern": "KLQE{3}RE[KR]{2}D"
+    },
+    {
+      "description": "Ribosomal protein S19e signature (PS00628)",
+      "pattern": "[SA].{2}[LIVMA].R.[AIV]LQ.L[EQ]"
+    },
+    {
+      "description": "Ribosomal protein S21e signature (PS00996)",
+      "pattern": "LYVPRKCSA"
+    },
+    {
+      "description": "Ribosomal protein S24e signature (PS00529)",
+      "pattern": "T[RKHQ]FG.{2}K[ST].G[FY][GA].[LIVM]Y[DN]"
+    },
+    {
+      "description": "Ribosomal protein S26e signature (PS00733)",
+      "pattern": "YCVSCAIH"
+    },
+    {
+      "description": "Ribosomal protein S28e signature (PS00961)",
+      "pattern": "ESEREARRLR\\$"
+    }
+  ]
+}

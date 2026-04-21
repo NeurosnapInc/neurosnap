@@ -72,6 +72,9 @@ neurosnap = [
   "algos/evoef2_lib/*.rtf",
   "algos/evoef2_lib/*.lib",
   "algos/evoef2_lib/*.npz",
+  "algos/wolfpsort/data/*.csv",
+  "algos/wolfpsort/data/*.json",
+  "algos/wolfpsort/motif_libraries/*.json",
 ]
 
 [tool.ruff]

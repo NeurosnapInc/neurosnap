@@ -1,0 +1,9 @@
+{
+  "name": "PROSITE low specificity DNA binding motifs",
+  "motifs": [
+    {
+      "description": "Leucine zipper pattern (PS00029)",
+      "pattern": "L.{6}L.{6}L.{6}L"
+    }
+  ]
+}

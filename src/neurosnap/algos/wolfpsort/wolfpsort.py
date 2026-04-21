@@ -39,6 +39,46 @@ from ._features import FEATURE_NAMES, FeatureExtractor, records_from_sequence_it
 from ._model import ModelData
 
 
+CLASS_LABEL_PARTS = {
+  "csk": "Cytoskeletal",
+  "cysk": "Cytoskeletal",
+  "cyto": "Cytoplasmic",
+  "cyt": "Cytoplasmic",
+  "nucl": "Nuclear",
+  "nuc": "Nuclear",
+  "mito": "Mitochondrial",
+  "mit": "Mitochondrial",
+  "ves": "Vesicles of Secretory System",
+  "E.R.": "Endoplasmic Reticulum",
+  "end": "Endoplasmic Reticulum",
+  "golg": "Golgi",
+  "gol": "Golgi",
+  "vacu": "Vacuolar",
+  "vac": "Vacuolar",
+  "plas": "Plasma Membrane",
+  "pla": "Plasma Membrane",
+  "pero": "Peroxisomal",
+  "pox": "Peroxisomal",
+  "extr": "Extracellular, Including Cell Wall",
+  "lyso": "Lysosomal",
+  "chlo": "Chloroplast",
+}
+
+
+def _label_for_class(class_name: str) -> str:
+  """Convert a raw WoLF PSORT class name into a human-readable label.
+
+  Args:
+    class_name: Raw class name emitted by the bundled WoLF PSORT models.
+
+  Returns:
+    Human-readable localization label for the supplied class name.
+  """
+  if class_name in CLASS_LABEL_PARTS:
+    return CLASS_LABEL_PARTS[class_name]
+  return " / ".join(CLASS_LABEL_PARTS.get(part, part) for part in class_name.split("_"))
+
+
 class WoLFPSortPredictor:
   """Pure Python WoLF PSORT port with structured outputs."""
 
@@ -114,7 +154,8 @@ class WoLFPSortPredictor:
 
     Returns:
       List of dictionaries containing the predicted class, ranked class scores,
-      best ``k`` value, and optional feature / neighbor details.
+      human-readable labels, best ``k`` value, and optional feature / neighbor
+      details.
     """
     records = records_from_sequence_iterator(sequences)
     results: List[Dict[str, object]] = []
@@ -122,11 +163,16 @@ class WoLFPSortPredictor:
       features = self._feature_extractor.compute(record)
       feature_vector = [features[name] for name in FEATURE_NAMES]
       prediction = self._model.predict(feature_vector, include_neighbors=include_neighbors)
+      ranked_labels = [(_label_for_class(class_name), score) for class_name, score in prediction["ranked_classes"]]
+      scores_by_label = {_label_for_class(class_name): score for class_name, score in prediction["scores_by_class"].items()}
       row: Dict[str, object] = {
         "id": record.identifier,
         "predicted_class": prediction["predicted_class"],
+        "predicted_label": _label_for_class(prediction["predicted_class"]),
         "ranked_classes": prediction["ranked_classes"],
+        "ranked_labels": ranked_labels,
         "scores_by_class": prediction["scores_by_class"],
+        "scores_by_label": scores_by_label,
         "best_overall_k": prediction["best_overall_k"],
       }
       if include_features:
@@ -151,16 +197,21 @@ class WoLFPSortPredictor:
     rows = []
     for prediction in self.predict(sequences, include_features=include_features, include_neighbors=False):
       ranked = prediction["ranked_classes"]
+      ranked_labels = prediction["ranked_labels"]
       top_class, top_score = ranked[0]
+      top_label, _ = ranked_labels[0]
       # Preserve the full class-score mapping even in the tabular API so users
       # can inspect tied or secondary localizations without recomputing.
       row = {
         "id": prediction["id"],
         "predicted_class": prediction["predicted_class"],
+        "predicted_label": prediction["predicted_label"],
         "top_class": top_class,
+        "top_label": top_label,
         "top_score": top_score,
         "best_overall_k": prediction["best_overall_k"],
         "scores_by_class": prediction["scores_by_class"],
+        "scores_by_label": prediction["scores_by_label"],
       }
       if include_features:
         row.update(prediction["features"])

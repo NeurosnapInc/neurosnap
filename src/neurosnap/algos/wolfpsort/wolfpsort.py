@@ -16,6 +16,16 @@ WoLF PSORT source distribution rehosted at:
 
 That distribution includes the historical PSORT / WoLF PSORT command-line code,
 model assets, and accompanying project notices.
+
+When citation of the underlying software or prediction method is appropriate,
+the original WoLF PSORT references suggested by the project materials include:
+
+- Horton P, Park KJ, Obayashi T, Fujita N, Harada H, Adams-Collier CJ, Nakai K.
+  "WoLF PSORT: protein localization predictor." Nucleic Acids Research 35
+  (Web Server issue): W585-W587 (2007). https://doi.org/10.1093/nar/gkm259
+- Horton P, Park KJ, Obayashi T, Nakai K. "Protein Subcellular Localization
+  Prediction with WoLF PSORT." Asian Pacific Bioinformatics Conference
+  (APBC/APCB 2006).
 """
 
 from __future__ import annotations

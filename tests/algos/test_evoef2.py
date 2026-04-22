@@ -9,7 +9,15 @@ import pytest
 import numpy as np
 
 from neurosnap.algos import evoef2
-from neurosnap.algos.evoef2 import calculate_binding, calculate_interface_energy, calculate_stability, rebuild_missing_atoms
+from neurosnap.algos.evoef2 import (
+  Mutation,
+  build_mutant,
+  build_mutants,
+  calculate_binding,
+  calculate_interface_energy,
+  calculate_stability,
+  rebuild_missing_atoms,
+)
 from tests._structure_test_utils import parse_single_model
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
@@ -298,6 +306,48 @@ def test_ptm_stability_smoke():
   assert "total" in data
   assert np.isfinite(data["total"])
   assert data["total"] == pytest.approx(-5820.224155352682, abs=5.0)
+
+
+def test_build_mutant_returns_new_structure_and_preserves_input():
+  structure = parse_single_model(FILES / "1MAL.pdb")
+  original_first_residue = structure["A"][1]
+  mutant = build_mutant(structure, [Mutation(chain_id="A", position=1, target_residue="A")], num_runs=1)
+  mutated_first_residue = mutant["A"][1]
+
+  assert original_first_residue.res_name == "VAL"
+  assert mutated_first_residue.res_name == "ALA"
+  assert mutant.chain_ids() == structure.chain_ids()
+  assert len(mutant) >= len(structure)
+  assert np.isfinite(calculate_stability(mutant)["total"])
+
+
+def test_build_mutants_returns_one_structure_per_mutation_set():
+  structure = parse_single_model(FILES / "1MAL.pdb")
+  mutants = build_mutants(
+    structure,
+    [
+      [Mutation(chain_id="A", position=1, target_residue="A")],
+      [Mutation(chain_id="B", position=1, target_residue="G")],
+    ],
+    num_runs=1,
+  )
+
+  assert len(mutants) == 2
+  assert mutants[0]["A"][1].res_name == "ALA"
+  assert mutants[1]["B"][1].res_name == "GLY"
+
+
+def test_build_mutant_rejects_duplicate_sites():
+  structure = parse_single_model(FILES / "dimer_af2.pdb")
+  with pytest.raises(ValueError, match="Duplicate mutation target"):
+    build_mutant(
+      structure,
+      [
+        Mutation(chain_id="A", position=1, target_residue="A"),
+        Mutation(chain_id="A", position=1, target_residue="V"),
+      ],
+      num_runs=1,
+    )
 
 
 def _debug_evoef2_structure(

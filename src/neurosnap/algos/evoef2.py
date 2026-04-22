@@ -30,6 +30,7 @@ Stability metric interpretation:
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -253,6 +254,24 @@ class Structure:
     for chain in self.chains:
       for res in chain.residues:
         yield res
+
+
+@dataclass(frozen=True)
+class Mutation:
+  """Single protein mutation to apply during EvoEF2 mutant building.
+
+  Attributes:
+    chain_id: Exact chain identifier from the input :class:`neurosnap.structure.Structure`.
+    position: Residue number within the chain.
+    target_residue: Target amino acid as a one-letter or three-letter code.
+      Histidine accepts ``"H"``/``"HIS"`` and will consider both EvoEF2 neutral
+      tautomers (``HSD`` and ``HSE``) during optimization, matching the native
+      BuildMutant behavior.
+  """
+
+  chain_id: str
+  position: int
+  target_residue: str
 
 
 @dataclass
@@ -1639,6 +1658,570 @@ def rebuild_missing_atoms(
       chains.append(lig_chain)
 
   return Structure(chains=chains)
+
+
+_AA_ONE_TO_THREE = {one: three for three, one in AA_THREE_TO_ONE.items()}
+
+
+def _clone_evo_residue(res: Residue) -> Residue:
+  """Deep-copy an internal EvoEF2 residue."""
+  cloned = Residue(
+    name=res.name,
+    chain=res.chain,
+    pos=res.pos,
+    bonds=[Bond(bond.a, bond.b, bond.bond_type) for bond in res.bonds],
+    patches=list(res.patches),
+    phipsi=(float(res.phipsi[0]), float(res.phipsi[1])),
+    n_cb_in_8a=res.n_cb_in_8a,
+    is_protein=res.is_protein,
+    is_nucleic=res.is_nucleic,
+    xtorsions=[float(x) for x in res.xtorsions],
+    na_torsions={key: float(value) for key, value in res.na_torsions.items()},
+  )
+  for atom_name, atom in res.atoms.items():
+    cloned.atoms[atom_name] = Atom(
+      name=atom.name,
+      param=atom.param,
+      chain=atom.chain,
+      pos=atom.pos,
+      res=cloned,
+      xyz=atom.xyz.copy(),
+      is_xyz_valid=atom.is_xyz_valid,
+      is_in_hbond=atom.is_in_hbond,
+    )
+  return cloned
+
+
+def _canonical_mutation_targets(target_residue: str) -> List[str]:
+  """Normalize a public mutation target into EvoEF2 residue names."""
+  if not isinstance(target_residue, str) or not target_residue.strip():
+    raise ValueError("Mutation target_residue must be a non-empty amino-acid code.")
+  target = target_residue.strip().upper()
+  if len(target) == 1:
+    if target == "H":
+      return ["HSD", "HSE"]
+    if target not in _AA_ONE_TO_THREE:
+      raise ValueError(f'Unsupported target amino acid code "{target_residue}".')
+    return [_AA_ONE_TO_THREE[target]]
+  if target in {"HIS", "HID", "HSD"}:
+    return ["HSD", "HSE"] if target == "HIS" else ["HSD"]
+  if target in {"HIE", "HSE"}:
+    return ["HSE"]
+  if target in {"HIP", "HSP"}:
+    return ["HSP"]
+  if target not in AA_THREE_TO_ONE:
+    raise ValueError(f'Unsupported target amino acid code "{target_residue}".')
+  return [target]
+
+
+def _find_unique_protein_residue(evo_struct: Structure, chain_id: str, position: int) -> Tuple[Chain, int, Residue]:
+  """Locate one protein residue by chain and residue number."""
+  matches: List[Tuple[Chain, int, Residue]] = []
+  for chain in evo_struct.chains:
+    if chain.name != chain_id:
+      continue
+    for residue_index, residue in enumerate(chain.residues):
+      if residue.pos == int(position) and residue.is_protein:
+        matches.append((chain, residue_index, residue))
+  if not matches:
+    raise ValueError(f'Could not find a protein residue at chain "{chain_id}" position {position}.')
+  if len(matches) > 1:
+    raise ValueError(
+      f'Chain "{chain_id}" position {position} is ambiguous in this structure. '
+      "Insertion-code-aware mutation selection is not supported by this API."
+    )
+  return matches[0]
+
+
+def _protein_torsion_ics(res: Residue, topologies: Dict[str, ResidueTopology]) -> List[CharmmIC]:
+  """Return IC entries that define chi torsions for a residue."""
+  torsion_ics: List[CharmmIC] = []
+  torsion_count = _DUNBRACK_TORSION_COUNT.get(res.name, 0)
+  topo = topologies.get(res.name)
+  if topo is None:
+    return torsion_ics
+  for torsion_index in range(torsion_count):
+    desired_b = torsion_index
+    desired_c = torsion_index + 1
+    for ic in topo.ics:
+      atom_b_order = _protein_atom_order(ic.atom_b)
+      atom_c_order = _protein_atom_order(ic.atom_c)
+      if atom_b_order == desired_b and atom_c_order == desired_c:
+        torsion_ics.append(ic)
+        break
+  return torsion_ics
+
+
+def _residue_downstream_atom_names(res: Residue, pivot_from: str, pivot_to: str) -> List[str]:
+  """Return atom names on the pivot_to side of a residue bond."""
+  adjacency: Dict[str, List[str]] = {}
+  for bond in res.bonds:
+    if bond.a.startswith(("+", "-")) or bond.b.startswith(("+", "-")):
+      continue
+    adjacency.setdefault(bond.a, []).append(bond.b)
+    adjacency.setdefault(bond.b, []).append(bond.a)
+  stack = [pivot_to]
+  seen = {pivot_from}
+  ordered: List[str] = []
+  while stack:
+    atom_name = stack.pop()
+    if atom_name in seen:
+      continue
+    seen.add(atom_name)
+    ordered.append(atom_name)
+    for neighbor in adjacency.get(atom_name, []):
+      if neighbor not in seen:
+        stack.append(neighbor)
+  return ordered
+
+
+def _normalize_angle_rad(angle: float) -> float:
+  """Wrap an angle into [-pi, pi]."""
+  return (angle + PI) % (2 * PI) - PI
+
+
+def _set_residue_sidechain_torsions(res: Residue, torsions: Sequence[float], topologies: Dict[str, ResidueTopology]) -> None:
+  """Apply chi torsions to a residue by rotating downstream atoms."""
+  torsion_ics = _protein_torsion_ics(res, topologies)
+  for torsion_index, target_angle in enumerate(torsions):
+    if torsion_index >= len(torsion_ics):
+      break
+    ic = torsion_ics[torsion_index]
+    atom_a = res.get_atom(ic.atom_a)
+    atom_b = res.get_atom(ic.atom_b)
+    atom_c = res.get_atom(ic.atom_c)
+    atom_d = res.get_atom(ic.atom_d)
+    if atom_a is None or atom_b is None or atom_c is None or atom_d is None:
+      continue
+    if not (atom_a.is_xyz_valid and atom_b.is_xyz_valid and atom_c.is_xyz_valid and atom_d.is_xyz_valid):
+      continue
+    current_angle = _get_torsion_angle(atom_a.xyz, atom_b.xyz, atom_c.xyz, atom_d.xyz)
+    delta = _normalize_angle_rad(float(target_angle) - current_angle)
+    if abs(delta) < 1e-8:
+      continue
+    for atom_name in _residue_downstream_atom_names(res, atom_b.name, atom_c.name):
+      atom = res.get_atom(atom_name)
+      if atom is None or not atom.is_xyz_valid:
+        continue
+      atom.xyz = _xyz_rotate_around(atom.xyz, atom_b.xyz, atom_c.xyz, delta)
+  _residue_calc_sidechain_torsions(res, topologies)
+
+
+def _prepare_mutated_template(
+  residue: Residue,
+  target_name: str,
+  params: Dict[str, Dict[str, AtomParam]],
+  topologies: Dict[str, ResidueTopology],
+  prev_res: Optional[Residue],
+  next_res: Optional[Residue],
+) -> Residue:
+  """Create a residue template for a target amino acid on an existing backbone."""
+  if target_name not in params or target_name not in topologies:
+    raise ValueError(f"Unsupported EvoEF2 mutation target {target_name}.")
+  old_residue = _clone_evo_residue(residue)
+  template = Residue(
+    name=target_name,
+    chain=residue.chain,
+    pos=residue.pos,
+    is_protein=True,
+    is_nucleic=False,
+    phipsi=(float(residue.phipsi[0]), float(residue.phipsi[1])),
+  )
+  _add_atoms_from_params(template, params)
+  _add_bonds_from_topology(template, topologies)
+  if any(patch_name in {"NTER", "GLYP", "PROP"} for patch_name in old_residue.patches):
+    _patch_nter_or_cter(template, params, topologies, "NTER")
+  if "CTER" in old_residue.patches:
+    _patch_nter_or_cter(template, params, topologies, "CTER")
+  for atom_name, old_atom in old_residue.atoms.items():
+    new_atom = template.get_atom(atom_name)
+    if new_atom is None:
+      continue
+    if old_atom.is_bb:
+      new_atom.xyz = old_atom.xyz.copy()
+      new_atom.is_xyz_valid = old_atom.is_xyz_valid
+  for atom in template.atoms.values():
+    atom.res = template
+  _assign_hbond_bases(template)
+  _residue_calc_all_atom_xyz(template, topologies, prev_res, next_res)
+  _residue_calc_sidechain_torsions(template, topologies)
+  return template
+
+
+def _dunbrack_bin_rotamers(residue_name: str, phipsi: Tuple[float, float], dun: DunbrackLibrary) -> List[DunbrackRotamer]:
+  """Return rotamers for one residue in the matching Dunbrack phi/psi bin."""
+  phi = int(phipsi[0])
+  psi = int(phipsi[1])
+  bin_index = ((phi + 180) // 10) * 36 + ((psi + 180) // 10)
+  if bin_index < 0 or bin_index >= len(dun.bins):
+    return []
+  return list(dun.bins[bin_index].by_residue.get(residue_name, []))
+
+
+def _candidate_rotamer_residues(
+  residue: Residue,
+  candidate_names: Sequence[str],
+  *,
+  include_current: bool,
+  params: Dict[str, Dict[str, AtomParam]],
+  topologies: Dict[str, ResidueTopology],
+  dun: DunbrackLibrary,
+  prev_res: Optional[Residue],
+  next_res: Optional[Residue],
+) -> List[Residue]:
+  """Generate candidate residue conformations for one optimization site."""
+  candidates: List[Residue] = []
+  seen_signatures = set()
+  if include_current:
+    current = _clone_evo_residue(residue)
+    current.phipsi = (float(residue.phipsi[0]), float(residue.phipsi[1]))
+    _residue_calc_sidechain_torsions(current, topologies)
+    candidates.append(current)
+    signature = (current.name, tuple(round(x, 3) for x in current.xtorsions))
+    seen_signatures.add(signature)
+  for candidate_name in candidate_names:
+    template = _prepare_mutated_template(residue, candidate_name, params, topologies, prev_res, next_res)
+    rotamers = _dunbrack_bin_rotamers(candidate_name, template.phipsi, dun)
+    if not rotamers:
+      signature = (template.name, tuple(round(x, 3) for x in template.xtorsions))
+      if signature not in seen_signatures:
+        candidates.append(template)
+        seen_signatures.add(signature)
+      continue
+    for rotamer in rotamers:
+      candidate = _clone_evo_residue(template)
+      _set_residue_sidechain_torsions(candidate, rotamer.torsions, topologies)
+      signature = (candidate.name, tuple(round(x, 3) for x in candidate.xtorsions))
+      if signature in seen_signatures:
+        continue
+      candidates.append(candidate)
+      seen_signatures.add(signature)
+  return candidates
+
+
+def _iter_residue_neighbors(evo_struct: Structure, query_residue: Residue) -> Iterable[Tuple[Chain, int, Residue]]:
+  """Yield residues whose minimum atom distance is inside the EvoEF2 cutoff."""
+  for chain in evo_struct.chains:
+    for residue_index, residue in enumerate(chain.residues):
+      if residue is query_residue:
+        continue
+      if not residue.is_protein:
+        continue
+      if _residue_min_distance(query_residue, residue) < ENERGY_DISTANCE_CUTOFF:
+        yield chain, residue_index, residue
+
+
+def _residue_min_distance(res1: Residue, res2: Residue) -> float:
+  """Return the minimum heavy-atom distance between two residues."""
+  best = float("inf")
+  for atom1 in res1.atoms.values():
+    if not atom1.is_xyz_valid:
+      continue
+    for atom2 in res2.atoms.values():
+      if not atom2.is_xyz_valid:
+        continue
+      dist = _xyz_distance(atom1.xyz, atom2.xyz)
+      if dist < best:
+        best = dist
+  return best
+
+
+def _local_candidate_energy(
+  evo_struct: Structure,
+  chain_index: int,
+  residue_index: int,
+  candidate: Residue,
+  *,
+  weight_dict: Optional[Dict[str, float]] = None,
+) -> float:
+  """Compute the local EvoEF2 energy used for BuildMutant rotamer selection."""
+  terms = _energy_term_initialize()
+  weights = get_weights(weight_dict)
+  _aa_reference_energy(candidate, terms)
+  _residue_intra_energy(candidate, terms)
+  for other_chain_index, chain in enumerate(evo_struct.chains):
+    for other_residue_index, other in enumerate(chain.residues):
+      if other_chain_index == chain_index and other_residue_index == residue_index:
+        continue
+      if not other.is_protein:
+        continue
+      if _residue_min_distance(candidate, other) >= ENERGY_DISTANCE_CUTOFF:
+        continue
+      if other_chain_index == chain_index:
+        if abs(candidate.pos - other.pos) == 1:
+          if candidate.pos < other.pos:
+            _residue_and_next_energy(candidate, other, terms)
+          else:
+            _residue_and_next_energy(other, candidate, terms)
+        else:
+          _residue_other_same_chain(candidate, other, terms)
+      else:
+        _residue_other_diff_chain(candidate, other, terms)
+  return _energy_term_weighting(terms, weights)[0]
+
+
+def _optimize_site_sequentially(
+  evo_struct: Structure,
+  chain_index: int,
+  residue_index: int,
+  candidate_names: Sequence[str],
+  *,
+  include_current: bool,
+  params: Dict[str, Dict[str, AtomParam]],
+  topologies: Dict[str, ResidueTopology],
+  dun: DunbrackLibrary,
+  weight_dict: Optional[Dict[str, float]] = None,
+) -> None:
+  """Choose the lowest local-energy rotamer for one residue."""
+  chain = evo_struct.chains[chain_index]
+  residue = chain.residues[residue_index]
+  prev_res = chain.residues[residue_index - 1] if residue_index > 0 else None
+  next_res = chain.residues[residue_index + 1] if residue_index + 1 < len(chain.residues) else None
+  candidates = _candidate_rotamer_residues(
+    residue,
+    candidate_names,
+    include_current=include_current,
+    params=params,
+    topologies=topologies,
+    dun=dun,
+    prev_res=prev_res,
+    next_res=next_res,
+  )
+  if not candidates:
+    return
+  best_energy = None
+  best_candidate = None
+  for candidate in candidates:
+    energy = _local_candidate_energy(evo_struct, chain_index, residue_index, candidate, weight_dict=weight_dict)
+    if best_energy is None or energy < best_energy:
+      best_energy = energy
+      best_candidate = candidate
+  if best_candidate is not None:
+    best_candidate.chain = residue.chain
+    best_candidate.pos = residue.pos
+    best_candidate.phipsi = (float(residue.phipsi[0]), float(residue.phipsi[1]))
+    chain.residues[residue_index] = best_candidate
+
+
+def _infer_element(atom_name: str) -> str:
+  """Infer a simple element symbol from a PDB-style atom name."""
+  stripped = "".join(ch for ch in atom_name.strip() if ch.isalpha())
+  if not stripped:
+    return ""
+  if stripped[:2].upper() in {"CL", "BR", "NA", "MG", "FE", "ZN", "CA", "MN", "CU"}:
+    return stripped[:2].title()
+  return stripped[0].upper()
+
+
+def _evo_structure_to_ns(
+  evo_struct: Structure,
+  source_structure: NSStructure,
+) -> NSStructure:
+  """Convert an internal EvoEF2 structure back into a public Neurosnap Structure."""
+  result = NSStructure(remove_annotations=False)
+  coords: List[Tuple[float, float, float]] = []
+  annotations = {name: [] for name in result._dtype_atom_annotations.names}
+  bond_rows: List[Tuple[int, int, int]] = []
+  template_rows = {}
+  source_df = source_structure.to_dataframe()
+  for row in source_df.itertuples(index=False):
+    key = (str(row.chain), int(row.res_id), str(row.ins_code), bool(row.hetero), str(row.atom_name))
+    template_rows[key] = row
+  represented_original_residues = set()
+  residue_atom_index: Dict[Tuple[str, int, str, bool, str], int] = {}
+  atom_serial = 1
+
+  for chain in evo_struct.chains:
+    public_chain_id = chain.name[:-2] if chain.name.endswith("_L") else chain.name
+    for residue in chain.residues:
+      hetero = not _is_polymer_residue(residue)
+      represented_original_residues.add((public_chain_id, int(residue.pos), "", hetero, residue.name))
+      local_atom_indices: Dict[str, int] = {}
+      for atom in residue.atoms.values():
+        if not atom.is_xyz_valid:
+          continue
+        template_key = (public_chain_id, int(residue.pos), "", hetero, atom.name)
+        template = template_rows.get(template_key)
+        coords.append((float(atom.xyz[0]), float(atom.xyz[1]), float(atom.xyz[2])))
+        annotations["chain_id"].append(public_chain_id)
+        annotations["res_id"].append(int(residue.pos))
+        annotations["ins_code"].append("")
+        annotations["res_name"].append(residue.name)
+        annotations["hetero"].append(bool(hetero))
+        annotations["atom_name"].append(atom.name)
+        annotations["element"].append(_infer_element(atom.name) if template is None else str(template.element))
+        annotations["atom_id"].append(atom_serial if template is None else int(template.atom))
+        annotations["b_factor"].append(0.0 if template is None else float(template.bfactor))
+        annotations["occupancy"].append(1.0 if template is None else float(template.occupancy))
+        annotations["charge"].append(0 if template is None else int(template.charge))
+        annotations["sym_id"].append("" if template is None else str(template.sym_id))
+        local_atom_indices[atom.name] = len(coords) - 1
+        residue_atom_index[(public_chain_id, int(residue.pos), "", hetero, atom.name)] = len(coords) - 1
+        atom_serial += 1
+      for bond in residue.bonds:
+        if bond.a.startswith(("+", "-")) or bond.b.startswith(("+", "-")):
+          continue
+        if bond.a in local_atom_indices and bond.b in local_atom_indices:
+          bond_rows.append((local_atom_indices[bond.a], local_atom_indices[bond.b], int(bond.bond_type)))
+
+  extra_atom_map: Dict[int, int] = {}
+  for atom_index, row in enumerate(source_df.itertuples(index=False)):
+    residue_key = (str(row.chain), int(row.res_id), str(row.ins_code), bool(row.hetero), str(row.res_name))
+    atom_key = (str(row.chain), int(row.res_id), str(row.ins_code), bool(row.hetero), str(row.atom_name))
+    if bool(row.hetero) and residue_key not in represented_original_residues and atom_key not in residue_atom_index:
+      coords.append((float(row.x), float(row.y), float(row.z)))
+      annotations["chain_id"].append(str(row.chain))
+      annotations["res_id"].append(int(row.res_id))
+      annotations["ins_code"].append(str(row.ins_code))
+      annotations["res_name"].append(str(row.res_name))
+      annotations["hetero"].append(bool(row.hetero))
+      annotations["atom_name"].append(str(row.atom_name))
+      annotations["element"].append(str(row.element))
+      annotations["atom_id"].append(int(row.atom))
+      annotations["b_factor"].append(float(row.bfactor))
+      annotations["occupancy"].append(float(row.occupancy))
+      annotations["charge"].append(int(row.charge))
+      annotations["sym_id"].append(str(row.sym_id))
+      extra_atom_map[atom_index] = len(coords) - 1
+  if extra_atom_map:
+    for bond in source_structure.bonds:
+      atom_i = int(bond["atom_i"])
+      atom_j = int(bond["atom_j"])
+      if atom_i in extra_atom_map and atom_j in extra_atom_map:
+        bond_rows.append((extra_atom_map[atom_i], extra_atom_map[atom_j], int(bond["bond_type"])))
+
+  result.atoms = np.array(coords, dtype=result._dtype_atoms)
+  result.atom_annotations = np.zeros(len(coords), dtype=result._dtype_atom_annotations)
+  for field_name, values in annotations.items():
+    result.atom_annotations[field_name] = np.asarray(values, dtype=result._dtype_atom_annotations.fields[field_name][0])
+  result.bonds = np.array(bond_rows, dtype=result._dtype_bond) if bond_rows else np.zeros(0, dtype=result._dtype_bond)
+  result.metadata = copy.deepcopy(source_structure.metadata)
+  result._remove_empty_annotations()
+  return result
+
+
+def build_mutant(
+  structure: NSStructure,
+  mutations: Sequence[Mutation],
+  *,
+  num_runs: int = 10,
+  param_path: Optional[Path] = None,
+  topo_path: Optional[Path] = None,
+  weight_dict: Optional[Dict[str, float]] = None,
+  dunbrack_path: Optional[Path] = None,
+) -> NSStructure:
+  """Build one EvoEF2-style mutant model from a list of mutations.
+
+  This API follows the native EvoEF2 ``BuildMutant`` logic at a library level:
+  the input structure is first repaired into a full-atom EvoEF2 internal model,
+  mutated residues are given target rotamer candidates, nearby protein residues
+  receive local wild-type rotamer candidates, and the affected sites are
+  optimized sequentially for ``num_runs`` passes.
+
+  Args:
+    structure: Single-model :class:`neurosnap.structure.Structure`.
+    mutations: Mutation set for a single mutant model.
+    num_runs: Number of sequential local-optimization passes. EvoEF2 uses 10.
+    param_path: Optional parameter file override.
+    topo_path: Optional topology file override.
+    weight_dict: Optional EvoEF2 weight override used during local selection.
+    dunbrack_path: Optional Dunbrack library override used for candidate generation.
+
+  Returns:
+    A new mutated :class:`neurosnap.structure.Structure`.
+  """
+  if not isinstance(structure, NSStructure):
+    raise TypeError(f"build_mutant() expects a Structure, found {type(structure).__name__}.")
+  if not mutations:
+    raise ValueError("build_mutant() requires at least one mutation.")
+  if num_runs < 1:
+    raise ValueError("num_runs must be at least 1.")
+
+  evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
+  params = load_atom_params(param_path)
+  topologies = load_topology(topo_path)
+  dun = load_dunbrack(dunbrack_path)
+
+  for chain in evo_struct.chains:
+    if chain.is_protein:
+      _calc_phi_psi(chain)
+
+  mutated_sites: List[Tuple[int, int, List[str]]] = []
+  seen_sites = set()
+  for mutation in mutations:
+    if not isinstance(mutation, Mutation):
+      raise TypeError("mutations must contain Mutation objects.")
+    chain, residue_index, residue = _find_unique_protein_residue(evo_struct, mutation.chain_id, mutation.position)
+    chain_index = evo_struct.chains.index(chain)
+    site_key = (chain.name, residue.pos)
+    if site_key in seen_sites:
+      raise ValueError(f'Duplicate mutation target at chain "{chain.name}" position {residue.pos}.')
+    seen_sites.add(site_key)
+    mutated_sites.append((chain_index, residue_index, _canonical_mutation_targets(mutation.target_residue)))
+
+  optimization_order: List[Tuple[int, int, List[str], bool]] = []
+  wildtype_sites: Dict[Tuple[int, int], List[str]] = {}
+
+  for chain_index, residue_index, candidate_names in mutated_sites:
+    optimization_order.append((chain_index, residue_index, candidate_names, False))
+    chain = evo_struct.chains[chain_index]
+    residue = chain.residues[residue_index]
+    for neighbor_chain, neighbor_index, neighbor_residue in _iter_residue_neighbors(evo_struct, residue):
+      neighbor_chain_index = evo_struct.chains.index(neighbor_chain)
+      neighbor_key = (neighbor_chain_index, neighbor_index)
+      if neighbor_key in {(site[0], site[1]) for site in mutated_sites}:
+        continue
+      if neighbor_key not in wildtype_sites:
+        candidate_names = [neighbor_residue.name]
+        if neighbor_residue.name == "HSD":
+          candidate_names.append("HSE")
+        elif neighbor_residue.name == "HSE":
+          candidate_names.append("HSD")
+        wildtype_sites[neighbor_key] = candidate_names
+      optimization_order.append((neighbor_chain_index, neighbor_index, wildtype_sites[neighbor_key], True))
+
+  for _ in range(int(num_runs)):
+    for chain_index, residue_index, candidate_names, include_current in optimization_order:
+      _optimize_site_sequentially(
+        evo_struct,
+        chain_index,
+        residue_index,
+        candidate_names,
+        include_current=include_current,
+        params=params,
+        topologies=topologies,
+        dun=dun,
+        weight_dict=weight_dict,
+      )
+
+  return _evo_structure_to_ns(evo_struct, structure)
+
+
+def build_mutants(
+  structure: NSStructure,
+  mutation_sets: Sequence[Sequence[Mutation]],
+  *,
+  num_runs: int = 10,
+  param_path: Optional[Path] = None,
+  topo_path: Optional[Path] = None,
+  weight_dict: Optional[Dict[str, float]] = None,
+  dunbrack_path: Optional[Path] = None,
+) -> List[NSStructure]:
+  """Build multiple EvoEF2-style mutant models from one input structure."""
+  if not isinstance(structure, NSStructure):
+    raise TypeError(f"build_mutants() expects a Structure, found {type(structure).__name__}.")
+  return [
+    build_mutant(
+      structure,
+      mutations,
+      num_runs=num_runs,
+      param_path=param_path,
+      topo_path=topo_path,
+      weight_dict=weight_dict,
+      dunbrack_path=dunbrack_path,
+    )
+    for mutations in mutation_sets
+  ]
 
 
 # -----------------------------

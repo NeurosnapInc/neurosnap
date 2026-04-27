@@ -65,7 +65,7 @@ Documentation Map
 * `AlphaFold metrics <neurosnap.algos.alphafold.html>`_
 * `pDockQ scoring <neurosnap.algos.pdockq.html>`_
 * `ipSAE metrics <neurosnap.algos.ipsae.html>`_
-* `LDDT scoring <neurosnap.algos.LDDT.html>`_
+* `LDDT scoring <neurosnap.algos.lddt.html>`_
 * `Electrostatic interface scoring <neurosnap.algos.ec_interface.html>`_
 * `EvoEF2 force field <neurosnap.algos.evoef2.html>`_
 * `ClusterProt clustering <neurosnap.algos.clusterprot.html>`_

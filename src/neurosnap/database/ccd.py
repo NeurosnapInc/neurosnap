@@ -4,11 +4,14 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import requests
 from rdkit import Chem
+from rdkit.Chem import rdFingerprintGenerator
+from rdkit.DataStructs import TanimotoSimilarity
 
+from neurosnap.constants.sequence import AA_RECORDS, AARecord
 from neurosnap.log import logger
 
 CCD_ENTRIES_URL = "https://neurosnap.ai/assets/ccd/entries.json"
@@ -107,6 +110,78 @@ def get_ccd(
   return get_ccd_entries(cache_path=cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout).get(str(code).upper().strip())
 
 
+def get_ccd_standard_aa(
+  ccd: Union[str, CCD],
+  *,
+  cache_path: str = DEFAULT_CCD_CACHE,
+  overwrite: bool = False,
+  max_age_days: int = 7,
+  timeout: int = 30,
+) -> AARecord:
+  """Return the most similar standard amino acid for a CCD entry.
+
+  If the input CCD code already has an explicit standard mapping in
+  ``AA_RECORDS``, that mapping is reused directly. Otherwise, the CCD entry is
+  compared against the 20 canonical amino-acid CCD entries using RDKit Morgan
+  fingerprints and the highest-similarity standard amino acid is returned.
+
+  Parameters:
+    ccd: CCD code string or a :class:`CCD` instance.
+    cache_path: Local cache file path for the CCD JSON payload.
+    overwrite: If ``True``, force a fresh CCD payload download.
+    max_age_days: Maximum accepted payload age in days.
+    timeout: HTTP timeout in seconds for CCD payload downloads.
+
+  Returns:
+    The best-matching standard amino-acid record.
+
+  Raises:
+    TypeError: If ``ccd`` is not a string or :class:`CCD`.
+    ValueError: If the CCD code is unknown or its SMILES cannot be parsed.
+  """
+  if isinstance(ccd, str):
+    query_code = ccd.upper().strip()
+    ccd_entry = get_ccd(query_code, cache_path=cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout)
+    if ccd_entry is None:
+      raise ValueError(f'Unknown CCD code "{query_code}".')
+  elif isinstance(ccd, CCD):
+    query_code = ccd.code.upper().strip()
+    ccd_entry = ccd
+  else:
+    raise TypeError(f"Expected `ccd` to be a str or CCD, found {type(ccd).__name__}.")
+
+  aa_record = AA_RECORDS.get(query_code)
+  if aa_record is not None:
+    if aa_record.is_standard:
+      return aa_record
+    if aa_record.standard_equiv_abr is not None:
+      return AA_RECORDS[aa_record.standard_equiv_abr]
+
+  entries = get_ccd_entries(cache_path=cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout)
+  fp_generator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+  query_fp = fp_generator.GetFingerprint(ccd_entry.to_mol())
+
+  best_match: Optional[AARecord] = None
+  best_similarity = -1.0
+  for aa in AA_RECORDS.values():
+    if not aa.is_standard:
+      continue
+
+    standard_ccd = entries.get(aa.abr)
+    if standard_ccd is None:
+      continue
+
+    similarity = TanimotoSimilarity(query_fp, fp_generator.GetFingerprint(standard_ccd.to_mol()))
+    if similarity > best_similarity:
+      best_similarity = similarity
+      best_match = aa
+
+  if best_match is None:
+    raise ValueError("Could not compare CCD entry against standard amino acids because no canonical amino-acid CCD entries were available.")
+
+  return best_match
+
+
 def get_ccd_rcsb(ccd_code: str, fpath: str):
   """
   Fetches the ideal SDF (Structure Data File) for a given CCD (Chemical Component Dictionary) code
@@ -137,6 +212,7 @@ def get_ccd_rcsb(ccd_code: str, fpath: str):
   r.raise_for_status()
   with open(fpath, "wb") as f:
     f.write(r.content)
+
 
 def _load_ccd_payload(*, cache_path: str, overwrite: bool, max_age_days: int, timeout: int) -> dict:
   """Load a cached CCD payload or refresh it from the remote endpoint."""
@@ -176,6 +252,7 @@ __all__ = [
   "CCD",
   "CCD_ENTRIES_URL",
   "DEFAULT_CCD_CACHE",
+  "get_ccd_standard_aa",
   "get_ccd_entries",
   "get_ccd",
 ]

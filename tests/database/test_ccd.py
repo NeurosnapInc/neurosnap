@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from rdkit import Chem
 
-from neurosnap.database.ccd import CCD, get_ccd, get_ccd_entries, get_ccd_rcsb
+from neurosnap.database.ccd import CCD, get_ccd, get_ccd_entries, get_ccd_rcsb, get_ccd_standard_aa
 
 
 class _MockCCDResponse:
@@ -24,8 +24,13 @@ def ccd_payload():
     "created_at": 1775430114,
     "entries": {
       "000": {"name": "methyl hydrogen carbonate", "smiles": "COC(O)=O"},
+      "ALA": {"name": "alanine", "smiles": "C[C@H](N)C(=O)O"},
       "ATP": {"name": "ATP", "smiles": "Nc1ncnc2n(cnc12)[C@@H]1O[C@H](COP(=O)(O)OP(=O)(O)OP(=O)(O)O)[C@@H](O)[C@H]1O"},
       "EOH": {"name": "ethanol", "smiles": "CCO"},
+      "GLY": {"name": "glycine", "smiles": "NCC(=O)O"},
+      "MSE": {"name": "selenomethionine", "smiles": "C[Se]CC[C@H](N)C(=O)O"},
+      "VAL": {"name": "valine", "smiles": "CC(C)[C@H](N)C(=O)O"},
+      "XAA": {"name": "alanine analog", "smiles": "C[C@H](N)C(=O)O"},
     },
   }
 
@@ -54,7 +59,7 @@ def test_get_ccd_entries_returns_ccd_objects(monkeypatch, tmp_path: Path, ccd_pa
   monkeypatch.setattr("neurosnap.database.ccd.requests.get", lambda url, timeout=None: _MockCCDResponse(ccd_payload))
 
   entries = get_ccd_entries(cache_path=str(cache))
-  assert sorted(entries) == ["000", "ATP", "EOH"]
+  assert sorted(entries) == sorted(ccd_payload["entries"])
   assert entries["ATP"].name == "ATP"
 
 
@@ -90,3 +95,19 @@ def test_ccd_smiles_canonical_rejects_invalid_smiles():
   ccd = CCD(code="BAD", name="broken", smiles="not-a-smiles")
   with pytest.raises(ValueError):
     ccd.smiles_canonical()
+
+
+def test_get_ccd_standard_aa_uses_explicit_mapping(monkeypatch, tmp_path: Path, ccd_payload):
+  cache = tmp_path / "ccd_entries.json"
+  monkeypatch.setattr("neurosnap.database.ccd.requests.get", lambda url, timeout=None: _MockCCDResponse(ccd_payload))
+
+  record = get_ccd_standard_aa("mse", cache_path=str(cache))
+  assert (record.code, record.abr, record.name) == ("M", "MET", "METHIONINE")
+
+
+def test_get_ccd_standard_aa_uses_similarity_for_unknown_ccd(monkeypatch, tmp_path: Path, ccd_payload):
+  cache = tmp_path / "ccd_entries.json"
+  monkeypatch.setattr("neurosnap.database.ccd.requests.get", lambda url, timeout=None: _MockCCDResponse(ccd_payload))
+
+  record = get_ccd_standard_aa(CCD(code="XAA", name="alanine analog", smiles=ccd_payload["entries"]["XAA"]["smiles"]), cache_path=str(cache))
+  assert (record.code, record.abr, record.name) == ("A", "ALA", "ALANINE")

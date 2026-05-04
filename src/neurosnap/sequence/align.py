@@ -15,7 +15,6 @@ from datetime import datetime
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import requests
-from Bio import SearchIO
 
 from neurosnap.constants.api import USER_AGENT
 from neurosnap.constants.sequence import STANDARD_AAs
@@ -430,6 +429,7 @@ def run_phmmer(query: str, database: str, evalue: float = 10.0, cpu: int = 2) ->
 
   """
   assert shutil.which("phmmer") is not None, "Cannot find phmmer. Please ensure phmmer is installed and added to your PATH."
+  from Bio import SearchIO
 
   # Create a fasta file containing the query protein sequence. The fasta file name is based on input genbank file name
   with tempfile.TemporaryDirectory() as tmp:

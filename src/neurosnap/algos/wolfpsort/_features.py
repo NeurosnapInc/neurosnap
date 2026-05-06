@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Sequence, Tuple
 
+from neurosnap._compat import compat_dataclass
 
 # Keep the exported feature order identical to the bundled model files.
 STANDARD_AMINO_ACIDS = tuple("ARNDCQEGHILKMFPSTWYV")
@@ -230,7 +230,7 @@ def _resource_path() -> Path:
   return Path(__file__).resolve().parent
 
 
-@dataclass(frozen=True)
+@compat_dataclass(frozen=True, slots=True)
 class SequenceRecord:
   """Normalized sequence input record used by the feature extractor."""
 

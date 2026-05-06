@@ -1,7 +1,6 @@
 """Chemical Component Dictionary metadata helpers."""
 
 import json
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
@@ -11,6 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
 from rdkit.DataStructs import TanimotoSimilarity
 
+from neurosnap._compat import compat_dataclass
 from neurosnap.constants.sequence import AA_RECORDS, AARecord
 from neurosnap.log import logger
 
@@ -20,7 +20,7 @@ DEFAULT_CCD_CACHE = "~/.cache/neurosnap/ccd_entries.json"
 _MEMORY_INDEX_CACHE: Dict[str, Tuple[str, Dict[str, "CCD"]]] = {}
 
 
-@dataclass(frozen=True, slots=True)
+@compat_dataclass(frozen=True, slots=True)
 class CCD:
   """Minimal Chemical Component Dictionary entry.
 

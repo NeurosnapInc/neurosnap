@@ -8,13 +8,14 @@ multi-model fast path (:class:`StructureStack`).
 The universal length unit is Å.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import field
 from types import MappingProxyType
 from typing import Any, Dict, Iterator, List, Literal, Mapping, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
+from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.constants.sequence import AA_RECORDS
 from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NUC_DNA_CODES, NUC_RNA_CODES, STANDARD_NUCLEOTIDES
@@ -645,7 +646,7 @@ class Structure:
     )
 
 
-@dataclass(frozen=True, slots=True)
+@compat_dataclass(frozen=True, slots=True)
 class Atom:
   """Immutable atom-level hierarchy view."""
 
@@ -667,7 +668,7 @@ class Atom:
     return np.array([self.x, self.y, self.z], dtype=np.float32)
 
 
-@dataclass(frozen=True, slots=True)
+@compat_dataclass(frozen=True, slots=True)
 class Residue:
   """Immutable residue-level hierarchy view.
 
@@ -730,7 +731,7 @@ class Residue:
     return self.key() == other.key()
 
 
-@dataclass(frozen=True, slots=True)
+@compat_dataclass(frozen=True, slots=True)
 class Chain:
   """Immutable chain-level hierarchy view.
 

@@ -39,6 +39,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from neurosnap._compat import compat_dataclass
 from neurosnap.algos.evoef2_lib.constants import (
   _ATOM_ORDER_SEQUENCE,
   _DUNBRACK_TORSION_COUNT,
@@ -256,7 +257,7 @@ class Structure:
         yield res
 
 
-@dataclass(frozen=True)
+@compat_dataclass(frozen=True, slots=True)
 class Mutation:
   """Single protein mutation to apply during EvoEF2 mutant building.
 

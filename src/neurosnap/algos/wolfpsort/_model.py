@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence
 
-from ._features import FEATURE_NAMES
+from neurosnap._compat import compat_dataclass
 
 
-@dataclass(frozen=True)
+@compat_dataclass(frozen=True, slots=True)
 class UniformScaler:
   """Piecewise-linear percentile scaler used by the original classifier."""
 

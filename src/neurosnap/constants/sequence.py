@@ -1,7 +1,8 @@
 """Sequence- and amino-acid-related constants."""
 
-from dataclasses import dataclass
 from typing import Dict, Optional
+
+from neurosnap._compat import compat_dataclass
 
 ## Amino Acid Codes and Properties
 # Codes for standard amino acids
@@ -9,7 +10,7 @@ STANDARD_AAs = set("ACDEFGHIKLMNPQRSTVWY")
 
 
 # Amino acid Record class
-@dataclass(frozen=True)
+@compat_dataclass(frozen=True, slots=True)
 class AARecord:
   code: Optional[str]  # 1-letter code; None for if unavailable
   abr: str  # 3-letter abbreviation or CCD code

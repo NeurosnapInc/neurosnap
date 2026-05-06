@@ -8,13 +8,14 @@ helpers for reading and writing
 """
 
 import io
-from collections import Counter
-from dataclasses import dataclass, field
 import pathlib
+from collections import Counter
+from dataclasses import field
 from typing import Dict, Iterable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
+from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.log import logger
 from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
@@ -29,7 +30,7 @@ AltlocSite = Tuple[int, AtomKey]
 ConectRecord = Tuple[int, List[int], int]
 
 
-@dataclass(slots=True)
+@compat_dataclass(slots=True)
 class _AtomRecord:
   """Internal representation of a parsed PDB atom record."""
 
@@ -51,7 +52,7 @@ class _AtomRecord:
   atom_key: AtomKey
 
 
-@dataclass(slots=True)
+@compat_dataclass(slots=True)
 class _ModelAccumulator:
   """Mutable builder used while parsing a single PDB model."""
 

@@ -1,6 +1,6 @@
 """Pairwise comparison and alignment functions for Neurosnap structures."""
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -13,7 +13,7 @@ def _matched_backbone_coords(
   mobile: Structure,
   chains1: Optional[Sequence[str]] = None,
   chains2: Optional[Sequence[str]] = None,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
   """Return matched backbone coordinates for two structures.
 
   Matching is done by chain mapping plus residue/atom identity, not by raw

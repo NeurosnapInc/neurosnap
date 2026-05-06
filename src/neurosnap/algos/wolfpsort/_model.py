@@ -6,7 +6,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, Tuple
 
 from neurosnap._compat import compat_dataclass
 
@@ -199,7 +199,7 @@ class ModelData:
     return result
 
 
-def _read_weights(path: Path) -> tuple[List[str], List[float], List[float], int]:
+def _read_weights(path: Path) -> Tuple[List[str], List[float], List[float], int]:
   """Read a WoLF PSORT weights JSON file.
 
   Args:
@@ -212,7 +212,7 @@ def _read_weights(path: Path) -> tuple[List[str], List[float], List[float], int]
   return payload["feature_names"], payload["w1"], payload["w2"], payload["k_max"]
 
 
-def _read_training(path: Path) -> tuple[List[str], List[str], List[str], List[List[float]]]:
+def _read_training(path: Path) -> Tuple[List[str], List[str], List[str], List[List[float]]]:
   """Read the bundled WoLF PSORT training table CSV.
 
   Args:
@@ -237,7 +237,7 @@ def _read_training(path: Path) -> tuple[List[str], List[str], List[str], List[Li
   return feature_names, training_ids, training_classes, matrix
 
 
-def _read_utility(path: Path) -> tuple[List[str], Dict[str, Dict[str, float]]]:
+def _read_utility(path: Path) -> Tuple[List[str], Dict[str, Dict[str, float]]]:
   """Read the class-utility matrix JSON used for cumulative kNN scoring.
 
   Args:

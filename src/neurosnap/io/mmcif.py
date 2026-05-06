@@ -12,7 +12,7 @@ Neurosnap structures directly in an array-oriented form.
 
 import io
 import pathlib
-from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union, Set
 
 import numpy as np
 
@@ -274,7 +274,7 @@ def parse_mmcif(
   model_ids = column("_atom_site.pdbx_PDB_model_num", default="1")
   charges = column("_atom_site.pdbx_formal_charge", default="0")
 
-  altloc_sites: set[tuple[int, tuple[str, int, str, str, bool, str]]] = set()
+  altloc_sites: Set[Tuple[int, Tuple[str, int, str, str, bool, str]]] = set()
   model_order: List[int] = []
   model_builders: Dict[int, Dict[str, object]] = {}
   implicit_residue_state: Dict[int, Dict[str, object]] = {}

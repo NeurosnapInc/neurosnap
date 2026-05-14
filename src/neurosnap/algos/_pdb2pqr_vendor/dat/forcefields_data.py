@@ -4,6 +4,7 @@
 # Keep values identical; only the on-disk representation has changed.
 
 FORCEFIELD_DATA = {
+  # Upstream PDB2PQR historically describes this built-in table as AMBER 94.
   "amber": {
     "atoms": {
       "ALA": {
@@ -2508,6 +2509,7 @@ FORCEFIELD_DATA = {
       },
     ],
   },
+  # Upstream PDB2PQR historically describes this built-in table as CHARMM 27.
   "charmm": {
     "atoms": {
       "ALA": {

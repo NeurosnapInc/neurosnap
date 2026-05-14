@@ -1,9 +1,4 @@
-"""Configuration information for PDB2PQR."""
-
-from ._version import __version__
-
-#: PDB2PQR version number.
-VERSION = __version__
+"""Configuration information for vendored PDB2PQR internals."""
 
 
 #: Options for PROPKA that PDB2PQR cannot handle
@@ -18,9 +13,6 @@ IGNORED_PROPKA_OPTIONS = {
     "keep_protons": False,
     "protonate_all": False,
 }
-
-#: How to format PDB2PQR title in output
-TITLE_STR = f"PDB2PQR v{VERSION}: biomolecular structure conversion software."
 
 #: Citation strings for PDB2PQR
 CITATIONS = [

@@ -72,6 +72,61 @@ def assign_pqr(
 
   Returns:
     A new :class:`Structure` carrying PDB2PQR geometry updates and annotations.
+
+  Example:
+    Basic structure-first PQR assignment and writing::
+
+      from neurosnap.io.pdb import parse_pdb
+      from neurosnap.algos.pdb2pqr import assign_pqr
+      from neurosnap.io.pqr import save_pqr
+
+      structure = parse_pdb(
+        "tests/files/1nkp_mycmax_with_hydrogens.pdb",
+        return_type="ensemble",
+      ).first()
+
+      pqr_structure = assign_pqr(
+        structure,
+        forcefield="AMBER",
+        assign_only=True,
+      )
+
+      print(pqr_structure.atom_annotations.dtype.names)
+      print(pqr_structure.atom_annotations["partial_charge"][:5])
+      print(pqr_structure.atom_annotations["radius"][:5])
+
+      save_pqr(pqr_structure, "test_output.pqr", include_header=True)
+
+    Quick smoke test on a standard PDB file::
+
+      from neurosnap.io.pdb import parse_pdb
+      from neurosnap.algos.pdb2pqr import assign_pqr
+
+      s = parse_pdb("tests/files/1BTL.pdb", return_type="ensemble").first()
+      out = assign_pqr(s, forcefield="AMBER", assign_only=True)
+      print(
+        "partial_charge" in out.atom_annotations.dtype.names,
+        "radius" in out.atom_annotations.dtype.names,
+      )
+
+    Inspect any automatic remediations or charge warnings::
+
+      from neurosnap.io.pdb import parse_pdb
+      from neurosnap.algos.pdb2pqr import assign_pqr
+      from neurosnap.io.pqr import save_pqr
+
+      structure = parse_pdb(
+        "tests/files/1nkp_mycmax_with_hydrogens.pdb",
+        return_type="ensemble",
+      ).first()
+      pqr_structure = assign_pqr(structure, forcefield="AMBER", assign_only=True)
+
+      print(pqr_structure.metadata.get("pdb2pqr_remediations"))
+      print(pqr_structure.metadata.get("pdb2pqr_charge_warning"))
+      print("partial_charge" in pqr_structure.atom_annotations.dtype.names)
+      print("radius" in pqr_structure.atom_annotations.dtype.names)
+
+      save_pqr(pqr_structure, "test_output.pqr", include_header=True)
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"assign_pqr() expects a Structure, found {type(structure).__name__}.")
@@ -124,6 +179,9 @@ def _run_vendor_pdb2pqr(
   effective_debump: bool,
   effective_optimize: bool,
 ) -> Tuple[Sequence[Any], str, Dict[str, Any]]:
+  # These metadata entries expose automatic behavior that would otherwise be
+  # hard for callers to see, especially when assign_only falls back to a full
+  # rebuild or when input hydrogens are stripped before parameter assignment.
   metadata_updates: Dict[str, Any] = {"pdb2pqr_remediations": []}
   working_structure = structure
 
@@ -266,6 +324,8 @@ def _run_vendor_pdb2pqr_once(
     ],
   }
   if total_charge_error:
+    # Preserve the warning text in metadata so callers can surface it in logs,
+    # UIs, or downstream provenance without parsing logger output.
     metadata_updates["pdb2pqr_charge_warning"] = total_charge_error
   if ffout_name is not None:
     metadata_updates["pdb2pqr_ffout"] = ffout_name.upper()

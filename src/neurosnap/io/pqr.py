@@ -25,6 +25,17 @@ def save_pqr(
     pqr: Output filepath or open file handle.
     include_header: Whether to include the stored ``pdb2pqr_header`` metadata when present.
     keep_chain: Whether to include chain IDs in the written PQR records.
+
+  Example:
+    Save a structure returned by :func:`neurosnap.algos.pdb2pqr.assign_pqr`::
+
+      from neurosnap.io.pdb import parse_pdb
+      from neurosnap.algos.pdb2pqr import assign_pqr
+      from neurosnap.io.pqr import save_pqr
+
+      structure = parse_pdb("tests/files/1BTL.pdb", return_type="ensemble").first()
+      pqr_structure = assign_pqr(structure, forcefield="AMBER", assign_only=True)
+      save_pqr(pqr_structure, "test_output.pqr", include_header=True)
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"save_pqr() expects a Structure, found {type(structure).__name__}.")

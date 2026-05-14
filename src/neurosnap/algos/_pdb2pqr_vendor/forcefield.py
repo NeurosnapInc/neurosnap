@@ -9,155 +9,54 @@ forcefield is considered a chain of residues of atoms.
 
 import logging
 import re
-from xml import sax
 
-from . import io
+from .dat.forcefields_data import FORCEFIELD_DATA
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class ForcefieldHandler(sax.ContentHandler):
-    """Process XML-format force field parameter files."""
+def _update_map(toname, fromname, map_):
+    """Add a new map entry pointing at an existing residue or atom definition."""
+    fromobj = map_[fromname]
+    if isinstance(fromobj, ForcefieldResidue):
+        if toname not in map_:
+            map_[toname] = ForcefieldResidue(fromname)
+        for atomname in fromobj.atoms:
+            map_[toname].atoms[atomname] = fromobj.atoms[atomname]
+    elif isinstance(fromobj, ForcefieldAtom):
+        map_[toname] = fromobj
 
-    def __init__(self, map_, reference):
-        """Initialize handler
 
-        :param map_:  dictionary of paramaeter information
-        :type map_:  dict
-        :param reference:  reference map for force field
-        :type reference:  dict
-        """
-        self.oldresname = None
-        self.oldatomname = None
-        self.curelement = None
-        self.newatomname = None
-        self.newresname = None
-        self.atommap = {}
-        self.map = map_
-        self.reference = reference
+def _find_matching_names(regname, map_):
+    """Find map keys that match a regular-expression rule."""
+    compiled = re.compile(f"{regname}$")
+    return [match for name in map_ if (match := compiled.match(name))]
 
-    @classmethod
-    def update_map(cls, toname, fromname, map_):
-        """Update the given map by adding a pointer from a new name to an object.
 
-        .. todo:: Should this be a staticmethod instead of classmethod?
-
-        :param toname:  the new name for the object
-        :type toname:  str
-        :param fromname:  the old name for the object
-        :type fromname:  str
-        :param map_:  a dictionary of forcefield-related items
-        :type map_: dict
-        """
-        fromobj = map_[fromname]
-        if isinstance(fromobj, ForcefieldResidue):
-            if toname not in map_:
-                newres = ForcefieldResidue(fromname)
-                map_[toname] = newres
-            for atomname in fromobj.atoms:
-                map_[toname].atoms[atomname] = fromobj.atoms[atomname]
-        elif isinstance(fromobj, ForcefieldAtom):
-            map_[toname] = fromobj
-
-    @classmethod
-    def find_matching_names(cls, regname, map_):
-        """Find strings in the map that match the given regular expression.
-
-        .. todo:: Should this be a staticmethod instead of classmethod?
-
-        :param regname: the regular expression to search for in the map
-        :type regname:  str
-        :param map_:  the dictionary to search
-        :type map_: dict
-        :return:  a list of regular expression match objects for dictionary
-            keys that match the regular expression.
-        :rtype:  [re.Match]
-        """
-        name_list = []
-        regname += "$"
-        # Find the existing items that match this string
-        for name in map_:
-            regexp = re.compile(regname).match(name)
-            if regexp:
-                name_list.append(regexp)
-        return name_list
-
-    def startElement(self, name, _):
-        """Start XML element parsing.
-
-        :param name:  element name
-        :type name:  str
-        """
-        if name != "name":
-            self.curelement = name
-
-    def endElement(self, name):
-        """End XML element parsing.
-
-        :param name:  the name of the element
-        :type name:  str
-        """
-        if name == "residue":
-            if self.oldresname is not None:  # Make a new residue hook
-                newreslist = self.find_matching_names(
-                    self.newresname, self.reference
-                )
-                # Multiple new residues
-                if self.oldresname.find("$group") >= 0:
-                    for resitem in newreslist:
-                        resname = resitem.string
-                        group = resitem.group(1)
-                        fromname = self.oldresname.replace("$group", group)
-                        if fromname in self.map:
-                            self.update_map(resname, fromname, self.map)
-                else:  # Work with a single new residue name
-                    _ = self.find_matching_names(self.oldresname, self.map)
-                    for resitem in newreslist:
-                        resname = resitem.string
-                        self.update_map(resname, self.oldresname, self.map)
-            # If this was only a residue conversion, exit
-            if self.atommap == {}:
-                self.oldresname = None
-                self.newresname = None
-                return None
-            # Apply atom conversions for all appropriate residues
-            resmatchlist = self.find_matching_names(self.newresname, self.map)
-            for resitem in resmatchlist:
-                residue = self.map[resitem.string]
-                for newname in self.atommap:
-                    oldname = self.atommap[newname]
-                    if oldname not in residue.atoms:
-                        continue
-                    self.update_map(newname, oldname, residue.atoms)
-            # Clean up
-            self.oldresname = None
-            self.newresname = None
-            self.atommap = {}
-        elif name == "atom":
-            self.atommap[self.newatomname] = self.oldatomname
-            self.oldatomname = None
-            self.newatomname = None
-        else:  # Just free the current element namespace
-            self.curelement = ""
-        return self.map
-
-    def characters(self, text):
-        """Parse text information within XML tag.
-
-        :param text:  the text value between the XML tags
-        :type test:  str
-        """
-        if text.isspace():
-            return
-        text = str(text)
-        if self.curelement == "residue":
-            self.newresname = text
-        elif self.curelement == "atom":
-            self.newatomname = text
-        elif self.curelement == "useatomname":
-            self.oldatomname = text
-        elif self.curelement == "useresname":
-            self.oldresname = text
+def _apply_name_rules(map_, reference, rules):
+    """Apply residue and atom renaming rules from Python-native forcefield data."""
+    for rule in rules:
+        oldresname = rule.get("useresname")
+        newresname = rule.get("name")
+        atom_rules = {entry["name"]: entry["useatomname"] for entry in rule.get("atom_map", [])}
+        if oldresname is not None:
+            newreslist = _find_matching_names(newresname, reference)
+            if "$group" in oldresname:
+                for resitem in newreslist:
+                    fromname = oldresname.replace("$group", resitem.group(1))
+                    if fromname in map_:
+                        _update_map(resitem.string, fromname, map_)
+            else:
+                for resitem in newreslist:
+                    if oldresname in map_:
+                        _update_map(resitem.string, oldresname, map_)
+        if not atom_rules:
+            continue
+        for resitem in _find_matching_names(newresname, map_):
+            residue = map_[resitem.string]
+            for new_atom_name, old_atom_name in atom_rules.items():
+                if old_atom_name in residue.atoms:
+                    _update_map(new_atom_name, old_atom_name, residue.atoms)
 
 
 class Forcefield:
@@ -192,58 +91,31 @@ class Forcefield:
         """
         self.map = {}
         self.name = str(ff_name)
-        defpath = ""
-        defpath = io.test_dat_file(ff_name) if userff is None else userff
-        with open(defpath, encoding="utf-8") as ff_file:
-            lines = ff_file.readlines()
-            for line in lines:
-                if not line.startswith("#"):
-                    fields = line.split()
-                    if fields == []:
-                        continue
-                    try:
-                        resname = fields[0]
-                        atomname = fields[1]
-                        charge = float(fields[2])
-                        radius = float(fields[3])
-                    except ValueError:
-                        txt = (
-                            "Unable to recognize user-defined forcefield file"
-                        )
-                        txt += f" {defpath}!" if defpath != "" else "!"
-                        txt += " Please use a valid parameter file."
-                        raise ValueError(txt)
-                    try:
-                        group = fields[4]
-                        atom = ForcefieldAtom(
-                            atomname, charge, radius, resname, group
-                        )
-                    except IndexError:
-                        atom = ForcefieldAtom(
-                            atomname, charge, radius, resname
-                        )
-
-                    my_residue = self.get_residue(resname)
-                    if my_residue is None:
-                        my_residue = ForcefieldResidue(resname)
-                        self.map[resname] = my_residue
-                    my_residue.add_atom(atom)
-        # Now parse the XML file, associating with FF objects -
-        # This is not necessary (if canonical names match ff names)
+        if userff is not None or usernames is not None:
+            raise NotImplementedError("External forcefield files are not supported in the self-contained Neurosnap PDB2PQR build.")
         try:
-            defpath = io.test_names_file(ff_name)
-        except FileNotFoundError:
-            defpath = None
-        if usernames:
-            names_path = usernames
-        elif defpath:
-            names_path = defpath
-        else:
-            raise ValueError("Unable to identify .names file.")
-        handler = ForcefieldHandler(self.map, definition.map)
-        sax.make_parser()
-        with open(names_path, encoding="utf-8") as namesfile:
-            sax.parseString(namesfile.read(), handler)
+            forcefield_data = FORCEFIELD_DATA[self.name.lower()]
+        except KeyError as exc:
+            raise ValueError(f"Unable to identify forcefield data for {ff_name!r}.") from exc
+        self._load_atoms(forcefield_data["atoms"])
+        _apply_name_rules(self.map, definition.map, forcefield_data["names"])
+
+    def _load_atoms(self, atom_data):
+        for resname, atoms in atom_data.items():
+            residue = self.get_residue(resname)
+            if residue is None:
+                residue = ForcefieldResidue(resname)
+                self.map[resname] = residue
+            for atomname, atom_data_entry in atoms.items():
+                residue.add_atom(
+                    ForcefieldAtom(
+                        atomname,
+                        atom_data_entry["charge"],
+                        atom_data_entry["radius"],
+                        atom_data_entry["resname"],
+                        atom_data_entry.get("group", ""),
+                    )
+                )
 
     def has_residue(self, resname):
         """Check if the residue name is in the map or not.

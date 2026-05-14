@@ -5,22 +5,16 @@ from __future__ import annotations
 import io
 import logging
 from collections import Counter
-from pathlib import Path
 
 from . import definitions as defns
 from . import pdb
 from .config import (
-  AA_DEF_PATH,
   FILTER_WARNINGS,
   FILTER_WARNINGS_LIMIT,
-  FORCE_FIELDS,
-  NA_DEF_PATH,
-  PATCH_DEF_PATH,
   TITLE_STR,
 )
 
 _LOGGER = logging.getLogger(__name__)
-_DATA_DIR = Path(__file__).with_name("dat")
 
 
 class DuplicateFilter(logging.Filter):
@@ -167,60 +161,6 @@ def print_pqr_header(
       lines.append(old_header)
 
   return "\n".join(lines) + "\n"
-
-
-def _test_for_file(name: str, suffix: str) -> Path:
-  candidate = Path(name)
-  if candidate.is_file():
-    return candidate
-
-  normalized_suffix = suffix.lower()
-  basename = candidate.name
-  stem = candidate.stem if candidate.suffix else candidate.name
-  trial_names = [basename]
-  if not basename.lower().endswith(f".{normalized_suffix}"):
-    trial_names.append(f"{basename}.{normalized_suffix}")
-  if stem.lower() != basename.lower():
-    trial_names.append(stem)
-    if not stem.lower().endswith(f".{normalized_suffix}"):
-      trial_names.append(f"{stem}.{normalized_suffix}")
-
-  if suffix == "DAT" and stem.lower() in FORCE_FIELDS:
-    trial_names.insert(0, f"{stem.upper()}.DAT")
-  if suffix == "NAMES" and stem.lower() in FORCE_FIELDS:
-    trial_names.insert(0, f"{stem.upper()}.names")
-
-  for trial_name in dict.fromkeys(trial_names):
-    path = _DATA_DIR / trial_name
-    if path.is_file():
-      return path
-
-  raise FileNotFoundError(f"Unable to locate vendored PDB2PQR data file '{name}'.")
-
-
-def test_dat_file(name: str) -> Path:
-  """Resolve a vendored DAT, XML, or hydrogen-definition file."""
-  if str(name).lower().endswith(".xml"):
-    return _test_for_file(name, "xml")
-  return _test_for_file(name, "DAT")
-
-
-def test_names_file(name: str) -> Path:
-  """Resolve a vendored forcefield names file."""
-  return _test_for_file(name, "NAMES")
-
-
-def test_xml_file(name: str) -> Path:
-  """Resolve a vendored XML topology file."""
-  return _test_for_file(name, "xml")
-
-
-def get_definitions(aa_path: str = AA_DEF_PATH, na_path: str = NA_DEF_PATH, patch_path: str = PATCH_DEF_PATH):
-  """Load vendored topology definition files."""
-  aa_path_ = test_xml_file(aa_path)
-  na_path_ = test_xml_file(na_path)
-  patch_path_ = test_xml_file(patch_path)
-  with open(aa_path_, encoding="utf-8") as aa_file, open(na_path_, encoding="utf-8") as na_file, open(
-    patch_path_, encoding="utf-8"
-  ) as patch_file:
-    return defns.Definition(aa_file=aa_file, na_file=na_file, patch_file=patch_file)
+def get_definitions():
+  """Load vendored topology definitions from Python-native data tables."""
+  return defns.Definition()

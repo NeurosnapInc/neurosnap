@@ -125,21 +125,6 @@ FILTER_WARNINGS = [
 #: Number of times warning string is printed before supressing further output
 FILTER_WARNINGS_LIMIT = 10
 
-#: Expected location for topology definition file
-TOPOLOGY_DEF_PATH = "TOPOLOGY.xml"
-
-#: Expected location for amino acid topology definition file
-AA_DEF_PATH = "AA.xml"
-
-#: Expected location for nucleic acid topology definition file
-NA_DEF_PATH = "NA.xml"
-
-#: Expected location for hydrogens topology definition file
-HYD_DEF_PATH = "HYDROGENS.xml"
-
-#: Expected location for topology patch definition file
-PATCH_DEF_PATH = "PATCHES.xml"
-
 #: Number of angle steps to scan when debumping
 DEBUMP_ANGLE_STEPS = 72
 

@@ -1,4 +1,4 @@
-"""XML handling for biomolecular residue topology definitions.
+"""Python-native biomolecular residue topology definitions.
 
 .. codeauthor::  Jens Erik Nielsen
 .. codeauthor::  Todd Dolinsky
@@ -6,123 +6,10 @@
 """
 
 import copy
-import logging
 import re
-from xml import sax
 
 from . import residue, structures
-
-_LOGGER = logging.getLogger(__name__)
-
-
-class DefinitionHandler(sax.ContentHandler):
-    """Handle definition XML file content."""
-
-    def __init__(self):
-        self.curelement = ""
-        self.curatom = None
-        self.curholder = None
-        self.curobj = None
-        self.map = {}
-        self.patches = []
-        self.content = ""
-
-    def startElement(self, name, _):
-        """Start XML element parsing.
-
-        :param name:  element name
-        :type name:  str
-        """
-        if name == "residue":
-            obj = DefinitionResidue()
-            self.curholder = obj
-            self.curobj = obj
-        elif name == "patch":
-            obj = Patch()
-            self.curholder = obj
-            self.curobj = obj
-        elif name == "atom":
-            obj = DefinitionAtom()
-            self.curatom = obj
-            self.curobj = obj
-        else:
-            self.curelement = name
-
-    def endElement(self, name):
-        """End XML element parsing.
-
-        :param name:  element name
-        :type name:  str
-        :raises KeyError:  for invalid atom or residue names
-        :raises RuntimeError:  for unexpected XML features or format
-        """
-        if name == "residue":  # Complete Residue object
-            residue_ = self.curholder
-            if not isinstance(residue_, DefinitionResidue):
-                raise RuntimeError("Internal error parsing XML!")
-            resname = residue_.name
-            if resname == "":
-                raise KeyError("Residue name not set in XML!")
-            else:
-                self.map[resname] = residue_
-                self.curholder = None
-                self.curobj = None
-        elif name == "patch":  # Complete patch object
-            patch = self.curholder
-            if not isinstance(patch, Patch):
-                raise RuntimeError("Internal error parsing XML!")
-            patchname = patch.name
-            if patchname == "":
-                raise KeyError("Residue name not set in XML!")
-            else:
-                self.patches.append(patch)
-                self.curholder = None
-                self.curobj = None
-        elif name == "atom":  # Complete atom object
-            atom = self.curatom
-            if not isinstance(atom, DefinitionAtom):
-                raise RuntimeError("Internal error parsing XML!")
-            atomname = atom.name
-            if atomname == "":
-                raise KeyError("Atom name not set in XML!")
-            else:
-                self.curholder.map[atomname] = atom
-                self.curatom = None
-                self.curobj = self.curholder
-        elif (self.curobj is not None) and (self.content.strip() != ""):
-            self.content = self.content.strip()
-            _LOGGER.debug(
-                f"Got text for {self.curholder.name} <{name}>: {self.content}"
-            )
-            if name == "bond":
-                self.curobj.bonds.append(self.content)
-            elif name == "dihedral":
-                self.curobj.dihedrals.append(self.content)
-            elif name == "altname":
-                self.curholder.altnames[self.content] = self.curatom.name
-            elif name == "remove":
-                self.curobj.remove.append(self.content)
-            elif name == "name":
-                self.curobj.name = self.content
-            elif self.curelement != "":
-                try:
-                    self.content = float(self.content)
-                except ValueError:
-                    pass
-                setattr(self.curobj, self.curelement, self.content)
-
-        self.content = ""
-        self.curelement = ""
-
-        return self.map
-
-    def characters(self, text):
-        """Parse text data in XML.
-
-        :param text:  text data to parse
-        :type text:  str
-        """
-        self.content += text
+from .dat.definitions_data import DEFINITION_DATA
 
 
 class Definition:
@@ -132,28 +19,20 @@ class Definition:
     and several mappings for easy access to the information.
     """
 
-    def __init__(self, aa_file, na_file, patch_file):
-        """Initialize object.
-
-        :param aa_file:  file-like object with amino acid definitions
-        :type aa_file:  file
-        :param na_file:  file-like object with nucleic acid definitions
-        :type na_file:  file
-        :param patch_file:  file-like object with patch definitions
-        :type patch_file:  file
-        """
+    def __init__(self, aa_data=None, na_data=None, patch_data=None):
+        """Initialize object from Python-native definition data."""
         self.map = {}
         self.patches = {}
-        handler = DefinitionHandler()
-        sax.make_parser()
-        for def_file in [aa_file, na_file]:
-            sax.parseString(def_file.read(), handler)
-            self.map.update(handler.map)
-        handler.map = {}
-        sax.parseString(patch_file.read(), handler)
+        aa_data = DEFINITION_DATA["aa"] if aa_data is None else aa_data
+        na_data = DEFINITION_DATA["na"] if na_data is None else na_data
+        patch_data = DEFINITION_DATA["patches"] if patch_data is None else patch_data
+        for definition_map in (aa_data, na_data):
+            for residue_name, residue_data in definition_map.items():
+                self.map[residue_name] = _build_definition_residue(residue_data)
         # Apply specific patches to the reference object, allowing users
         # to specify protonation states in the PDB file
-        for patch in handler.patches:
+        for patch_data_entry in patch_data:
+            patch = _build_patch(patch_data_entry)
             if patch.newname != "":
                 # Find all residues matching applyto
                 resnames = list(self.map.keys())
@@ -329,3 +208,37 @@ class DefinitionAtom(structures.Atom):
         :rtype:  bool
         """
         return self.name in structures.BACKBONE
+
+
+def _build_definition_residue(data):
+    residue_obj = DefinitionResidue()
+    residue_obj.name = data["name"]
+    residue_obj.dihedrals = list(data.get("dihedrals", []))
+    residue_obj.altnames = dict(data.get("altnames", {}))
+    for atom_name, atom_data in data.get("atoms", {}).items():
+        residue_obj.map[atom_name] = _build_definition_atom(atom_data)
+    return residue_obj
+
+
+def _build_patch(data):
+    patch_obj = Patch()
+    patch_obj.name = data.get("name", "")
+    patch_obj.applyto = data.get("applyto", "")
+    patch_obj.newname = data.get("newname", "")
+    patch_obj.remove = list(data.get("remove", []))
+    patch_obj.altnames = dict(data.get("altnames", {}))
+    patch_obj.dihedrals = list(data.get("dihedrals", []))
+    for atom_name, atom_data in data.get("atoms", {}).items():
+        patch_obj.map[atom_name] = _build_definition_atom(atom_data)
+    return patch_obj
+
+
+def _build_definition_atom(data):
+    atom = DefinitionAtom(
+        name=data.get("name", ""),
+        x=float(data.get("x", 0.0)),
+        y=float(data.get("y", 0.0)),
+        z=float(data.get("z", 0.0)),
+    )
+    atom.bonds = list(data.get("bonds", []))
+    return atom

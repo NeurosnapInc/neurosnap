@@ -1,10 +1,8 @@
 """Topology-related classes for hydrogen optimization."""
 
 import logging
-from xml import sax
 
 from .. import aa
-from .. import definitions as defns
 from .. import utilities as util
 from ..config import ANGLE_CUTOFF, DIST_CUTOFF
 from . import io, optimize
@@ -1111,7 +1109,7 @@ class Carboxylic(optimize.Optimize):
         if len(hydatom.name) == 4:
             hname = hydatom.name[:-1]
             residue.rename_atom(hydatom.name, hname)
-        # PATCHES.xml expects *2 - if it's *1 that left, flip names
+        # Terminal patch naming expects *2; if *1 remains, flip names.
         if len(self.atomlist) == 2:
             if hydatom.name.endswith("1"):
                 residue.rename_atom(hydatom.name, f"{hydatom.name[:-1]}2")
@@ -1295,78 +1293,8 @@ class HydrogenAmbiguity:
         return text
 
 
-class HydrogenHandler(sax.ContentHandler):
-    """Extends the SAX XML Parser to parse the Hydrogens.xml class."""
+class HydrogenHandler:
+    """Container for hydrogen optimization-holder definitions."""
 
     def __init__(self):
-        self.curelement = ""
-        self.curatom = None
-        self.curobj = None
-        self.curholder = None
         self.map = {}
-
-    def startElement(self, name, _):
-        """Create optimization holder objects or atoms.
-
-        .. todo::
-           Rename this and related methods to conform with PEP8
-
-        :param name:  name for element
-        :type name:  str
-        """
-        if name == "class":
-            obj = optimize.OptimizationHolder()
-            self.curholder = obj
-            self.curobj = obj
-        elif name == "atom":
-            obj = defns.DefinitionAtom()
-            self.curatom = obj
-            self.curobj = obj
-        else:
-            self.curelement = name
-
-    def endElement(self, name):
-        """Complete object is passed in by name parameter.
-
-        .. todo::
-           Rename this and related methods to conform with PEP8
-
-        :param name:  name for element
-        :type name:  str
-        """
-        if name == "class":  # Complete Residue object
-            obj = self.curholder
-            if not isinstance(obj, optimize.OptimizationHolder):
-                raise ValueError("Internal error parsing XML!")
-            self.map[obj.name] = obj
-            self.curholder = None
-            self.curobj = None
-        elif name == "atom":  # Complete atom object
-            atom = self.curatom
-            if not isinstance(atom, defns.DefinitionAtom):
-                raise ValueError("Internal error parsing XML!")
-            atomname = atom.name
-            if atomname == "":
-                raise ValueError("Atom name not set in XML!")
-            else:
-                self.curholder.map[atomname] = atom
-                self.curatom = None
-                self.curobj = self.curholder
-        else:  # Just free the current element namespace
-            self.curelement = ""
-        return self.map
-
-    def characters(self, text):
-        """Set a given attribute of the object to the text.
-
-        :param text:  value of the attribute
-        :type text:  str
-        """
-        if text.isspace():
-            return
-        # If this is a float, make it so
-        try:
-            value = float(str(text))
-        except ValueError:
-            value = str(text)
-        setattr(self.curobj, self.curelement, value)

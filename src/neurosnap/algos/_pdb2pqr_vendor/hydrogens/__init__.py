@@ -13,13 +13,12 @@ This is an module for hydrogen optimization routines.
 
 __author__ = "Todd Dolinsky, Jens Erik Nielsen, Yong Huang, Nathan Baker"
 import logging
-from xml import sax
 
 from .. import aa, cells, io
 from .. import definitions as defns
 from .. import quatfit as quat
 from .. import utilities as util
-from ..config import HYD_DEF_PATH
+from ..dat.hydrogens_data import HYDROGEN_DATA
 from . import structures
 from .structures import (
     HydrogenConformation,
@@ -64,19 +63,24 @@ TITRATION_DICT = {
 }
 
 
-def create_handler(hyd_path=HYD_DEF_PATH):
-    """Create and populate a hydrogen handler.
-
-    :param hyd_def_file:  path to hydrogen definition file
-    :type hyd_def_file:  string or pathlib.Path object
-    :return: HydrogenHandler object
-    :rtype: HydrogenHandler
-    """
+def create_handler(hyd_path=None):
+    """Create and populate a hydrogen handler from native vendored data."""
     handler = HydrogenHandler()
-    hyd_path = io.test_dat_file(hyd_path)
-    with open(hyd_path) as hyd_file:
-        sax.make_parser()
-        sax.parseString(hyd_file.read(), handler)
+    if hyd_path is not None:
+        raise NotImplementedError("External hydrogen-definition files are not supported in the self-contained Neurosnap PDB2PQR build.")
+    for class_name, class_data in HYDROGEN_DATA.items():
+        holder = optimize.OptimizationHolder()
+        holder.name = class_data["name"]
+        holder.opttype = class_data["opttype"]
+        holder.optangle = class_data["optangle"]
+        for atom_data in class_data.get("atoms", []):
+            atom = defns.DefinitionAtom()
+            atom.name = atom_data.get("name", "")
+            bond = atom_data.get("bond")
+            if bond:
+                atom.bonds.append(bond)
+            holder.map[atom.name] = atom
+        handler.map[class_name] = holder
     return handler
 
 
@@ -314,7 +318,7 @@ class HydrogenRoutines:
         return optinstance
 
     def set_optimizeable_hydrogens(self):
-        """Set any hydrogen listed in HYDROGENS.xml that is optimizeable.
+        """Set any hydrogen listed in the vendored hydrogen table that is optimizeable.
 
         Used BEFORE hydrogen optimization to label atoms so that they won't be
         debumped - i.e. if SER HG is too close to another atom, don't debump
@@ -608,7 +612,7 @@ class HydrogenRoutines:
         ntrmap = {}
         hmap = {}
         nonhmap = {}
-        # reference map from TOPOLOGY.xml
+        # Reference map from the vendored topology table.
         for res_ in topo.residues:
             refmap[res_.name] = res_.reference
             for atom in refmap[res_.name].atoms:

@@ -6,12 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from neurosnap.io import mmcif as mmcif_module
 from neurosnap.io.mmcif import save_cif
 from neurosnap.io.pdb import parse_pdb, save_pdb
 from neurosnap.io.sdf import parse_sdf, save_sdf
 from neurosnap.structure import StructureEnsemble, StructureStack, extract_non_biopolymers, fix_nucleic_termini
 
-from tests._structure_test_utils import FILES as TEST_FILES, PDB_NO_H, make_structure, parse_single_model
+from tests._structure_test_utils import FILES as TEST_FILES, MIXED_BACKBONE_ATOMS, PDB_NO_H, make_structure, parse_single_model
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -60,6 +61,41 @@ def test_save_and_reload_mmcif(tmp_path):
   reloaded = parse_single_model(output_cif)
   assert len(reloaded) == len(structure)
   assert [chain.chain_id for chain in reloaded.chains()] == [chain.chain_id for chain in structure.chains()]
+
+
+def test_save_cif_writes_full_entity_metadata_by_default():
+  structure = make_structure(MIXED_BACKBONE_ATOMS)
+  cif_buffer = io.StringIO()
+
+  save_cif(structure, cif_buffer)
+
+  mmcif_dict = mmcif_module._parse_mmcif_dict(cif_buffer.getvalue())
+  assert mmcif_dict["_entity.id"] == ["1", "2"]
+  assert mmcif_dict["_entity.type"] == ["polymer", "polymer"]
+  assert mmcif_dict["_entity_poly.entity_id"] == ["1", "2"]
+  assert mmcif_dict["_entity_poly.type"] == ["polypeptide(L)", "polydeoxyribonucleotide"]
+  assert mmcif_dict["_struct_asym.id"] == ["A", "B"]
+  assert mmcif_dict["_struct_asym.entity_id"] == ["1", "2"]
+  assert set(mmcif_dict["_atom_site.label_entity_id"]) == {"1", "2"}
+  assert set(mmcif_dict["_atom_site.label_asym_id"]) == {"A", "B"}
+  assert mmcif_dict["_entity_poly_seq.entity_id"] == ["1", "1", "2"]
+  assert mmcif_dict["_entity_poly_seq.num"] == ["1", "2", "1"]
+  assert mmcif_dict["_entity_poly_seq.mon_id"] == ["ALA", "GLY", "DA"]
+
+
+def test_save_cif_minimal_preserves_compact_output():
+  structure = make_structure(MIXED_BACKBONE_ATOMS)
+  cif_buffer = io.StringIO()
+
+  save_cif(structure, cif_buffer, minimal=True)
+
+  mmcif_dict = mmcif_module._parse_mmcif_dict(cif_buffer.getvalue())
+  assert "_entity.id" not in mmcif_dict
+  assert "_entity_poly.entity_id" not in mmcif_dict
+  assert "_entity_poly_seq.entity_id" not in mmcif_dict
+  assert "_struct_asym.id" not in mmcif_dict
+  assert set(mmcif_dict["_atom_site.label_entity_id"]) == {"1", "2"}
+  assert set(mmcif_dict["_atom_site.label_asym_id"]) == {"A", "B"}
 
 
 def _ligand_structure():

@@ -17,7 +17,7 @@ from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union, Set
 import numpy as np
 
 from neurosnap.log import logger
-from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
+from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack, _classify_polymer_residue
 
 __all__ = ["parse_mmcif", "save_cif"]
 
@@ -459,62 +459,63 @@ def parse_mmcif(
     return ensemble
 
 
-def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif: Union[str, pathlib.Path, io.IOBase]):
+def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif: Union[str, pathlib.Path, io.IOBase], minimal: bool = False):
   """Save a Neurosnap structure container as an mmCIF file.
 
   Parameters:
     structure: Structure container to write.
     cif: Output filepath or open file handle.
+    minimal: If ``True``, emit the legacy compact atom-site-only mmCIF output.
+      If ``False`` (default), include entity/polymer/subchain metadata for
+      broader downstream parser compatibility.
 
   Notes:
-    The writer emits a compact ``_atom_site`` loop that round-trips through
-    :func:`parse_mmcif`. Multi-model outputs are represented using the
-    ``_atom_site.pdbx_PDB_model_num`` column. This initial writer does not yet
-    export bond tables such as ``_struct_conn``.
+    Multi-model outputs are represented using the
+    ``_atom_site.pdbx_PDB_model_num`` column. The writer does not yet export
+    bond tables such as ``_struct_conn``.
   """
   models = _models_for_cif_output(structure)
   if not models:
     raise ValueError("No models are available for mmCIF output.")
 
-  lines = [
-    "data_neurosnap",
-    "#",
-    "loop_",
-    "_atom_site.group_PDB",
-    "_atom_site.id",
-    "_atom_site.type_symbol",
-    "_atom_site.label_atom_id",
-    "_atom_site.label_alt_id",
-    "_atom_site.label_comp_id",
-    "_atom_site.label_seq_id",
-    "_atom_site.auth_seq_id",
-    "_atom_site.pdbx_PDB_ins_code",
-    "_atom_site.label_asym_id",
-    "_atom_site.Cartn_x",
-    "_atom_site.Cartn_y",
-    "_atom_site.Cartn_z",
-    "_atom_site.occupancy",
-    "_atom_site.label_entity_id",
-    "_atom_site.auth_asym_id",
-    "_atom_site.auth_comp_id",
-    "_atom_site.B_iso_or_equiv",
-    "_atom_site.pdbx_PDB_model_num",
-    "_atom_site.pdbx_formal_charge",
-  ]
+  chain_metadata = _build_cif_chain_metadata(models)
+  lines = ["data_neurosnap", "#"]
 
-  entity_ids: Dict[str, int] = {}
-  next_entity_id = 1
-  for _model_id, model in models:
-    for chain_id in model.atom_annotations["chain_id"]:
-      chain_id = str(chain_id)
-      if chain_id not in entity_ids:
-        entity_ids[chain_id] = next_entity_id
-        next_entity_id += 1
+  if not minimal:
+    _append_cif_entity_metadata(lines, chain_metadata)
+
+  lines.extend(
+    [
+      "loop_",
+      "_atom_site.group_PDB",
+      "_atom_site.id",
+      "_atom_site.type_symbol",
+      "_atom_site.label_atom_id",
+      "_atom_site.label_alt_id",
+      "_atom_site.label_comp_id",
+      "_atom_site.label_seq_id",
+      "_atom_site.auth_seq_id",
+      "_atom_site.pdbx_PDB_ins_code",
+      "_atom_site.label_asym_id",
+      "_atom_site.Cartn_x",
+      "_atom_site.Cartn_y",
+      "_atom_site.Cartn_z",
+      "_atom_site.occupancy",
+      "_atom_site.label_entity_id",
+      "_atom_site.auth_asym_id",
+      "_atom_site.auth_comp_id",
+      "_atom_site.B_iso_or_equiv",
+      "_atom_site.pdbx_PDB_model_num",
+      "_atom_site.pdbx_formal_charge",
+    ]
+  )
 
   for model_id, model in models:
     atom_ids = _atom_ids_for_model(model)
+    residue_label_seq_ids = _residue_label_seq_ids_for_model(model)
     for atom_index in range(len(model)):
       chain_id = str(model.atom_annotations["chain_id"][atom_index])
+      chain_info = chain_metadata[chain_id]
       res_id = int(model.atom_annotations["res_id"][atom_index])
       ins_code = _annotation_value_for_cif(model, "ins_code", atom_index, "")
       res_name = _annotation_value_for_cif(model, "res_name", atom_index, "")
@@ -524,6 +525,8 @@ def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif
       b_factor = float(_annotation_value_for_cif(model, "b_factor", atom_index, 0.0))
       charge = _annotation_value_for_cif(model, "charge", atom_index, None)
       hetero = bool(model.atom_annotations["hetero"][atom_index])
+      residue_key = (chain_id, res_id, str(ins_code), str(res_name), hetero)
+      label_seq_id = res_id if minimal else residue_label_seq_ids.get(residue_key, ".")
 
       lines.append(
         " ".join(
@@ -534,16 +537,16 @@ def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif
             _format_mmcif_token(atom_name),
             ".",
             _format_mmcif_token(res_name),
-            str(res_id),
+            str(label_seq_id),
             str(res_id),
             _format_mmcif_token(ins_code or "?"),
-            _format_mmcif_token(chain_id),
+            _format_mmcif_token(chain_info["label_asym_id"]),
             f"{float(model.atoms['x'][atom_index]):.6f}",
             f"{float(model.atoms['y'][atom_index]):.6f}",
             f"{float(model.atoms['z'][atom_index]):.6f}",
             f"{occupancy:.3f}",
-            str(entity_ids[chain_id]),
-            _format_mmcif_token(chain_id),
+            str(chain_info["entity_id"]),
+            _format_mmcif_token(chain_info["auth_asym_id"]),
             _format_mmcif_token(res_name),
             f"{b_factor:.3f}",
             str(model_id),
@@ -566,6 +569,236 @@ def _models_for_cif_output(structure: Union[Structure, StructureEnsemble, Struct
   if isinstance(structure, StructureStack):
     return list(zip(structure.model_ids, structure.models()))
   raise TypeError(f"Unsupported structure type for mmCIF output: {type(structure).__name__}.")
+
+
+def _build_cif_chain_metadata(models: List[Tuple[int, Structure]]) -> Dict[str, Dict[str, object]]:
+  """Return per-chain metadata used by full mmCIF output."""
+  chain_metadata: Dict[str, Dict[str, object]] = {}
+  next_entity_id = 1
+  generated_chain_index = 1
+
+  for _model_id, model in models:
+    for chain in model.chains():
+      if chain.chain_id in chain_metadata:
+        continue
+
+      label_asym_id = chain.chain_id
+      auth_asym_id = chain.chain_id
+      if not label_asym_id:
+        label_asym_id = f"CHAIN{generated_chain_index}"
+        auth_asym_id = label_asym_id
+        generated_chain_index += 1
+
+      polymer_type = _chain_polymer_type(chain)
+      chain_metadata[chain.chain_id] = {
+        "entity_id": next_entity_id,
+        "label_asym_id": label_asym_id,
+        "auth_asym_id": auth_asym_id,
+        "polymer_type": polymer_type,
+        "polymer_residues": _chain_polymer_residues(chain, polymer_type),
+      }
+      next_entity_id += 1
+
+  return chain_metadata
+
+
+def _append_cif_entity_metadata(lines: List[str], chain_metadata: Dict[str, Dict[str, object]]):
+  """Append full entity/polymer/asym metadata blocks to an mmCIF output."""
+  lines.extend(
+    [
+      "loop_",
+      "_entity.id",
+      "_entity.type",
+      "_entity.src_method",
+      "_entity.pdbx_description",
+      "_entity.formula_weight",
+      "_entity.pdbx_number_of_molecules",
+      "_entity.details",
+    ]
+  )
+  for chain_info in chain_metadata.values():
+    chain_label = str(chain_info["auth_asym_id"])
+    entity_type = "polymer" if chain_info["polymer_type"] is not None else "non-polymer"
+    lines.append(f'{chain_info["entity_id"]} {entity_type} man {_format_mmcif_token(f"Chain {chain_label}")} . 1 .')
+  lines.append("#")
+
+  polymer_entities = [chain_info for chain_info in chain_metadata.values() if chain_info["polymer_type"] is not None]
+  if polymer_entities:
+    lines.extend(
+      [
+        "loop_",
+        "_entity_poly.entity_id",
+        "_entity_poly.type",
+        "_entity_poly.nstd_linkage",
+        "_entity_poly.nstd_monomer",
+        "_entity_poly.pdbx_strand_id",
+        "_entity_poly.pdbx_seq_one_letter_code",
+        "_entity_poly.pdbx_seq_one_letter_code_can",
+      ]
+    )
+    for chain_info in polymer_entities:
+      sequence_code = _entity_poly_sequence_code(chain_info["polymer_residues"], str(chain_info["polymer_type"]))
+      lines.extend(
+        [
+          (
+            f'{chain_info["entity_id"]} {_mmcif_entity_poly_type(str(chain_info["polymer_type"]))} '
+            f'no no {_format_mmcif_token(str(chain_info["auth_asym_id"]))}'
+          ),
+          f";{sequence_code}",
+          ";",
+          f";{sequence_code}",
+          ";",
+        ]
+      )
+    lines.append("#")
+
+    lines.extend(
+      [
+        "loop_",
+        "_entity_poly_seq.entity_id",
+        "_entity_poly_seq.num",
+        "_entity_poly_seq.mon_id",
+        "_entity_poly_seq.hetero",
+      ]
+    )
+    for chain_info in polymer_entities:
+      for seq_index, residue in enumerate(chain_info["polymer_residues"], start=1):
+        lines.append(f'{chain_info["entity_id"]} {seq_index} {_format_mmcif_token(residue.res_name)} .')
+    lines.append("#")
+
+  lines.extend(
+    [
+      "loop_",
+      "_struct_asym.id",
+      "_struct_asym.entity_id",
+      "_struct_asym.details",
+    ]
+  )
+  for chain_info in chain_metadata.values():
+    chain_label = str(chain_info["auth_asym_id"])
+    lines.append(f'{_format_mmcif_token(str(chain_info["label_asym_id"]))} {chain_info["entity_id"]} {_format_mmcif_token(f"Chain {chain_label}")}')
+  lines.append("#")
+
+
+def _chain_polymer_type(chain) -> Optional[str]:
+  """Return a normalized polymer type for a chain."""
+  polymer_types = {polymer_type for residue in chain.residues() if not residue.hetero for polymer_type in [_classify_polymer_residue(residue)] if polymer_type is not None}
+  if not polymer_types:
+    return None
+  if len(polymer_types) > 1:
+    chain_label = chain.chain_id or "<blank>"
+    raise ValueError(f'Chain "{chain_label}" mixes incompatible polymer residue types for mmCIF output.')
+  return next(iter(polymer_types))
+
+
+def _chain_polymer_residues(chain, polymer_type: Optional[str]):
+  """Return polymer residues in atom-table order for a chain."""
+  if polymer_type is None:
+    return []
+  return [residue for residue in chain.residues() if not residue.hetero and _classify_polymer_residue(residue) == polymer_type]
+
+
+def _entity_poly_sequence_code(polymer_residues, polymer_type: str) -> str:
+  """Return a conservative one-letter-style sequence code for ``_entity_poly``."""
+  residue_tokens: List[str] = []
+  for residue in polymer_residues:
+    residue_name = residue.res_name.strip().upper()
+    if polymer_type == "protein":
+      residue_tokens.append(_protein_sequence_token(residue_name))
+    elif polymer_type == "dna":
+      residue_tokens.append(_dna_sequence_token(residue_name))
+    else:
+      residue_tokens.append(_rna_sequence_token(residue_name))
+  return "".join(residue_tokens) or "?"
+
+
+def _protein_sequence_token(residue_name: str) -> str:
+  """Return a one-letter or CCD token for a protein residue."""
+  if residue_name == "ALA":
+    return "A"
+  if residue_name == "ARG":
+    return "R"
+  if residue_name == "ASN":
+    return "N"
+  if residue_name == "ASP":
+    return "D"
+  if residue_name == "CYS":
+    return "C"
+  if residue_name == "GLN":
+    return "Q"
+  if residue_name == "GLU":
+    return "E"
+  if residue_name == "GLY":
+    return "G"
+  if residue_name == "HIS":
+    return "H"
+  if residue_name == "ILE":
+    return "I"
+  if residue_name == "LEU":
+    return "L"
+  if residue_name == "LYS":
+    return "K"
+  if residue_name == "MET":
+    return "M"
+  if residue_name == "PHE":
+    return "F"
+  if residue_name == "PRO":
+    return "P"
+  if residue_name == "SER":
+    return "S"
+  if residue_name == "THR":
+    return "T"
+  if residue_name == "TRP":
+    return "W"
+  if residue_name == "TYR":
+    return "Y"
+  if residue_name == "VAL":
+    return "V"
+  return f"({residue_name})"
+
+
+def _dna_sequence_token(residue_name: str) -> str:
+  """Return a one-letter or CCD token for a DNA residue."""
+  if residue_name == "DA":
+    return "A"
+  if residue_name == "DC":
+    return "C"
+  if residue_name == "DG":
+    return "G"
+  if residue_name == "DT":
+    return "T"
+  return f"({residue_name})"
+
+
+def _rna_sequence_token(residue_name: str) -> str:
+  """Return a one-letter or CCD token for an RNA residue."""
+  if residue_name in {"A", "C", "G", "U"}:
+    return residue_name
+  return f"({residue_name})"
+
+
+def _mmcif_entity_poly_type(polymer_type: str) -> str:
+  """Return the mmCIF ``_entity_poly.type`` label for a polymer."""
+  if polymer_type == "protein":
+    return "polypeptide(L)"
+  if polymer_type == "dna":
+    return "polydeoxyribonucleotide"
+  if polymer_type == "rna":
+    return "polyribonucleotide"
+  raise ValueError(f'Unsupported polymer type "{polymer_type}".')
+
+
+def _residue_label_seq_ids_for_model(model: Structure) -> Dict[Tuple[str, int, str, str, bool], int]:
+  """Return ``_atom_site.label_seq_id`` values keyed by residue identity."""
+  label_seq_ids: Dict[Tuple[str, int, str, str, bool], int] = {}
+  for chain in model.chains():
+    seq_index = 1
+    for residue in chain.residues():
+      if residue.hetero or _classify_polymer_residue(residue) is None:
+        continue
+      label_seq_ids[residue.key()] = seq_index
+      seq_index += 1
+  return label_seq_ids
 
 
 def _atom_ids_for_model(model: Structure) -> np.ndarray:

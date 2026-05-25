@@ -79,7 +79,7 @@ class Structure:
     "sym_id": "",
   }
 
-  def __init__(self, remove_annotations: bool = True):
+  def __init__(self, *, remove_annotations: bool = True):
     """Initialize an empty single-model structure."""
     # keys are metadata field names / titles and values are the corresponding values
     # TODO: Read metadata from file and add it as needed
@@ -127,7 +127,8 @@ class Structure:
     self.atom_annotations = np.zeros(0, dtype=self._dtype_atom_annotations)
     self.bonds = np.zeros(0, dtype=self._dtype_bond)
 
-    if remove_annotations:
+    assert isinstance(remove_annotations, bool) # prevent users from mistakenly initialize the class with the incorrect type
+    if remove_annotations is True:
       self._remove_empty_annotations()
 
   def __len__(self) -> int:

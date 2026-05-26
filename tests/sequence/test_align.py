@@ -94,6 +94,20 @@ def test_read_msa_drop_and_remove_and_uppercase():
   assert seqs == ["ACDE", "ACDE"]
 
 
+def test_read_msa_filters_are_case_insensitive_with_uppercase_true():
+  s = ">ok\nac-de*\n>bad\nAxc\n>ok2\nacdE\n"
+  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="x", remove_chars="-*", uppercase=True))
+  assert names == ["ok", "ok2"]
+  assert seqs == ["ACDE", "ACDE"]
+
+
+def test_read_msa_filters_are_case_insensitive_with_uppercase_false():
+  s = ">ok\nAc-dE*\n>bad\naXc\n>ok2\nacde\n"
+  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="x", remove_chars="-*", uppercase=False))
+  assert names == ["ok", "ok2"]
+  assert seqs == ["AcdE", "acde"]
+
+
 def test_read_msa_name_allow_all_chars():
   s = ">we keep the whole header | yes\nACD\n"
   names, seqs = collect_msa(read_msa(s, name_allow_all_chars=True))

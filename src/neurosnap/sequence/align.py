@@ -44,9 +44,12 @@ def read_msa(
   Parameters:
     input_fasta: Path to read input a3m file, fasta as a raw string, or a file-handle like object to read
     size: Number of rows to read
-    allow_chars: Sequences that contain characters not included within STANDARD_AAs+allow_chars will throw an exception
-    drop_chars: Drop sequences that contain these characters. For example, ``"-X"``
-    remove_chars: Removes these characters from sequences. For example, ``"*-X"``
+    allow_chars: Sequences that contain characters not included within STANDARD_AAs+allow_chars
+      will throw an exception. Character matching is case-insensitive.
+    drop_chars: Drop sequences that contain these characters. For example, ``"-X"``.
+      Character matching is case-insensitive.
+    remove_chars: Removes these characters from sequences. For example, ``"*-X"``.
+      Character matching is case-insensitive.
     uppercase: Converts all amino acid chars to uppercase when True
     name_allow_all_chars: Uses the entire header string for names instead of the standard regex pattern
     query: Query amino acid sequence. If not provided, the first sequence in the MSA is used.
@@ -65,10 +68,6 @@ def read_msa(
     - ``seq``: protein sequence from the a3m file, including gaps
 
   """
-  allow_chars = allow_chars.replace("-", "\\-")
-  drop_chars = drop_chars.replace("-", "\\-")
-  remove_chars = remove_chars.replace("-", "\\-")
-
   # compile regular expressions
   if name_allow_all_chars:
     reg_name = re.compile(r"^>(.*)$")
@@ -76,10 +75,10 @@ def read_msa(
     reg_name = re.compile(r"^>([\w_-\|]*)")
 
   if remove_chars:
-    reg_rc = re.compile(f"[{remove_chars}\\s]")
+    reg_rc = re.compile(f"[{re.escape(remove_chars)}\\s]", re.IGNORECASE)
   if drop_chars:
-    reg_dc = re.compile(f"[{drop_chars}]")
-  reg_ac = re.compile(f"^[{''.join(STANDARD_AAs)+allow_chars}]*$")
+    reg_dc = re.compile(f"[{re.escape(drop_chars)}]", re.IGNORECASE)
+  reg_ac = re.compile(f"^[{re.escape(''.join(STANDARD_AAs) + allow_chars)}]*$", re.IGNORECASE)
 
   if isinstance(input_fasta, str):
     if os.path.exists(input_fasta):

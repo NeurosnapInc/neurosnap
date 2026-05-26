@@ -569,6 +569,18 @@ def run_phmmer_mafft(
   return align_mafft(unaligned_seqs, threads=mafft_threads)
 
 
+def _run_hhfilter(input_path: str, output_path: str, cov: int, id: int, hhfilter_bin: str = "hhfilter") -> None:
+  """Run HH-suite's hhfilter command."""
+  result = subprocess.run(
+    [hhfilter_bin, "-i", input_path, "-id", str(id), "-cov", str(cov), "-o", output_path],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+  )
+  if result.returncode != 0:
+    raise Exception(f"Error in hhfilter execution: \n{result.stdout}\n{result.stderr}")
+
+
 def run_mmseqs2(
   seqs: Union[str, List[str]],
   output: str,
@@ -878,7 +890,7 @@ def run_mmseqs2_modes(
       for n, sequence in enumerate(sequences):
         f.write(f">n{n}\n{''.join(sequence)}\n")
 
-    os.system(f"hhfilter -i {paired_in_fpath} -id {id} -cov {cov} -o {paired_out_fpath}")
+    _run_hhfilter(paired_in_fpath, paired_out_fpath, cov=cov, id=id, hhfilter_bin=hhfilter_path)
 
     with open(paired_out_fpath, "r") as f:
       for line in f:
@@ -905,7 +917,7 @@ def run_mmseqs2_modes(
         f.write(a3m_lines)
 
       # Filter
-      os.system(f"hhfilter -i {in_fpath} -id {id} -cov {cov} -o {out_fpath}")
+      _run_hhfilter(in_fpath, out_fpath, cov=cov, id=id, hhfilter_bin=hhfilter_path)
 
       with open(out_fpath, "r") as f:
         for line in f:

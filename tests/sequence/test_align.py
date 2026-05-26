@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from neurosnap.sequence.align import (
+  _run_hhfilter,
   align_mafft,
   alignment_coverage,
   consensus_sequence,
@@ -297,6 +298,45 @@ def test_run_phmmer_mafft_pipeline(has_phmmer, has_mafft, tmp_path: Path):
   assert "input_sequence" in names
   # all sequences should be aligned => equal lengths
   assert len(set(map(len, seqs))) == 1
+
+
+def test_run_hhfilter_uses_subprocess_args():
+  calls = []
+
+  def fake_run(args, stdout, stderr, text):
+    calls.append(
+      {
+        "args": args,
+        "stdout": stdout,
+        "stderr": stderr,
+        "text": text,
+      }
+    )
+
+    class Result:
+      returncode = 0
+      stdout = ""
+      stderr = ""
+
+    return Result()
+
+  import neurosnap.sequence.align as align_module
+
+  original_run = align_module.subprocess.run
+  align_module.subprocess.run = fake_run
+  try:
+    _run_hhfilter("/tmp/in file.a3m", "/tmp/out file.a3m", cov=50, id=90, hhfilter_bin="/usr/bin/hhfilter")
+  finally:
+    align_module.subprocess.run = original_run
+
+  assert calls == [
+    {
+      "args": ["/usr/bin/hhfilter", "-i", "/tmp/in file.a3m", "-id", "90", "-cov", "50", "-o", "/tmp/out file.a3m"],
+      "stdout": -1,
+      "stderr": -1,
+      "text": True,
+    }
+  ]
 
 
 # ---------- run_mmseqs2 (network/API) ----------

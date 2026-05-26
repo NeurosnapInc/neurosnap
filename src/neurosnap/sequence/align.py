@@ -893,7 +893,7 @@ def run_mmseqs2_modes(
   if len(msa) < max_msa and (mode in ["unpaired", "unpaired_paired"] or len(u_seqs) == 1):
     print("Getting unpaired MSA")
     out, _ = run_mmseqs2(u_seqs, output, pairing=None)
-    Ls = [len(seq) for seq in u_seqs]
+    seq_lengths = [len(seq) for seq in u_seqs]
     sub_idx = []
     sub_msa = []
     sub_msa_num = 0
@@ -910,7 +910,7 @@ def run_mmseqs2_modes(
       with open(out_fpath, "r") as f:
         for line in f:
           if not line.startswith(">"):
-            xs = ["-" * l for l in Ls]
+            xs = ["-" * seq_length for seq_length in seq_lengths]
             xs[n] = line.rstrip()
             # Expand homooligomeric sequences
             xs = ["/".join([x] * num) for x, num in zip(xs, u_nums)]

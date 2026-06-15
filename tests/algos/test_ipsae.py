@@ -283,6 +283,32 @@ def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
   assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (5,)
 
 
+def test_calculate_ipsae_accepts_token_expanded_hetero_residues():
+  structure = make_structure(
+    [
+      ("CA", "ALA", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CB", "ALA", "A", 1, 1.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "B", 1, 0.0, 5.0, 0.0, "C"),
+      ("C1", "ATP", "C", 1, 2.0, 2.0, 0.0, "C"),
+      ("N1", "ATP", "C", 1, 3.0, 2.0, 0.0, "N"),
+      ("MG", "MG", "D", 1, 4.0, 2.0, 0.0, "MG"),
+    ]
+  )
+  structure.atom_annotations["hetero"][3:] = True
+
+  plddt = np.array([90.0, 85.0, 70.0, 68.0, 60.0], dtype=float)
+  pae = np.full((5, 5), 5.0, dtype=float)
+  np.fill_diagonal(pae, 0.0)
+
+  res = calculate_ipSAE(structure, plddt=plddt, pae_matrix=pae, pae_cutoff=10.0)
+
+  assert res["residue_order"]["names"].tolist() == ["ALA", "GLY", "ATP", "ATP", "MG"]
+  assert res["residue_order"]["chains"].tolist() == ["A", "B", "C", "C", "D"]
+  assert set(res["asym"]["ipsae_d0chn"].keys()) == {"A", "B", "C", "D"}
+  assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (5,)
+  assert "C" in res["scores"]["pDockQ"]
+
+
 def test_calculate_ipsae_min_metric_with_ptm_fixture():
   prot = parse_single_model(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
   plddt, pae = _load_plddt_pae(FILES / "chai1_dimer_ptm_protein_with_nanobody.json")

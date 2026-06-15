@@ -220,6 +220,61 @@ def _protein_to_site_arrays_with_nonstandard_atoms(
   )
 
 
+def _structure_to_site_arrays_with_hetero_atoms(
+  structure: Structure,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+  """
+  Returns site-level arrays aligned across the structure order:
+    residue_names (N,), chains (N,), residue_numbers (N,), coords (N,3)
+
+  Standard amino acids / nucleotides contribute one representative site per residue.
+  Any other residue, including hetero residues such as ligands and ions, contributes
+  one site per non-hydrogen atom in atom order.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"_structure_to_site_arrays_with_hetero_atoms() expects a Structure, found {type(structure).__name__}.")
+  residue_names: List[str] = []
+  chains: List[str] = []
+  residue_numbers: List[int] = []
+  coords: List[np.ndarray] = []
+
+  for chain in structure.chains():
+    ch_id = chain.chain_id
+    for residue in chain.residues():
+      resname = residue.res_name
+      resseq = int(residue.res_id)
+
+      is_aa = (not residue.hetero) and (resname in AA_SET)
+      is_na = (not residue.hetero) and (resname in NA_SET)
+      if is_aa or is_na:
+        coord = _pick_atom_coord(residue, is_protein=is_aa)
+        if coord is None:
+          continue
+        residue_names.append(resname)
+        chains.append(ch_id)
+        residue_numbers.append(resseq)
+        coords.append(coord.astype(float))
+        continue
+
+      for atom in residue.atoms():
+        if _is_hydrogen_atom(atom):
+          continue
+        residue_names.append(resname)
+        chains.append(ch_id)
+        residue_numbers.append(resseq)
+        coords.append(atom.coord.astype(float))
+
+  if not residue_names:
+    raise ValueError("No usable sites were found in the structure.")
+
+  return (
+    np.array(residue_names, dtype=object),
+    np.array(chains, dtype=object),
+    np.array(residue_numbers, dtype=int),
+    np.vstack(coords).astype(float),
+  )
+
+
 def _classify_chains(chains: np.ndarray, residue_names: np.ndarray) -> Dict[str, str]:
   chain_types: Dict[str, str] = {}
   uniq = np.unique(chains)
@@ -344,8 +399,9 @@ def calculate_ipSAE(
     plddt = plddt.take(keep_indices, axis=0)
     pae_matrix = pae_matrix[np.ix_(keep_indices, keep_indices)]
 
-  # If residue-level alignment still does not fit, try token-expanded mode:
-  # standard residues as one site + all heavy atoms for non-standard residues.
+  # If residue-level alignment still does not fit, try token-expanded modes:
+  # standard residues as one site + all heavy atoms for non-standard residues,
+  # then the same but including hetero residues such as ligands and ions.
   if plddt.shape != (N,) or pae_matrix.shape != (N, N):
     (
       residue_names_token,
@@ -361,11 +417,26 @@ def calculate_ipSAE(
       coords_cb = coords_token
       N = Nt
     else:
-      raise ValueError(
-        f"Unable to align payload: plddt shape {plddt.shape}, pae_matrix shape {pae_matrix.shape}, "
-        f"residue-level expected ({len(keep_indices)}, {len(keep_indices)}), "
-        f"token-expanded expected ({Nt}, {Nt})."
-      )
+      (
+        residue_names_hetero,
+        chains_hetero,
+        residue_nums_hetero,
+        coords_hetero,
+      ) = _structure_to_site_arrays_with_hetero_atoms(structure)
+      Nh = len(chains_hetero)
+      if plddt.shape == (Nh,) and pae_matrix.shape == (Nh, Nh):
+        residue_names = residue_names_hetero
+        chains = chains_hetero
+        residue_nums = residue_nums_hetero
+        coords_cb = coords_hetero
+        N = Nh
+      else:
+        raise ValueError(
+          f"Unable to align payload: plddt shape {plddt.shape}, pae_matrix shape {pae_matrix.shape}, "
+          f"residue-level expected ({len(keep_indices)}, {len(keep_indices)}), "
+          f"token-expanded expected ({Nt}, {Nt}), "
+          f"hetero-token-expanded expected ({Nh}, {Nh})."
+        )
 
   uniq_chains = np.unique(chains)
   chain_type = _classify_chains(chains, residue_names)

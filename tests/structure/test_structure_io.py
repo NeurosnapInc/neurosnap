@@ -12,7 +12,16 @@ from neurosnap.io.pdb import parse_pdb, save_pdb
 from neurosnap.io.sdf import parse_sdf, save_sdf
 from neurosnap.structure import StructureEnsemble, StructureStack, extract_non_biopolymers, fix_nucleic_termini
 
-from tests._structure_test_utils import FILES as TEST_FILES, MIXED_BACKBONE_ATOMS, PDB_NO_H, make_structure, parse_single_model
+from tests._structure_test_utils import (
+  FILES as TEST_FILES,
+  MIXED_BACKBONE_ATOMS,
+  PDB_NO_H,
+  ROT_Z_90,
+  TRANSLATION_VECTOR,
+  make_structure,
+  parse_single_model,
+  transform_atoms,
+)
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
@@ -28,6 +37,34 @@ def test_save_and_reload_pdb(tmp_path):
   reloaded = parse_single_model(output_pdb)
   assert len(reloaded) == len(structure)
   assert [chain.chain_id for chain in reloaded.chains()] == [chain.chain_id for chain in structure.chains()]
+
+
+def test_structure_select_chain_roundtrips_pdb(tmp_path):
+  structure = parse_single_model(FILES / "dimer_af2.pdb")
+  chain_a = structure.select(chains=["A"])
+  output_pdb = tmp_path / "chain_a.pdb"
+
+  chain_a.save_pdb(output_pdb)
+  reloaded = parse_single_model(output_pdb)
+
+  assert reloaded.chain_ids() == ["A"]
+  assert len(reloaded) == len(chain_a)
+  assert np.array_equal(reloaded.atom_annotations["atom_id"], chain_a.atom_annotations["atom_id"])
+  assert np.allclose(
+    np.column_stack((reloaded.atoms["x"], reloaded.atoms["y"], reloaded.atoms["z"])),
+    np.column_stack((chain_a.atoms["x"], chain_a.atoms["y"], chain_a.atoms["z"])),
+  )
+
+
+def test_structure_select_predicate_filters_atoms_and_bonds():
+  structure = make_structure(MIXED_BACKBONE_ATOMS)
+  structure.bonds = np.array([(0, 1, 1), (1, 2, 1), (2, 3, 1)], dtype=structure._dtype_bond)
+
+  subset = structure.select(predicate=lambda atom: atom.chain_id == "A" and atom.res_id == 1)
+
+  assert subset.chain_ids() == ["A"]
+  assert {residue.res_id for chain in subset.chains() for residue in chain.residues()} == {1}
+  assert len(subset.bonds) == 2
 
 
 def test_fix_nucleic_termini_noop_roundtrips_protein_with_zinc(tmp_path, caplog):
@@ -61,6 +98,41 @@ def test_save_and_reload_mmcif(tmp_path):
   reloaded = parse_single_model(output_cif)
   assert len(reloaded) == len(structure)
   assert [chain.chain_id for chain in reloaded.chains()] == [chain.chain_id for chain in structure.chains()]
+
+
+def test_stack_select_chain_across_models_roundtrips_cif(tmp_path):
+  model_one = make_structure(MIXED_BACKBONE_ATOMS)
+  model_two = make_structure(transform_atoms(MIXED_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))
+  stack = StructureStack([model_one, model_two], model_ids=[1, 2])
+  chain_a_stack = stack.select(chains=["A"])
+  output_cif = tmp_path / "chain_a_models.cif"
+
+  assert isinstance(chain_a_stack, StructureStack)
+
+  chain_a_stack.save_cif(output_cif)
+  reloaded = mmcif_module.parse_mmcif(output_cif, return_type="stack")
+
+  assert isinstance(reloaded, StructureStack)
+  assert reloaded.model_ids == [1, 2]
+  assert all(model.chain_ids() == ["A"] for model in reloaded.models())
+  assert np.allclose(reloaded[2].atoms["x"], chain_a_stack[2].atoms["x"])
+
+
+def test_ensemble_select_model_and_chain_returns_roundtrip_safe_subset(tmp_path):
+  model_one = make_structure(MIXED_BACKBONE_ATOMS)
+  model_two = make_structure(transform_atoms(MIXED_BACKBONE_ATOMS, ROT_Z_90, TRANSLATION_VECTOR))
+  ensemble = StructureEnsemble([model_one, model_two], model_ids=[1, 2])
+  subset = ensemble.select(models=[1], chains=["B"])
+  output_pdb = tmp_path / "model1_chain_b.pdb"
+
+  subset.save_pdb(output_pdb)
+  reloaded = parse_pdb(output_pdb, return_type="ensemble")
+
+  assert len(subset) == 1
+  assert subset.first().chain_ids() == ["B"]
+  assert len(reloaded) == 1
+  assert reloaded.first().chain_ids() == ["B"]
+  assert np.allclose(reloaded.first().atoms["y"], subset.first().atoms["y"])
 
 
 def test_save_cif_writes_full_entity_metadata_by_default():

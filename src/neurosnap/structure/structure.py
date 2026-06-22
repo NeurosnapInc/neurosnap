@@ -8,9 +8,10 @@ multi-model fast path (:class:`StructureStack`).
 The universal length unit is Å.
 """
 
+from collections.abc import Callable, Sequence
 from dataclasses import field
 from types import MappingProxyType
-from typing import Any, Dict, Iterator, List, Literal, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Literal, Mapping, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -166,6 +167,80 @@ class Structure:
       if chain.chain_id == chain_id:
         return chain
     raise KeyError(f'Chain "{chain_id}" was not found.')
+
+  def select(
+    self,
+    *,
+    chains: Optional[Sequence[str]] = None,
+    residues: Optional[Sequence[Union[int, "Residue", Tuple[Any, ...]]]] = None,
+    predicate: Optional[Callable[["Atom"], bool]] = None,
+  ) -> "Structure":
+    """Return an independent atom-level subset of the structure.
+
+    The returned structure preserves the selected atoms exactly as parsed:
+    coordinates, atom serials, residue identifiers, optional annotations, and
+    any bonds whose endpoints remain in the subset. Bond indices are remapped
+    onto the new atom table automatically so the subset can be exported
+    directly with :meth:`save_pdb` or :meth:`save_cif`.
+
+    Parameters:
+      chains: Optional chain IDs to keep. If ``None``, atoms from all chains
+        remain eligible for selection.
+      residues: Optional residue selectors to keep. Supported selector forms
+        are:
+          - integer residue IDs, matched across all selected chains
+          - :class:`Residue` objects
+          - ``(chain_id, res_id)`` tuples
+          - ``(chain_id, res_id, ins_code)`` tuples
+          - full residue-key tuples
+            ``(chain_id, res_id, ins_code, res_name, hetero)``
+      predicate: Optional atom-level predicate. When provided, each atom is
+        exposed as an immutable :class:`Atom` view and kept only if the
+        predicate returns a truthy value.
+
+    Returns:
+      A new :class:`Structure` containing only atoms that satisfy every
+      provided filter.
+
+    Raises:
+      ValueError: If a requested chain or residue selector is not present in
+        the structure.
+      TypeError: If ``predicate`` is not callable or a residue selector has an
+        unsupported type/shape.
+    """
+    atom_mask = _structure_selection_mask(self, chains=chains, residues=residues, predicate=predicate)
+    return _subset_structure(self, atom_mask)
+
+  def save_pdb(self, pdb):
+    """Write the structure directly as a PDB file.
+
+    This is a convenience wrapper around
+    :func:`neurosnap.io.pdb.save_pdb`. It is especially useful after
+    :meth:`select`, because the selected structure can be exported without
+    rebuilding a new container manually.
+
+    Parameters:
+      pdb: Output filepath or open writable file handle.
+    """
+    from neurosnap.io.pdb import save_pdb
+
+    save_pdb(self, pdb)
+
+  def save_cif(self, cif, *, minimal: bool = False):
+    """Write the structure directly as an mmCIF file.
+
+    This is a convenience wrapper around
+    :func:`neurosnap.io.mmcif.save_cif`. It preserves the current atom table
+    and metadata exactly as stored on the structure.
+
+    Parameters:
+      cif: Output filepath or open writable file handle.
+      minimal: If ``True``, emit compact atom-site-only mmCIF output. If
+        ``False`` (default), include entity/polymer/subchain metadata.
+    """
+    from neurosnap.io.mmcif import save_cif
+
+    save_cif(self, cif, minimal=minimal)
 
   def to_dataframe(self) -> pd.DataFrame:
     """Export the structure as a pandas dataframe.
@@ -924,6 +999,231 @@ class Chain:
     return missing_ids
 
 
+def _normalize_requested_model_ids(existing_model_ids: Sequence[int], requested_model_ids: Optional[Sequence[int]]) -> set[int]:
+  """Return validated model identifiers requested for selection.
+
+  Parameters:
+    existing_model_ids: Model IDs currently present in an ensemble or stack.
+    requested_model_ids: Optional model IDs requested by the caller. ``None``
+      means all existing models should be kept.
+
+  Returns:
+    Set of integer model IDs to retain.
+
+  Raises:
+    ValueError: If any requested model ID does not exist.
+  """
+  if requested_model_ids is None:
+    return {int(model_id) for model_id in existing_model_ids}
+
+  selected_model_ids = {int(model_id) for model_id in requested_model_ids}
+  missing_model_ids = sorted(selected_model_ids - {int(model_id) for model_id in existing_model_ids})
+  if missing_model_ids:
+    raise ValueError(f"Model ID(s) {', '.join(str(model_id) for model_id in missing_model_ids)} were not found.")
+  return selected_model_ids
+
+
+def _normalize_residue_selector(selector: Union[int, Residue, Tuple[Any, ...]]) -> Tuple[Optional[str], int, Optional[str], Optional[str], Optional[bool]]:
+  """Normalize one residue selector into comparable components.
+
+  Parameters:
+    selector: One supported residue selector supplied to :meth:`Structure.select`.
+
+  Returns:
+    Tuple ``(chain_id, res_id, ins_code, res_name, hetero)`` where each field
+    may be ``None`` when the selector intentionally leaves that part
+    unspecified.
+
+  Raises:
+    TypeError: If the selector does not match one of the supported forms.
+  """
+  if isinstance(selector, Residue):
+    return selector.chain_id, int(selector.res_id), selector.ins_code, selector.res_name, bool(selector.hetero)
+  if isinstance(selector, int):
+    return None, int(selector), None, None, None
+  if isinstance(selector, tuple):
+    if len(selector) == 2:
+      chain_id, res_id = selector
+      return str(chain_id), int(res_id), None, None, None
+    if len(selector) == 3:
+      chain_id, res_id, ins_code = selector
+      return str(chain_id), int(res_id), str(ins_code), None, None
+    if len(selector) == 5:
+      chain_id, res_id, ins_code, res_name, hetero = selector
+      return str(chain_id), int(res_id), str(ins_code), str(res_name), bool(hetero)
+  raise TypeError(
+    "Residue selectors must be integers, Residue objects, "
+    "(chain_id, res_id) tuples, (chain_id, res_id, ins_code) tuples, or full residue-key tuples."
+  )
+
+
+def _residue_matches_selector(
+  residue_key: Tuple[str, int, str, str, bool],
+  selector: Tuple[Optional[str], int, Optional[str], Optional[str], Optional[bool]],
+) -> bool:
+  """Return ``True`` when a residue key matches a normalized selector.
+
+  Parameters:
+    residue_key: Full residue identity tuple from a parsed structure.
+    selector: Normalized selector tuple produced by
+      :func:`_normalize_residue_selector`.
+  """
+  chain_id, res_id, ins_code, res_name, hetero = selector
+  return (
+    residue_key[1] == res_id
+    and (chain_id is None or residue_key[0] == chain_id)
+    and (ins_code is None or residue_key[2] == ins_code)
+    and (res_name is None or residue_key[3] == res_name)
+    and (hetero is None or residue_key[4] == hetero)
+  )
+
+
+def _selected_residue_keys(
+  structure: Structure,
+  residues: Sequence[Union[int, Residue, Tuple[Any, ...]]],
+  chain_filter: Optional[set[str]] = None,
+) -> set[Tuple[str, int, str, str, bool]]:
+  """Return validated residue keys selected from a structure.
+
+  Parameters:
+    structure: Source structure being filtered.
+    residues: Residue selectors requested by the caller.
+    chain_filter: Optional set of chain IDs already selected upstream. When
+      provided, residue matching is restricted to those chains.
+
+  Returns:
+    Set of full residue-key tuples present in ``structure``.
+
+  Raises:
+    ValueError: If any requested residue selector does not match at least one
+      residue in the filtered structure view.
+  """
+  available_residue_keys = [residue.key() for chain in structure.chains() for residue in chain.residues()]
+  if chain_filter is not None:
+    available_residue_keys = [residue_key for residue_key in available_residue_keys if residue_key[0] in chain_filter]
+
+  selected_residue_keys: set[Tuple[str, int, str, str, bool]] = set()
+  unmatched_selectors = []
+  for selector in residues:
+    normalized_selector = _normalize_residue_selector(selector)
+    matches = {residue_key for residue_key in available_residue_keys if _residue_matches_selector(residue_key, normalized_selector)}
+    if not matches:
+      unmatched_selectors.append(selector)
+      continue
+    selected_residue_keys.update(matches)
+
+  if unmatched_selectors:
+    formatted = ", ".join(repr(selector) for selector in unmatched_selectors)
+    raise ValueError(f"Residue selector(s) were not found in the structure: {formatted}.")
+  return selected_residue_keys
+
+
+def _structure_selection_mask(
+  structure: Structure,
+  *,
+  chains: Optional[Sequence[str]] = None,
+  residues: Optional[Sequence[Union[int, Residue, Tuple[Any, ...]]]] = None,
+  predicate: Optional[Callable[[Atom], bool]] = None,
+) -> np.ndarray:
+  """Return a boolean atom mask for a structure selection.
+
+  The mask applies chain, residue, and predicate filters cumulatively. Each
+  filter narrows the selection further; an atom must satisfy all supplied
+  constraints to be retained.
+
+  Parameters:
+    structure: Source structure being filtered.
+    chains: Optional chain IDs to keep.
+    residues: Optional residue selectors to keep.
+    predicate: Optional atom-level predicate applied to immutable
+      :class:`Atom` views.
+
+  Returns:
+    One-dimensional boolean mask with one entry per atom in ``structure``.
+
+  Raises:
+    ValueError: If a requested chain or residue selector is not present.
+    TypeError: If ``predicate`` is not callable.
+  """
+  atom_mask = np.ones(len(structure), dtype=bool)
+  selected_chains: Optional[set[str]] = None
+
+  if chains is not None:
+    selected_chains = {str(chain_id) for chain_id in chains}
+    missing_chains = sorted(selected_chains - set(structure.chain_ids()))
+    if missing_chains:
+      raise ValueError(f'Chain(s) {", ".join(missing_chains)} were not found in the structure.')
+    atom_mask &= np.isin(structure.atom_annotations["chain_id"], list(selected_chains))
+
+  if residues is not None:
+    residue_keys = _selected_residue_keys(structure, residues, chain_filter=selected_chains)
+    residue_mask = np.zeros(len(structure), dtype=bool)
+    for atom_index in range(len(structure)):
+      residue_key = (
+        str(structure.atom_annotations["chain_id"][atom_index]),
+        int(structure.atom_annotations["res_id"][atom_index]),
+        str(structure.atom_annotations["ins_code"][atom_index]),
+        str(structure.atom_annotations["res_name"][atom_index]),
+        bool(structure.atom_annotations["hetero"][atom_index]),
+      )
+      if residue_key in residue_keys:
+        residue_mask[atom_index] = True
+    atom_mask &= residue_mask
+
+  if predicate is not None:
+    if not callable(predicate):
+      raise TypeError("predicate must be callable.")
+    predicate_mask = np.zeros(len(structure), dtype=bool)
+    for atom_index in range(len(structure)):
+      predicate_mask[atom_index] = bool(predicate(structure._atom_view(atom_index)))
+    atom_mask &= predicate_mask
+
+  return atom_mask
+
+
+def _subset_structure(structure: Structure, atom_mask: np.ndarray) -> Structure:
+  """Return a structure subset with bonds remapped onto the selected atoms.
+
+  Parameters:
+    structure: Source structure to subset.
+    atom_mask: One-dimensional boolean array indicating which atoms to keep.
+
+  Returns:
+    A new independent :class:`Structure` with copied coordinates, copied atom
+    annotations, copied metadata, and a bond table containing only bonds whose
+    two endpoints are both retained.
+
+  Raises:
+    ValueError: If ``atom_mask`` does not have exactly one boolean entry per
+      atom in ``structure``.
+  """
+  atom_mask = np.asarray(atom_mask, dtype=bool)
+  if atom_mask.ndim != 1 or len(atom_mask) != len(structure):
+    raise ValueError("Atom selection mask must be a one-dimensional boolean array with one entry per atom.")
+
+  selected_indices = np.flatnonzero(atom_mask)
+  index_map = {int(atom_index): new_index for new_index, atom_index in enumerate(selected_indices)}
+  bond_rows = []
+  for bond in structure.bonds:
+    atom_i = int(bond["atom_i"])
+    atom_j = int(bond["atom_j"])
+    if atom_i in index_map and atom_j in index_map:
+      bond_rows.append((index_map[atom_i], index_map[atom_j], int(bond["bond_type"])))
+
+  subset = Structure(remove_annotations=False)
+  subset.metadata = dict(structure.metadata)
+  subset._dtype_atoms = structure._dtype_atoms
+  subset._dtype_atom_annotations = structure._dtype_atom_annotations
+  subset._dtype_bond = structure._dtype_bond
+  subset.atoms = np.array(structure.atoms[atom_mask], dtype=structure._dtype_atoms, copy=True)
+  subset.atom_annotations = np.array(structure.atom_annotations[atom_mask], dtype=structure._dtype_atom_annotations, copy=True)
+  if bond_rows:
+    subset.bonds = np.array(bond_rows, dtype=structure._dtype_bond)
+  else:
+    subset.bonds = np.zeros(0, dtype=structure._dtype_bond)
+  return subset
+
+
 def _validate_structure_model(model: Structure):
   """Validate that an object is a structurally consistent ``Structure``.
 
@@ -1129,6 +1429,65 @@ class StructureEnsemble:
       raise IndexError("Cannot fetch the first model from an empty StructureEnsemble.")
     return self._models[0]
 
+  def select(
+    self,
+    *,
+    models: Optional[Sequence[int]] = None,
+    chains: Optional[Sequence[str]] = None,
+    residues: Optional[Sequence[Union[int, Residue, Tuple[Any, ...]]]] = None,
+    predicate: Optional[Callable[[Atom], bool]] = None,
+  ) -> "StructureEnsemble":
+    """Return a filtered ensemble of independently subsetted models.
+
+    Parameters:
+      models: Optional model IDs to keep. If ``None``, all models are
+        considered.
+      chains: Optional chain IDs to keep within each selected model.
+      residues: Optional residue selectors to keep within each selected model.
+      predicate: Optional atom-level predicate applied independently inside
+        each selected model.
+
+    Returns:
+      A new :class:`StructureEnsemble` whose model IDs match the selected
+      source models and whose per-model contents are the corresponding
+      :meth:`Structure.select` subsets.
+
+    Raises:
+      ValueError: If any requested model ID, chain, or residue selector is not
+        present.
+      TypeError: If ``predicate`` is not callable or a residue selector is
+        malformed.
+    """
+    selected_model_ids = _normalize_requested_model_ids(self.model_ids, models)
+    subset = StructureEnsemble(metadata=self.metadata)
+    for model_id, model in zip(self.model_ids, self._models):
+      if model_id not in selected_model_ids:
+        continue
+      subset.append(model.select(chains=chains, residues=residues, predicate=predicate), model_id=model_id)
+    return subset
+
+  def save_pdb(self, pdb):
+    """Write the ensemble directly as a PDB file.
+
+    Parameters:
+      pdb: Output filepath or open writable file handle.
+    """
+    from neurosnap.io.pdb import save_pdb
+
+    save_pdb(self, pdb)
+
+  def save_cif(self, cif, *, minimal: bool = False):
+    """Write the ensemble directly as an mmCIF file.
+
+    Parameters:
+      cif: Output filepath or open writable file handle.
+      minimal: If ``True``, emit compact atom-site-only mmCIF output. If
+        ``False`` (default), include entity/polymer/subchain metadata.
+    """
+    from neurosnap.io.mmcif import save_cif
+
+    save_cif(self, cif, minimal=minimal)
+
   def to_stack(self) -> "StructureStack":
     """Convert the ensemble into a ``StructureStack``.
 
@@ -1309,6 +1668,62 @@ class StructureStack:
   def models(self) -> List[Structure]:
     """Materialize and return all models in the stack."""
     return [self._model_to_structure(index) for index in range(len(self))]
+
+  def select(
+    self,
+    *,
+    models: Optional[Sequence[int]] = None,
+    chains: Optional[Sequence[str]] = None,
+    residues: Optional[Sequence[Union[int, Residue, Tuple[Any, ...]]]] = None,
+    predicate: Optional[Callable[[Atom], bool]] = None,
+  ) -> Union["StructureStack", StructureEnsemble]:
+    """Return a filtered multi-model subset of the stack.
+
+    The selection is executed through the ensemble path so each chosen model is
+    subsetted with the same semantics as :meth:`Structure.select`. If the
+    resulting models still share identical atom annotations and bonds, the
+    return value is a :class:`StructureStack`; otherwise it falls back to a
+    :class:`StructureEnsemble`.
+
+    Parameters:
+      models: Optional model IDs to keep. If ``None``, all models are
+        considered.
+      chains: Optional chain IDs to keep within each selected model.
+      residues: Optional residue selectors to keep within each selected model.
+      predicate: Optional atom-level predicate applied independently inside
+        each selected model.
+
+    Returns:
+      A :class:`StructureStack` when the subset remains stack-compatible,
+      otherwise a :class:`StructureEnsemble`.
+    """
+    subset_ensemble = self.to_ensemble().select(models=models, chains=chains, residues=residues, predicate=predicate)
+    try:
+      return StructureStack.from_ensemble(subset_ensemble)
+    except ValueError:
+      return subset_ensemble
+
+  def save_pdb(self, pdb):
+    """Write the stack directly as a PDB file.
+
+    Parameters:
+      pdb: Output filepath or open writable file handle.
+    """
+    from neurosnap.io.pdb import save_pdb
+
+    save_pdb(self, pdb)
+
+  def save_cif(self, cif, *, minimal: bool = False):
+    """Write the stack directly as an mmCIF file.
+
+    Parameters:
+      cif: Output filepath or open writable file handle.
+      minimal: If ``True``, emit compact atom-site-only mmCIF output. If
+        ``False`` (default), include entity/polymer/subchain metadata.
+    """
+    from neurosnap.io.mmcif import save_cif
+
+    save_cif(self, cif, minimal=minimal)
 
   def to_ensemble(self) -> StructureEnsemble:
     """Convert the stack into an independent ``StructureEnsemble``."""

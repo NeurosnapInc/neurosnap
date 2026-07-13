@@ -101,6 +101,44 @@ def _pick_atom_coord(residue: Residue, is_protein: bool) -> Optional[np.ndarray]
   return None
 
 
+def _heavy_atom_sites(residue: Residue, atom_indices: np.ndarray) -> List[Tuple[np.ndarray, np.ndarray]]:
+  sites: List[Tuple[np.ndarray, np.ndarray]] = []
+  for atom, atom_index in zip(residue.atoms(), atom_indices):
+    if _is_hydrogen_atom(atom):
+      continue
+    sites.append((atom.coord.astype(float), np.array([int(atom_index)], dtype=int)))
+  return sites
+
+
+def _pick_residue_site_coord(residue: Residue) -> Optional[np.ndarray]:
+  atom_lookup = {atom.atom_name.strip().upper(): atom for atom in residue.atoms()}
+
+  for name in ("CB", "CA"):
+    if name in atom_lookup:
+      return atom_lookup[name].coord.astype(float)
+
+  for tier in NA_PRIORITIES:
+    for name in tier:
+      key = name.strip().upper()
+      if key in atom_lookup:
+        return atom_lookup[key].coord.astype(float)
+
+  heavy_coords = [atom.coord.astype(float) for atom in residue.atoms() if not _is_hydrogen_atom(atom)]
+  if heavy_coords:
+    return np.vstack(heavy_coords).mean(axis=0)
+  return None
+
+
+def _iter_residue_atom_indices(structure: Structure):
+  atom_index = 0
+  for chain in structure.chains():
+    for residue in chain.residues():
+      atoms = list(residue.atoms())
+      atom_indices = np.arange(atom_index, atom_index + len(atoms), dtype=int)
+      atom_index += len(atoms)
+      yield chain.chain_id, residue, atoms, atom_indices
+
+
 def _is_hydrogen_atom(atom: Atom) -> bool:
   if str(atom.element).strip().upper() == "H":
     return True
@@ -275,6 +313,164 @@ def _structure_to_site_arrays_with_hetero_atoms(
   )
 
 
+def _structure_to_site_arrays_boltz2(
+  structure: Structure,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+  """One token per non-hetero residue; hetero residues expand to heavy atoms."""
+  residue_names: List[str] = []
+  chains: List[str] = []
+  residue_numbers: List[int] = []
+  coords: List[np.ndarray] = []
+  keep_indices: List[int] = []
+  site_index = 0
+
+  for ch_id, residue, _atoms, atom_indices in _iter_residue_atom_indices(structure):
+    if residue.hetero:
+      for atom_coord, _atom_group in _heavy_atom_sites(residue, atom_indices):
+        residue_names.append(residue.res_name)
+        chains.append(ch_id)
+        residue_numbers.append(int(residue.res_id))
+        coords.append(atom_coord)
+        keep_indices.append(site_index)
+        site_index += 1
+      continue
+
+    coord = _pick_residue_site_coord(residue)
+    if coord is None:
+      continue
+    residue_names.append(residue.res_name)
+    chains.append(ch_id)
+    residue_numbers.append(int(residue.res_id))
+    coords.append(coord)
+    if residue.res_name in AA_SET or residue.res_name in NA_SET:
+      keep_indices.append(site_index)
+    site_index += 1
+
+  if not residue_names:
+    raise ValueError("No usable sites were found in the structure.")
+
+  return (
+    np.array(residue_names, dtype=object),
+    np.array(chains, dtype=object),
+    np.array(residue_numbers, dtype=int),
+    np.vstack(coords).astype(float),
+    np.array(keep_indices, dtype=int),
+  )
+
+
+def _structure_to_site_arrays_chai1(
+  structure: Structure,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+  """
+  Standard residues contribute one representative site.
+  Non-standard residues inside biopolymer chains expand to heavy atoms.
+  Standalone non-standard chains contribute one residue-level site plus heavy atoms.
+  """
+  residue_names: List[str] = []
+  chains: List[str] = []
+  residue_numbers: List[int] = []
+  coords: List[np.ndarray] = []
+
+  chain_has_standard_polymer: Dict[str, bool] = {}
+  for chain in structure.chains():
+    chain_has_standard_polymer[chain.chain_id] = any((not residue.hetero) and (residue.res_name in AA_SET or residue.res_name in NA_SET) for residue in chain.residues())
+
+  for ch_id, residue, _atoms, atom_indices in _iter_residue_atom_indices(structure):
+    resname = residue.res_name
+    resseq = int(residue.res_id)
+    is_standard_polymer = (not residue.hetero) and (resname in AA_SET or resname in NA_SET)
+
+    if is_standard_polymer:
+      coord = _pick_atom_coord(residue, is_protein=(resname in AA_SET))
+      if coord is None:
+        continue
+      residue_names.append(resname)
+      chains.append(ch_id)
+      residue_numbers.append(resseq)
+      coords.append(coord.astype(float))
+      continue
+
+    if not chain_has_standard_polymer.get(ch_id, False):
+      coord = _pick_residue_site_coord(residue)
+      if coord is not None:
+        residue_names.append(resname)
+        chains.append(ch_id)
+        residue_numbers.append(resseq)
+        coords.append(coord)
+
+    for atom_coord, _atom_group in _heavy_atom_sites(residue, atom_indices):
+      residue_names.append(resname)
+      chains.append(ch_id)
+      residue_numbers.append(resseq)
+      coords.append(atom_coord)
+
+  if not residue_names:
+    raise ValueError("No usable sites were found in the structure.")
+
+  return (
+    np.array(residue_names, dtype=object),
+    np.array(chains, dtype=object),
+    np.array(residue_numbers, dtype=int),
+    np.vstack(coords).astype(float),
+  )
+
+
+def _structure_to_site_arrays_protenix(
+  structure: Structure,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[np.ndarray], int]:
+  """
+  Protenix uses token-level PAE but atom-level pLDDT.
+  Standard residues contribute one token whose pLDDT is the residue mean.
+  Non-standard and hetero residues expand to heavy-atom tokens.
+  """
+  residue_names: List[str] = []
+  chains: List[str] = []
+  residue_numbers: List[int] = []
+  coords: List[np.ndarray] = []
+  plddt_groups: List[np.ndarray] = []
+  atom_count = 0
+
+  for ch_id, residue, _atoms, atom_indices in _iter_residue_atom_indices(structure):
+    atom_count = max(atom_count, int(atom_indices[-1]) + 1) if len(atom_indices) else atom_count
+    resname = residue.res_name
+    resseq = int(residue.res_id)
+    is_standard_polymer = (not residue.hetero) and (resname in AA_SET or resname in NA_SET)
+
+    if is_standard_polymer:
+      coord = _pick_atom_coord(residue, is_protein=(resname in AA_SET))
+      if coord is None:
+        continue
+      residue_names.append(resname)
+      chains.append(ch_id)
+      residue_numbers.append(resseq)
+      coords.append(coord.astype(float))
+      plddt_groups.append(atom_indices.astype(int))
+      continue
+
+    for atom_coord, atom_group in _heavy_atom_sites(residue, atom_indices):
+      residue_names.append(resname)
+      chains.append(ch_id)
+      residue_numbers.append(resseq)
+      coords.append(atom_coord)
+      plddt_groups.append(atom_group)
+
+  if not residue_names:
+    raise ValueError("No usable sites were found in the structure.")
+
+  return (
+    np.array(residue_names, dtype=object),
+    np.array(chains, dtype=object),
+    np.array(residue_numbers, dtype=int),
+    np.vstack(coords).astype(float),
+    plddt_groups,
+    atom_count,
+  )
+
+
+def _aggregate_plddt_by_groups(plddt: np.ndarray, groups: List[np.ndarray]) -> np.ndarray:
+  return np.array([float(np.asarray(plddt[group], dtype=float).mean()) for group in groups], dtype=float)
+
+
 def _classify_chains(chains: np.ndarray, residue_names: np.ndarray) -> Dict[str, str]:
   chain_types: Dict[str, str] = {}
   uniq = np.unique(chains)
@@ -291,6 +487,7 @@ def calculate_ipSAE(
   plddt: np.ndarray,
   pae_matrix: np.ndarray,
   *,
+  input_format: str = "auto",
   pae_cutoff: float = 10.0,
   dist_cutoff: float = 10.0,
   pDockQ_cutoff: float = 8.0,
@@ -310,12 +507,16 @@ def calculate_ipSAE(
     residue). If payload shapes do not match, it falls back to a
     token-expanded order where non-standard residues contribute one site per
     heavy atom. ``plddt`` (N,) and ``pae_matrix`` (N, N) must match whichever
-  order is selected.
+  order is selected. ``input_format`` can be used to select a specific
+  alignment strategy for AF3-like payloads.
 
   Args:
     structure: Single-model Neurosnap :class:`Structure` containing the complex.
     plddt: Per-site pLDDT aligned to the selected analysis order (normalized to [0-100] NOT [0-1]).
     pae_matrix: Site-site PAE (Å) aligned to the same order.
+    input_format: Payload layout selector. Supported values are ``"auto"``,
+      ``"boltz2"``, ``"chai1"``, and ``"protenix"``. ``"auto"`` preserves
+      the historical shape-based fallback behavior.
     pae_cutoff: PAE threshold (Å) for ipSAE and counting “valid” pairs.
     dist_cutoff: Distance cutoff (Å) for interface-restricted counts.
     pDockQ_cutoff: Distance cutoff (Å) used by pDockQ/pDockQ2 neighbor tests.
@@ -366,12 +567,19 @@ def calculate_ipSAE(
     - Representative atom for standard residues:
       * Proteins: Cβ (GLY→Cα; fallback to Cα if Cβ missing).
       * Nucleic acids: prefer C3′/C3*, then C1′/C1*, then P.
-    - Non-standard residues are handled in two modes:
+    - Non-standard residues are handled in multiple modes:
       * Residue-level mode (default): non-standard residues are removed from
         pLDDT/PAE when payload length matches the raw polymer residue count.
       * Token-expanded mode (auto fallback): if payload length instead matches
         one representative site per standard residue plus all heavy atoms for
         non-standard residues, those non-standard atoms are retained as sites.
+      * ``boltz2``: one token per non-hetero residue, hetero residues expanded
+        to heavy atoms.
+      * ``chai1``: standard residues use representative sites, modified residues
+        in protein chains expand to heavy atoms, and standalone non-standard
+        chains contribute both a residue-level site and heavy-atom sites.
+      * ``protenix``: uses the hetero-token-expanded site order for PAE and
+        atom-level pLDDT aggregated to the selected sites.
     - Chain-type classification (protein vs nucleic acid) sets a minimum d0
       (2.0 for any pair containing NA; 1.0 otherwise) and influences d0
       via the standard length-based formula.
@@ -380,6 +588,22 @@ def calculate_ipSAE(
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"calculate_ipSAE() expects a Structure, found {type(structure).__name__}.")
+  input_format = input_format.strip().lower().replace("-", "_")
+  format_aliases = {
+    "boltz_2": "boltz2",
+    "boltz2": "boltz2",
+    "chai1": "chai1",
+    "protenix": "protenix",
+    "auto": "auto",
+  }
+  if input_format not in format_aliases:
+    supported = ", ".join(f'"{name}"' for name in ("auto", "boltz2", "chai1", "protenix"))
+    raise ValueError(f'Unsupported input_format "{input_format}". Supported values: {supported}.')
+  input_format = format_aliases[input_format]
+
+  plddt = np.asarray(plddt, dtype=float)
+  pae_matrix = np.asarray(pae_matrix, dtype=float)
+
   (
     residue_names,
     chains,
@@ -392,51 +616,112 @@ def calculate_ipSAE(
   keep_indices = np.asarray(keep_indices, dtype=int)
   N = len(chains)
 
-  # Default: residue-level mode with optional pruning of non-standard residues.
-  if plddt.shape[0] == total_polymer_residues:
-    if pae_matrix.shape != (total_polymer_residues, total_polymer_residues):
-      raise ValueError(f"pae_matrix shape {pae_matrix.shape} does not match expected ({total_polymer_residues},{total_polymer_residues}).")
-    plddt = plddt.take(keep_indices, axis=0)
-    pae_matrix = pae_matrix[np.ix_(keep_indices, keep_indices)]
+  def _set_active_sites(names: np.ndarray, chain_ids: np.ndarray, numbers: np.ndarray, coords: np.ndarray) -> None:
+    nonlocal residue_names, chains, residue_nums, coords_cb, N
+    residue_names = names
+    chains = chain_ids
+    residue_nums = numbers
+    coords_cb = coords
+    N = len(chain_ids)
 
-  # If residue-level alignment still does not fit, try token-expanded modes:
-  # standard residues as one site + all heavy atoms for non-standard residues,
-  # then the same but including hetero residues such as ligands and ions.
-  if plddt.shape != (N,) or pae_matrix.shape != (N, N):
-    (
-      residue_names_token,
-      chains_token,
-      residue_nums_token,
-      coords_token,
-    ) = _protein_to_site_arrays_with_nonstandard_atoms(structure)
-    Nt = len(chains_token)
-    if plddt.shape == (Nt,) and pae_matrix.shape == (Nt, Nt):
-      residue_names = residue_names_token
-      chains = chains_token
-      residue_nums = residue_nums_token
-      coords_cb = coords_token
-      N = Nt
-    else:
-      (
-        residue_names_hetero,
-        chains_hetero,
-        residue_nums_hetero,
-        coords_hetero,
-      ) = _structure_to_site_arrays_with_hetero_atoms(structure)
-      Nh = len(chains_hetero)
-      if plddt.shape == (Nh,) and pae_matrix.shape == (Nh, Nh):
-        residue_names = residue_names_hetero
-        chains = chains_hetero
-        residue_nums = residue_nums_hetero
-        coords_cb = coords_hetero
-        N = Nh
+  def _try_residue_level() -> bool:
+    nonlocal plddt, pae_matrix
+    if plddt.shape[0] == total_polymer_residues:
+      if pae_matrix.shape != (total_polymer_residues, total_polymer_residues):
+        raise ValueError(f"pae_matrix shape {pae_matrix.shape} does not match expected ({total_polymer_residues},{total_polymer_residues}).")
+      plddt = plddt.take(keep_indices, axis=0)
+      pae_matrix = pae_matrix[np.ix_(keep_indices, keep_indices)]
+      return True
+    return plddt.shape == (N,) and pae_matrix.shape == (N, N)
+
+  alignment_error: Optional[str] = None
+
+  if input_format == "auto":
+    if not _try_residue_level():
+      residue_names_token, chains_token, residue_nums_token, coords_token = _protein_to_site_arrays_with_nonstandard_atoms(structure)
+      Nt = len(chains_token)
+      if plddt.shape == (Nt,) and pae_matrix.shape == (Nt, Nt):
+        _set_active_sites(residue_names_token, chains_token, residue_nums_token, coords_token)
       else:
-        raise ValueError(
-          f"Unable to align payload: plddt shape {plddt.shape}, pae_matrix shape {pae_matrix.shape}, "
-          f"residue-level expected ({len(keep_indices)}, {len(keep_indices)}), "
-          f"token-expanded expected ({Nt}, {Nt}), "
-          f"hetero-token-expanded expected ({Nh}, {Nh})."
-        )
+        residue_names_hetero, chains_hetero, residue_nums_hetero, coords_hetero = _structure_to_site_arrays_with_hetero_atoms(structure)
+        Nh = len(chains_hetero)
+        if plddt.shape == (Nh,) and pae_matrix.shape == (Nh, Nh):
+          _set_active_sites(residue_names_hetero, chains_hetero, residue_nums_hetero, coords_hetero)
+        else:
+          residue_names_boltz, chains_boltz, residue_nums_boltz, coords_boltz, keep_indices_boltz = _structure_to_site_arrays_boltz2(structure)
+          Nb = len(chains_boltz)
+          if plddt.shape == (Nb,):
+            if pae_matrix.shape != (Nb, Nb):
+              raise ValueError(f"pae_matrix shape {pae_matrix.shape} does not match expected ({Nb},{Nb}).")
+            plddt = plddt.take(keep_indices_boltz, axis=0)
+            pae_matrix = pae_matrix[np.ix_(keep_indices_boltz, keep_indices_boltz)]
+            _set_active_sites(
+              residue_names_boltz.take(keep_indices_boltz, axis=0),
+              chains_boltz.take(keep_indices_boltz, axis=0),
+              residue_nums_boltz.take(keep_indices_boltz, axis=0),
+              coords_boltz.take(keep_indices_boltz, axis=0),
+            )
+          else:
+            residue_names_chai1, chains_chai1, residue_nums_chai1, coords_chai1 = _structure_to_site_arrays_chai1(structure)
+            Nc = len(chains_chai1)
+            if plddt.shape == (Nc,) and pae_matrix.shape == (Nc, Nc):
+              _set_active_sites(residue_names_chai1, chains_chai1, residue_nums_chai1, coords_chai1)
+            else:
+              residue_names_prot, chains_prot, residue_nums_prot, coords_prot, plddt_groups_prot, atom_count_prot = _structure_to_site_arrays_protenix(structure)
+              Np = len(chains_prot)
+              if pae_matrix.shape == (Np, Np) and plddt.shape == (atom_count_prot,):
+                plddt = _aggregate_plddt_by_groups(plddt, plddt_groups_prot)
+                _set_active_sites(residue_names_prot, chains_prot, residue_nums_prot, coords_prot)
+              else:
+                alignment_error = (
+                  f"Unable to align payload: plddt shape {plddt.shape}, pae_matrix shape {pae_matrix.shape}, "
+                  f"residue-level expected ({len(keep_indices)}, {len(keep_indices)}), "
+                  f"token-expanded expected ({Nt}, {Nt}), "
+                  f"hetero-token-expanded expected ({Nh}, {Nh}), "
+                  f'boltz2 raw expected ({Nb}, {Nb}), '
+                  f'chai1 expected ({Nc}, {Nc}), protenix expected plddt ({atom_count_prot},) with pae ({Np}, {Np}).'
+                )
+  elif input_format == "boltz2":
+    residue_names_boltz, chains_boltz, residue_nums_boltz, coords_boltz, keep_indices_boltz = _structure_to_site_arrays_boltz2(structure)
+    Nb = len(chains_boltz)
+    Nk = len(keep_indices_boltz)
+    filtered_names = residue_names_boltz.take(keep_indices_boltz, axis=0)
+    filtered_chains = chains_boltz.take(keep_indices_boltz, axis=0)
+    filtered_nums = residue_nums_boltz.take(keep_indices_boltz, axis=0)
+    filtered_coords = coords_boltz.take(keep_indices_boltz, axis=0)
+    if plddt.shape == (Nb,) and pae_matrix.shape == (Nb, Nb):
+      plddt = plddt.take(keep_indices_boltz, axis=0)
+      pae_matrix = pae_matrix[np.ix_(keep_indices_boltz, keep_indices_boltz)]
+      _set_active_sites(filtered_names, filtered_chains, filtered_nums, filtered_coords)
+    elif plddt.shape == (Nk,) and pae_matrix.shape == (Nk, Nk):
+      _set_active_sites(filtered_names, filtered_chains, filtered_nums, filtered_coords)
+    else:
+      alignment_error = (
+        f'input_format="boltz2" expects raw plddt/pae shapes ({Nb},)/({Nb}, {Nb}) '
+        f'or pruned shapes ({Nk},)/({Nk}, {Nk}), found {plddt.shape} and {pae_matrix.shape}.'
+      )
+  elif input_format == "chai1":
+    residue_names_chai1, chains_chai1, residue_nums_chai1, coords_chai1 = _structure_to_site_arrays_chai1(structure)
+    Nc = len(chains_chai1)
+    if plddt.shape == (Nc,) and pae_matrix.shape == (Nc, Nc):
+      _set_active_sites(residue_names_chai1, chains_chai1, residue_nums_chai1, coords_chai1)
+    else:
+      alignment_error = f'input_format="chai1" expects plddt shape ({Nc},) and pae_matrix shape ({Nc}, {Nc}), found {plddt.shape} and {pae_matrix.shape}.'
+  elif input_format == "protenix":
+    residue_names_prot, chains_prot, residue_nums_prot, coords_prot, plddt_groups_prot, atom_count_prot = _structure_to_site_arrays_protenix(structure)
+    Np = len(chains_prot)
+    if pae_matrix.shape != (Np, Np):
+      alignment_error = f'input_format="protenix" expects pae_matrix shape ({Np}, {Np}), found {pae_matrix.shape}.'
+    elif plddt.shape == (Np,):
+      _set_active_sites(residue_names_prot, chains_prot, residue_nums_prot, coords_prot)
+    elif plddt.shape == (atom_count_prot,):
+      plddt = _aggregate_plddt_by_groups(plddt, plddt_groups_prot)
+      _set_active_sites(residue_names_prot, chains_prot, residue_nums_prot, coords_prot)
+    else:
+      alignment_error = f'input_format="protenix" expects plddt shape ({Np},) or atom-level ({atom_count_prot},), found {plddt.shape}.'
+
+  if alignment_error is not None:
+    raise ValueError(alignment_error)
 
   uniq_chains = np.unique(chains)
   chain_type = _classify_chains(chains, residue_names)

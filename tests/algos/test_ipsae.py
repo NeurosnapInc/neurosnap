@@ -19,6 +19,7 @@ from tests._structure_test_utils import make_structure, parse_ensemble, parse_si
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
+AF3_FILES = FILES / "af3"
 
 
 # ----------------------------
@@ -90,11 +91,30 @@ def test_init_pairdict_variants():
 def _load_plddt_pae(json_path: Path):
   with open(json_path) as f:
     score = json.load(f)
+  if "plddt" not in score and "1" in score:
+    score = score["1"]
   plddt = np.asarray(score["plddt"])
   pae = np.asarray(score["pae"])
   # ensure square pae
   assert pae.ndim == 2 and pae.shape[0] == pae.shape[1]
   return plddt, pae
+
+
+def _load_af3_score(json_path: Path):
+  with open(json_path) as f:
+    score = json.load(f)
+  return score["1"]
+
+
+def _af3_input_format(struct_path: Path) -> str:
+  name = struct_path.stem
+  if name.startswith("chai1_"):
+    return "chai1"
+  if name.startswith("boltz_2_"):
+    return "boltz2"
+  if name.startswith("protenix_"):
+    return "protenix"
+  raise AssertionError(f"Unexpected AF3 fixture name: {struct_path.name}")
 
 
 @pytest.mark.parametrize(
@@ -321,3 +341,65 @@ def test_calculate_ipsae_min_metric_with_ptm_fixture():
   assert np.isfinite(min_ab)
   assert np.isfinite(min_ba)
   assert min_ab == min_ba
+
+
+@pytest.mark.parametrize("struct_path", sorted(AF3_FILES.glob("*.cif")), ids=lambda path: path.stem)
+def test_calculate_ipsae_runs_on_all_af3_fixtures(struct_path: Path):
+  score_path = struct_path.with_suffix(".json")
+  structure = parse_single_model(struct_path)
+  score = _load_af3_score(score_path)
+
+  res = calculate_ipSAE(
+    structure,
+    plddt=np.asarray(score["plddt"]),
+    pae_matrix=np.asarray(score["pae"]),
+    input_format=_af3_input_format(struct_path),
+  )
+
+  site_count = len(res["residue_order"]["chains"])
+  chains = np.unique(res["residue_order"]["chains"])
+  assert site_count > 0
+  assert len(chains) >= 2
+  assert res["by_residue"]["ipsae_d0chn"][chains[0]][chains[1]].shape == (site_count,)
+  assert res["by_residue"]["ipsae_d0chn"]
+  assert res["scores"]["LIS"]
+
+
+@pytest.mark.parametrize(
+  "fixture_name",
+  [
+    "boltz_2_dimer",
+    "boltz_2_dimer_ptm",
+    "chai1_dimer",
+    "chai1_dimer_ptm",
+  ],
+)
+def test_calculate_ipsae_matches_af3_reference_scores_when_present(fixture_name: str):
+  struct_path = AF3_FILES / f"{fixture_name}.cif"
+  score = _load_af3_score(AF3_FILES / f"{fixture_name}.json")
+  structure = parse_single_model(struct_path)
+
+  res = calculate_ipSAE(
+    structure,
+    plddt=np.asarray(score["plddt"]),
+    pae_matrix=np.asarray(score["pae"]),
+    input_format=_af3_input_format(struct_path),
+  )
+
+  for metric in ["iptm_d0chn", "ipsae_d0chn", "ipsae_d0dom", "ipsae_d0res"]:
+    for c1, inner in score[metric].items():
+      for c2, expected in inner.items():
+        assert res["asym"][metric][c1][c2] == pytest.approx(expected, abs=1e-4)
+
+  for metric in ["pDockQ", "pDockQ2", "LIS"]:
+    for c1, inner in score[metric].items():
+      for c2, expected in inner.items():
+        assert res["scores"][metric][c1][c2] == pytest.approx(expected, abs=1e-4)
+
+
+def test_calculate_ipsae_rejects_unknown_input_format():
+  structure = parse_single_model(FILES / "dimer_af2.pdb")
+  plddt, pae = _load_plddt_pae(FILES / "dimer_af2.json")
+
+  with pytest.raises(ValueError, match="Unsupported input_format"):
+    calculate_ipSAE(structure, plddt=plddt, pae_matrix=pae, input_format="unknown_format")

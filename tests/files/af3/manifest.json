@@ -1,0 +1,28 @@
+{
+  "description": "Nine minimal single-sequence Neurosnap predictions for ipSAE pLDDT/PAE development.",
+  "protein_dimer": {
+    "protein_1": "MCKQLEDKVEELLSKNYHLENEVARLKKLVGER",
+    "protein_2": "MCKQLEDKVEELLSKNYHLENEVARLKKLVGER"
+  },
+  "ptm": "SEP on protein_1 Ser14",
+  "covalent_cases": {
+    "chai1": "NAG covalently attached to the protein_1 N-terminus",
+    "boltz_2": "Cys2 SG covalently attached to ethanethiol sulfur",
+    "protenix": "NAG covalently attached to the protein_1 N-terminus"
+  },
+  "jobs": {
+    "chai1_dimer": "6a51089416acf4813e8d50bd",
+    "chai1_dimer_ptm": "6a51089416acf4813e8d50c1",
+    "chai1_dimer_ptm_covalent": "6a51542eaef8e8d3840e3d69",
+    "boltz_2_dimer": "6a51089616acf4813e8d50c9",
+    "boltz_2_dimer_ptm": "6a51089716acf4813e8d50cd",
+    "boltz_2_dimer_ptm_covalent": "6a51089816acf4813e8d50d1",
+    "protenix_dimer": "6a51089916acf4813e8d50d5",
+    "protenix_dimer_ptm": "6a51089a16acf4813e8d50d9",
+    "protenix_dimer_ptm_covalent": "6a51542faef8e8d3840e3d6d"
+  },
+  "failed_attempts": {
+    "chai1_dimer_ptm_covalent": "6a51089516acf4813e8d50c5",
+    "protenix_dimer_ptm_covalent": "6a51089a16acf4813e8d50dd"
+  }
+}

@@ -6,7 +6,7 @@ import pytest
 from neurosnap.algos.lddt import calc_lddt
 from neurosnap.io.mmcif import parse_mmcif
 from neurosnap.structure import Structure, StructureEnsemble
-from tests._structure_test_utils import FILES, parse_ensemble, parse_single_model
+from tests._structure_test_utils import FILES, parse_single_model
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +33,9 @@ def _make_structure(atom_defs):
   """Build a synthetic single-model structure with optional hetero residues."""
   structure = Structure(remove_annotations=False)
   structure.metadata["model_id"] = 1
-  structure.atoms = np.array([(x, y, z) for _atom_name, _resname, _chain_id, _resid, _ins_code, _hetero, x, y, z, _element in atom_defs], dtype=structure._dtype_atoms)
+  structure.atoms = np.array(
+    [(x, y, z) for _atom_name, _resname, _chain_id, _resid, _ins_code, _hetero, x, y, z, _element in atom_defs], dtype=structure._dtype_atoms
+  )
   structure.atom_annotations = np.zeros(len(atom_defs), dtype=structure._dtype_atom_annotations)
 
   for atom_index, (atom_name, resname, chain_id, resid, ins_code, hetero, _x, _y, _z, element) in enumerate(atom_defs):

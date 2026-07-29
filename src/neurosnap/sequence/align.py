@@ -467,9 +467,9 @@ def align_mafft(seqs: Union[str, List[str], Dict[str, str]], ep: float = 0.0, op
     - ``out_names``: list of aligned protein names
     - ``out_seqs``: list of corresponding protein sequences
   """
-  assert (
-    shutil.which("mafft") is not None
-  ), "Cannot create alignment without mafft being installed. Please install mafft either using a package manager or from https://mafft.cbrc.jp/alignment/software/"
+  assert shutil.which("mafft") is not None, (
+    "Cannot create alignment without mafft being installed. Please install mafft either using a package manager or from https://mafft.cbrc.jp/alignment/software/"
+  )
 
   with tempfile.TemporaryDirectory() as tmp_dir:
     tmp_fasta_path = f"{tmp_dir}/tmp.fasta"
@@ -792,8 +792,7 @@ def run_mmseqs2(
     templates = {}
     for line in open(f"{output}/pdb70.m8", "r"):
       p = line.rstrip().split()
-      seq_id, pdb, qid, e_value = p[0], p[1], p[2], p[10]
-      seq_id = int(seq_id)
+      seq_id, pdb = int(p[0]), p[1]
       if seq_id not in templates:
         templates[seq_id] = []
       templates[seq_id].append(pdb)
@@ -814,7 +813,7 @@ def run_mmseqs2(
       if template_fpath is None:
         logger.warning(f"No templates found for {seqs_unique[seq_id]}")
 
-  logger.info(f"Finished generating MSA, took {datetime.now()-start}")
+  logger.info(f"Finished generating MSA, took {datetime.now() - start}")
 
   if not pairing and use_templates:
     return a3m_lines, template_paths.values()

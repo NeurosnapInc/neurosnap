@@ -14,6 +14,7 @@ from neurosnap.algos.ipsae import (
   init_pairdict_set,
   ptm_func,
   ptm_func_vec,
+  extract_minimum_interchain_metrics,
 )
 from tests._structure_test_utils import make_structure, parse_ensemble, parse_single_model
 
@@ -341,6 +342,30 @@ def test_calculate_ipsae_min_metric_with_ptm_fixture():
   assert np.isfinite(min_ab)
   assert np.isfinite(min_ba)
   assert min_ab == min_ba
+
+
+def test_extract_minimum_interchain_metrics():
+  prot = parse_single_model(FILES / "chai1_dimer_ptm_protein_with_nanobody.cif")
+  plddt, pae = _load_plddt_pae(FILES / "chai1_dimer_ptm_protein_with_nanobody.json")
+  res = calculate_ipSAE(prot, plddt=plddt, pae_matrix=pae)
+
+  min_metrics = extract_minimum_interchain_metrics(res)
+  assert "iptm_d0chn" in min_metrics
+  assert "ipsae_d0chn" in min_metrics
+  assert "ipsae_d0dom" in min_metrics
+  assert "ipsae_d0res" in min_metrics
+
+  assert min_metrics["ipsae_d0res"]["A"]["B"] == res["min"]["ipsae_d0res"]["A"]["B"]
+
+  # Validation tests
+  with pytest.raises(TypeError):
+    extract_minimum_interchain_metrics("not a dict")
+
+  with pytest.raises(ValueError):
+    extract_minimum_interchain_metrics({})
+
+  with pytest.raises(KeyError):
+    extract_minimum_interchain_metrics({"min": {"iptm_d0chn": 1.0}})
 
 
 @pytest.mark.parametrize("struct_path", sorted(AF3_FILES.glob("*.cif")), ids=lambda path: path.stem)

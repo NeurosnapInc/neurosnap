@@ -1197,3 +1197,40 @@ def extract_interchain_metrics(res: dict) -> dict:
     # Measures local contact consistency between chains based purely on PAE.
     "LIS": res["scores"]["LIS"],
   }
+
+
+def extract_minimum_interchain_metrics(res: dict) -> dict:
+  """Extracts minimum inter-chain confidence metrics from a calculate_ipSAE() result.
+
+  This helper returns the minimum values of the ipSAE and ipTM metric families
+  representing the worst-case interface confidence between chain pairs.
+
+  Args:
+      res (dict): Output dictionary from `calculate_ipSAE()`. Must contain the "min" key.
+
+  Returns:
+      dict: Nested dictionary of the form:
+          {
+            "iptm_d0chn": {chain1: {chain2: float}},
+            "ipsae_d0chn": {chain1: {chain2: float}},
+            "ipsae_d0dom": {chain1: {chain2: float}},
+            "ipsae_d0res": {chain1: {chain2: float}},
+          }
+  """
+  if not isinstance(res, dict):
+    raise TypeError("Input must be a dictionary.")
+  if "min" not in res:
+    raise ValueError("Input dictionary does not contain 'min' metrics. Ensure it is a valid calculate_ipSAE result.")
+
+  expected_keys = ["iptm_d0chn", "ipsae_d0chn", "ipsae_d0dom", "ipsae_d0res"]
+  for key in expected_keys:
+    if key not in res["min"]:
+      raise KeyError(f"Expected key '{key}' not found in res['min'].")
+
+  return {
+    "iptm_d0chn": res["min"]["iptm_d0chn"],
+    "ipsae_d0chn": res["min"]["ipsae_d0chn"],
+    "ipsae_d0dom": res["min"]["ipsae_d0dom"],
+    "ipsae_d0res": res["min"]["ipsae_d0res"],
+  }
+

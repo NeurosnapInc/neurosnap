@@ -1606,10 +1606,13 @@ class StructureEnsemble:
 
 
 class StructureStack:
-  """Shared-annotation, shared-connection multi-model fast path.
+  """Shared-annotation, shared-topology multi-model fast path.
 
   All models in a stack must share the same atom ordering, per-atom annotations,
-  bonds, and interactions. Only the coordinates vary between models.
+  and bonds, because those describe persistent topology. Coordinates and
+  interactions vary per model: interactions are geometry-dependent, so each
+  model owns its own table and ``interactions`` is a list indexed in parallel
+  with ``model_ids``.
 
   Parameters:
     models: Optional initial list of stack-compatible models.
@@ -1638,7 +1641,7 @@ class StructureStack:
     self.coord = np.zeros((0, 0, 3), dtype=np.float32)
     self.atom_annotations = np.zeros(0, dtype=self._dtype_atom_annotations)
     self.bonds = np.zeros(0, dtype=self._dtype_bond)
-    self.interactions = np.zeros(0, dtype=self._dtype_interaction)
+    self.interactions: List[np.ndarray] = []
 
     models = models or []
     if model_ids is not None and len(model_ids) != len(models):
@@ -1707,7 +1710,7 @@ class StructureStack:
         self.coord[index].copy(),
         self.atom_annotations.copy(),
         self.bonds.copy(),
-        self.interactions.copy(),
+        [table.copy() for table in self.interactions[index]],
         model_ids=self.model_ids[index],
         metadata=self.metadata,
       )
@@ -1744,12 +1747,12 @@ class StructureStack:
       self.coord = coord[np.newaxis, ...]
       self.atom_annotations = np.array(model.atom_annotations, dtype=model.atom_annotations.dtype, copy=True)
       self.bonds = np.array(model.bonds, dtype=model.bonds.dtype, copy=True)
-      self.interactions = np.array(model.interactions, dtype=model.interactions.dtype, copy=True)
     else:
       reference = self._model_to_structure(0)
       self._ensure_stack_compatible(reference, model)
       self.coord = np.concatenate((self.coord, coord[np.newaxis, ...]), axis=0)
 
+    self.interactions.append(np.array(model.interactions, dtype=self._dtype_interaction, copy=True))
     self.model_ids.append(len(self.model_ids) + 1 if model_id is None else int(model_id))
 
   def remove_model(self, model_id: int) -> Structure:
@@ -1767,6 +1770,7 @@ class StructureStack:
     model_position = _model_position_from_id(self.model_ids, model_id)
     removed_model = self._model_to_structure(model_position)
     self.coord = np.delete(self.coord, model_position, axis=0)
+    self.interactions.pop(model_position)
     self.model_ids.pop(model_position)
     return removed_model
 
@@ -1853,12 +1857,22 @@ class StructureStack:
     coord: np.ndarray,
     atom_annotations: np.ndarray,
     bonds: np.ndarray,
-    interactions: np.ndarray,
+    interactions: Union[np.ndarray, Sequence[np.ndarray]],
     *,
     model_ids: Optional[List[int]] = None,
     metadata: Optional[Mapping[str, Any]] = None,
   ) -> "StructureStack":
-    """Construct a stack directly from shared coordinates and annotations."""
+    """Construct a stack directly from shared coordinates and annotations.
+
+    Parameters:
+      coord: Coordinates of shape ``(n_models, n_atoms, 3)``.
+      atom_annotations: Shared per-atom annotation table.
+      bonds: Shared bond table.
+      interactions: Either one interaction table per model, or a single table
+        that is applied to every model.
+      model_ids: Optional model identifiers.
+      metadata: Optional stack-level metadata.
+    """
     coord = np.asarray(coord, dtype=np.float32)
     if coord.ndim != 3 or coord.shape[2] != 3:
       raise ValueError("StructureStack coordinates must have shape (n_models, n_atoms, 3).")
@@ -1871,8 +1885,14 @@ class StructureStack:
     stack.atom_annotations = np.array(atom_annotations, dtype=atom_annotations.dtype, copy=True)
     stack._dtype_bond = bonds.dtype
     stack.bonds = np.array(bonds, dtype=bonds.dtype, copy=True)
-    stack._dtype_interaction = interactions.dtype
-    stack.interactions = np.array(interactions, dtype=interactions.dtype, copy=True)
+    if isinstance(interactions, np.ndarray):
+      per_model_interactions = [interactions] * coord.shape[0]
+    else:
+      per_model_interactions = list(interactions)
+      if len(per_model_interactions) != coord.shape[0]:
+        raise ValueError("One interaction table is required per model in coord.")
+    stack._dtype_interaction = per_model_interactions[0].dtype if per_model_interactions else stack._dtype_interaction
+    stack.interactions = [np.array(table, dtype=table.dtype, copy=True) for table in per_model_interactions]
     stack.model_ids = list(range(1, coord.shape[0] + 1)) if model_ids is None else [int(x) for x in model_ids]
     if len(stack.model_ids) != coord.shape[0]:
       raise ValueError("model_ids must match the number of models in coord.")
@@ -1883,7 +1903,7 @@ class StructureStack:
     atoms = self._atoms_from_coord_matrix(self.coord[model_index], self._dtype_atoms)
     metadata = dict(self.metadata)
     metadata["model_id"] = self.model_ids[model_index]
-    return self._structure_from_parts(atoms, self.atom_annotations, self.bonds, self.interactions, metadata=metadata)
+    return self._structure_from_parts(atoms, self.atom_annotations, self.bonds, self.interactions[model_index], metadata=metadata)
 
   @staticmethod
   def _coord_matrix_from_structure(model: Structure) -> np.ndarray:
@@ -1937,5 +1957,7 @@ class StructureStack:
       raise ValueError("StructureStack requires identical atom annotations across all models.")
     if reference.bonds.dtype != candidate.bonds.dtype or not np.array_equal(reference.bonds, candidate.bonds):
       raise ValueError("StructureStack requires identical bonds across all models.")
-    if reference.interactions.dtype != candidate.interactions.dtype or not np.array_equal(reference.interactions, candidate.interactions):
-      raise ValueError("StructureStack requires identical interactions across all models.")
+    # Interactions are geometry-dependent and may legitimately differ between
+    # models, so only the schema has to agree.
+    if reference.interactions.dtype != candidate.interactions.dtype:
+      raise ValueError("StructureStack requires identical interaction schemas across all models.")

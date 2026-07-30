@@ -395,3 +395,41 @@ def test_analysis_helpers_require_structure():
     calculate_surface_area(ensemble)
   with pytest.raises(TypeError):
     calculate_protein_volume(ensemble)
+
+
+def test_structure_stack_allows_interactions_to_differ_between_models():
+  """Interactions are geometry-dependent, so a stack must not force them to match.
+
+  Bonds describe persistent topology and stay shared, but interactions are
+  derived from coordinates and legitimately vary per model.
+  """
+  import numpy as np
+
+  from neurosnap.structure import InteractionType, StructureStack
+  from tests._structure_test_utils import PROTEIN_BACKBONE_ATOMS, make_structure
+
+  def model(pairs):
+    structure = make_structure(list(PROTEIN_BACKBONE_ATOMS))
+    structure.interactions = np.array(
+      [(atom_i, atom_j, int(InteractionType.HYDROGEN_BOND)) for atom_i, atom_j in pairs],
+      dtype=structure._dtype_interaction,
+    )
+    return structure
+
+  stack = StructureStack([model([(0, 3)]), model([(1, 4), (2, 5)])])
+
+  # each model keeps its own table
+  assert len(stack[1].interactions) == 1
+  assert len(stack[2].interactions) == 2
+
+  # bonds remain shared topology
+  assert np.array_equal(stack[1].bonds, stack[2].bonds)
+
+  # the per-model tables survive an ensemble round trip
+  rebuilt = StructureStack.from_ensemble(stack.to_ensemble())
+  assert [len(table) for table in rebuilt.interactions] == [1, 2]
+
+  # and stay aligned when models are dropped
+  removed = stack.remove_model(1)
+  assert len(removed.interactions) == 1
+  assert [len(table) for table in stack.interactions] == [2]

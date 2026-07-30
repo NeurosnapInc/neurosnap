@@ -43,8 +43,6 @@ from neurosnap._compat import compat_dataclass
 from neurosnap.algos.evoef2_lib.constants import (
   _ATOM_ORDER_SEQUENCE,
   _DUNBRACK_TORSION_COUNT,
-  AA_ONE_LETTER,
-  AA_THREE_TO_ONE,
   COULOMB_CONSTANT,
   DNA_BI_CENTER,
   DNA_BII_CENTER,
@@ -54,6 +52,7 @@ from neurosnap.algos.evoef2_lib.constants import (
   ENERGY_DISTANCE_CUTOFF,
   ENERGY_SCALE_FACTOR_BOND_14,
   ENERGY_SCALE_FACTOR_BOND_15,
+  EVOEF2_STANDARD_AA_INDEX,
   ENERGY_TERM_NAMES,
   ENERGY_TERM_ORDER,
   HBOND_DISTANCE_CUTOFF_MAX,
@@ -61,9 +60,6 @@ from neurosnap.algos.evoef2_lib.constants import (
   HBOND_OPTIMAL_DISTANCE,
   HBOND_WELL_DEPTH,
   MAX_EVOEF_ENERGY_TERM_NUM,
-  NA_BACKBONE_ATOMS,
-  NA_RESIDUE_MAP,
-  NA_RESIDUES,
   PI,
   RADIUS_SCALE_FOR_DESOLV,
   RADIUS_SCALE_FOR_VDW,
@@ -74,8 +70,20 @@ from neurosnap.algos.evoef2_lib.constants import (
   SSBOND_DISTANCE,
 )
 from neurosnap.algos.evoef2_lib.weights import get_weights
+from neurosnap.constants.sequence import AA_RECORDS, STANDARD_AAs
+from neurosnap.constants.structure import BACKBONE_ATOMS_NUCLEOTIDE, NUC_ALL_CODES, NUC_RESIDUE_MAP
 from neurosnap.log import logger
 from neurosnap.structure import BondType, Structure as NSStructure
+from neurosnap.sequence.protein import getAA
+
+def _protein_one_letter_code(res_name: str) -> Optional[str]:
+  """Return the canonical one-letter code for a protein residue name."""
+  if res_name in {"HSD", "HSE", "HSP"}:
+    return "H"
+  record = AA_RECORDS.get(res_name)
+  if record is None or not record.is_standard:
+    return None
+  return record.code
 
 
 @dataclass
@@ -457,7 +465,7 @@ def _default_evoef2_root() -> Path:
 
 
 def _is_nucleic_res_name(res_name: str) -> bool:
-  return res_name in NA_RESIDUES or res_name in NA_RESIDUE_MAP
+  return res_name in NUC_ALL_CODES or res_name in NUC_RESIDUE_MAP
 
 
 def _is_polymer_residue(res: Residue) -> bool:
@@ -554,7 +562,7 @@ def _load_na_params(
     for atom_name, (atom_type, charge) in atoms.items():
       eps, rmin2 = vdw_params.get(atom_type, (0.0, 0.0))
       # Backbone classification and polarity are heuristic but consistent.
-      is_bb = atom_name in NA_BACKBONE_ATOMS or "'" in atom_name or atom_name.startswith("P") or atom_name.startswith("OP")
+      is_bb = atom_name in BACKBONE_ATOMS_NUCLEOTIDE or "'" in atom_name or atom_name.startswith("P") or atom_name.startswith("OP")
       polarity = "P" if atom_name[0] in {"O", "N", "P"} else "C"
       # H-bond role: hydrogens are donors; hetero atoms default to acceptors.
       hb_h_or_a = "H" if atom_name.startswith("H") else ("A" if atom_name[0] in {"O", "N"} else "-")
@@ -1544,9 +1552,9 @@ def rebuild_missing_atoms(
           res_name = "HSE"
         elif res_name == "HIP":
           res_name = "HSP"
-        if res_name in NA_RESIDUE_MAP:
-          res_name = NA_RESIDUE_MAP[res_name]
-        is_protein = res_name in AA_THREE_TO_ONE
+        if res_name in NUC_RESIDUE_MAP:
+          res_name = NUC_RESIDUE_MAP[res_name]
+        is_protein = _protein_one_letter_code(res_name) is not None
         is_nucleic = _is_nucleic_res_name(res_name)
         res = Residue(
           name=res_name,
@@ -1592,9 +1600,9 @@ def rebuild_missing_atoms(
         res_name = "HSE"
       elif res_name == "HIP":
         res_name = "HSP"
-      if res_name in NA_RESIDUE_MAP:
-        res_name = NA_RESIDUE_MAP[res_name]
-      is_protein = res_name in AA_THREE_TO_ONE
+      if res_name in NUC_RESIDUE_MAP:
+        res_name = NUC_RESIDUE_MAP[res_name]
+      is_protein = _protein_one_letter_code(res_name) is not None
       is_nucleic = _is_nucleic_res_name(res_name)
       res = Residue(
         name=res_name,
@@ -1661,7 +1669,7 @@ def rebuild_missing_atoms(
   return Structure(chains=chains)
 
 
-_AA_ONE_TO_THREE = {one: three for three, one in AA_THREE_TO_ONE.items()}
+_AA_ONE_TO_THREE = {code: abr for abr, record in AA_RECORDS.items() if record.is_standard and (code := record.code) is not None}
 
 
 def _clone_evo_residue(res: Residue) -> Residue:
@@ -1701,16 +1709,16 @@ def _canonical_mutation_targets(target_residue: str) -> List[str]:
   if len(target) == 1:
     if target == "H":
       return ["HSD", "HSE"]
-    if target not in _AA_ONE_TO_THREE:
+    if target not in STANDARD_AAs:
       raise ValueError(f'Unsupported target amino acid code "{target_residue}".')
-    return [_AA_ONE_TO_THREE[target]]
+    return [getAA(target).abr]
   if target in {"HIS", "HID", "HSD"}:
     return ["HSD", "HSE"] if target == "HIS" else ["HSD"]
   if target in {"HIE", "HSE"}:
     return ["HSE"]
   if target in {"HIP", "HSP"}:
     return ["HSP"]
-  if target not in AA_THREE_TO_ONE:
+  if _protein_one_letter_code(target) is None:
     raise ValueError(f'Unsupported target amino acid code "{target_residue}".')
   return [target]
 
@@ -2759,10 +2767,10 @@ def _aa_propensity_ramachandran(res: Residue, aap: AAppTable, rama: RamaTable, t
     rama: Ramachandran table.
     terms: Energy term accumulator.
   """
-  aa1 = AA_THREE_TO_ONE.get(res.name)
+  aa1 = _protein_one_letter_code(res.name)
   if aa1 is None:
     return
-  aa_index = AA_ONE_LETTER.index(aa1)
+  aa_index = EVOEF2_STANDARD_AA_INDEX[aa1]
   phi = int(res.phipsi[0])
   psi = int(res.phipsi[1])
   phi_index = (phi + 180) // 10

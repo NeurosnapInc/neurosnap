@@ -42,6 +42,13 @@ SSBOND_CUTOFF_MIN = 1.95
 
 PI = math.pi
 
+# EvoEF2's statistical parameter tables use this exact amino-acid axis order.
+# Treat it as part of the bundled table schema rather than a general-purpose
+# amino-acid constant: if the shared sequence constants ever change, EvoEF2 must
+# still preserve this exact order to keep propensity/Ramachandran indices aligned.
+EVOEF2_STANDARD_AA_ORDER = tuple("ACDEFGHIKLMNPQRSTVWY")
+EVOEF2_STANDARD_AA_INDEX = {aa: i for i, aa in enumerate(EVOEF2_STANDARD_AA_ORDER)}
+
 # Energy term indices and names
 ENERGY_TERM_NAMES = {
   0: "total",
@@ -203,72 +210,6 @@ WEIGHT_KEY_TO_INDEX = {
   "rna_suite": 94,
   "dna_bibii": 95,
   "dna_chi": 96,
-}
-
-AA_ONE_LETTER = "ACDEFGHIKLMNPQRSTVWY"
-AA_THREE_TO_ONE = {
-  "ALA": "A",
-  "CYS": "C",
-  "ASP": "D",
-  "GLU": "E",
-  "PHE": "F",
-  "GLY": "G",
-  "HIS": "H",
-  "HSE": "H",
-  "HSD": "H",
-  "HSP": "H",
-  "ILE": "I",
-  "LYS": "K",
-  "LEU": "L",
-  "MET": "M",
-  "ASN": "N",
-  "PRO": "P",
-  "GLN": "Q",
-  "ARG": "R",
-  "SER": "S",
-  "THR": "T",
-  "VAL": "V",
-  "TRP": "W",
-  "TYR": "Y",
-}
-
-# Nucleic acid residues (common PDB names and CHARMM names)
-NA_RNA_RESIDUES = {"A", "C", "G", "U", "I"}
-NA_DNA_RESIDUES = {"DA", "DC", "DG", "DT", "DI"}
-NA_CHARMm_RESIDUES = {"ADE", "GUA", "CYT", "THY", "URA"}
-NA_RESIDUES = NA_RNA_RESIDUES | NA_DNA_RESIDUES | NA_CHARMm_RESIDUES
-
-# Map common PDB names to CHARMM NA residue names.
-NA_RESIDUE_MAP = {
-  "A": "ADE",
-  "G": "GUA",
-  "C": "CYT",
-  "U": "URA",
-  "DA": "ADE",
-  "DG": "GUA",
-  "DC": "CYT",
-  "DT": "THY",
-  "I": "GUA",
-  "DI": "GUA",
-}
-
-# Backbone atoms for nucleic acids (sugar/phosphate)
-NA_BACKBONE_ATOMS = {
-  "P",
-  "OP1",
-  "OP2",
-  "OP3",
-  "O1P",
-  "O2P",
-  "O5'",
-  "C5'",
-  "C4'",
-  "O4'",
-  "C3'",
-  "O3'",
-  "C2'",
-  "O2'",
-  "C1'",
 }
 
 # Nucleic acid torsion suite reference:

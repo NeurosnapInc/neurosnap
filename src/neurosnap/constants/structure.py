@@ -31,6 +31,10 @@ BACKBONE_ATOMS_DNA = (
 # Names of atoms that are part of an RNA backbone structure
 # (Same as DNA but includes the 2'-OH group)
 BACKBONE_ATOMS_RNA = BACKBONE_ATOMS_DNA + ("O2'",)
+# Backbone atoms for nucleic acids across the common DNA/RNA naming variants
+# used in structure parsing and topology lookup. This includes OP3, which is a
+# terminal phosphate atom name encountered in some files.
+BACKBONE_ATOMS_NUCLEOTIDE = BACKBONE_ATOMS_RNA + ("OP3",)
 
 ## Nucleotide Codes
 # Single-letter PDB residue codes for standard DNA residues
@@ -39,6 +43,24 @@ NUC_DNA_CODES = {"DA", "DT", "DC", "DG", "DI"}
 NUC_RNA_CODES = {"A", "U", "C", "G", "I"}
 # Codes for standard nucleotides (both RNA and DNA)
 STANDARD_NUCLEOTIDES = NUC_DNA_CODES.union(NUC_RNA_CODES)
+# Canonical CHARMM residue names for standard nucleic acid bases.
+NUC_CHARMM_RESIDUES = {"ADE", "GUA", "CYT", "THY", "URA"} # TODO: Kinda redundant with NUC_RESIDUE_MAP.values()
+# Combined set of standard nucleic-acid residue names across common PDB and
+# CHARMM conventions.
+NUC_ALL_CODES = STANDARD_NUCLEOTIDES.union(NUC_CHARMM_RESIDUES)
+# Map common PDB nucleic acid residue names to their corresponding CHARMM residue names for topology and parameter lookup.
+NUC_RESIDUE_MAP = {
+  "A": "ADE",
+  "G": "GUA",
+  "C": "CYT",
+  "U": "URA",
+  "DA": "ADE",
+  "DG": "GUA",
+  "DC": "CYT",
+  "DT": "THY",
+  "I": "GUA",
+  "DI": "GUA",
+}
 
 
 ### Protein Constants
@@ -52,10 +74,14 @@ HYDROPHOBIC_RESIDUES = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "TRP", "PRO"}
 __all__ = [
   "BACKBONE_ATOMS_AA",
   "BACKBONE_ATOMS_DNA",
+  "BACKBONE_ATOMS_NUCLEOTIDE",
   "BACKBONE_ATOMS_RNA",
   "HYDROPHOBIC_RESIDUES",
+  "NUC_ALL_CODES",
+  "NUC_CHARMM_RESIDUES",
   "NUC_DNA_CODES",
   "NUC_RNA_CODES",
+  "NUC_RESIDUE_MAP",
   "STANDARD_NUCLEOTIDES",
   "FIVE_PRIME_TERMINAL_ATOMS",
   "THREE_PRIME_TERMINAL_ATOMS",

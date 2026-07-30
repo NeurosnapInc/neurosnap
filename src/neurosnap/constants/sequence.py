@@ -73,6 +73,15 @@ for abr, rec in AA_RECORDS.items():
   AA_ALIASES[abr] = abr
   AA_ALIASES[rec.name] = abr
 
+# Common histidine protonation/tautomer residue names should resolve to the
+# canonical histidine record rather than requiring per-caller special cases.
+AA_ALIASES["HSD"] = "HIS"
+AA_ALIASES["HSE"] = "HIS"
+AA_ALIASES["HSP"] = "HIS"
+AA_ALIASES["HID"] = "HIS"
+AA_ALIASES["HIE"] = "HIS"
+AA_ALIASES["HIP"] = "HIS"
+
 ## Amino acid molecular masses
 # Average residue masses (in Daltons) for amino acids *as incorporated into peptides/proteins*.
 # These values already account for the loss of one H2O molecule during peptide bond formation,

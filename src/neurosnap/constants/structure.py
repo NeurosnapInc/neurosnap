@@ -36,7 +36,7 @@ BACKBONE_ATOMS_RNA = BACKBONE_ATOMS_DNA + ("O2'",)
 # Single-letter PDB residue codes for standard DNA residues
 NUC_DNA_CODES = {"DA", "DT", "DC", "DG", "DI"}
 # Single-letter PDB residue codes for standard RNA residues
-NUC_RNA_CODES = {"A", "U", "C", "G"}
+NUC_RNA_CODES = {"A", "U", "C", "G", "I"}
 # Codes for standard nucleotides (both RNA and DNA)
 STANDARD_NUCLEOTIDES = NUC_DNA_CODES.union(NUC_RNA_CODES)
 

@@ -19,6 +19,7 @@ from .. import definitions as defns
 from .. import quatfit as quat
 from .. import utilities as util
 from ..dat.hydrogens_data import HYDROGEN_DATA
+from . import optimize
 from . import structures
 from .structures import (
     HydrogenConformation,

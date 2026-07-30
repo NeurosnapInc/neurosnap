@@ -163,7 +163,7 @@ class Structure:
     self.bonds = np.zeros(0, dtype=self._dtype_bond)
     self.interactions = np.zeros(0, dtype=self._dtype_interaction)
 
-    assert isinstance(remove_annotations, bool) # prevent users from mistakenly initialize the class with the incorrect type
+    assert isinstance(remove_annotations, bool)  # prevent users from mistakenly initialize the class with the incorrect type
     if remove_annotations is True:
       self._remove_empty_annotations()
 
@@ -701,7 +701,7 @@ class Structure:
     selected_chains = [str(chain_id) for chain_id in chains]
     missing_chains = sorted(set(selected_chains) - set(self.chain_ids()))
     if missing_chains:
-      raise ValueError(f'Chain(s) {", ".join(missing_chains)} were not found in the structure.')
+      raise ValueError(f"Chain(s) {', '.join(missing_chains)} were not found in the structure.")
 
     return np.isin(self.atom_annotations["chain_id"], selected_chains)
 
@@ -1058,7 +1058,9 @@ def _normalize_requested_model_ids(existing_model_ids: Sequence[int], requested_
   return selected_model_ids
 
 
-def _normalize_residue_selector(selector: Union[int, Residue, Tuple[Any, ...]]) -> Tuple[Optional[str], int, Optional[str], Optional[str], Optional[bool]]:
+def _normalize_residue_selector(
+  selector: Union[int, Residue, Tuple[Any, ...]],
+) -> Tuple[Optional[str], int, Optional[str], Optional[str], Optional[bool]]:
   """Normalize one residue selector into comparable components.
 
   Parameters:
@@ -1087,8 +1089,7 @@ def _normalize_residue_selector(selector: Union[int, Residue, Tuple[Any, ...]]) 
       chain_id, res_id, ins_code, res_name, hetero = selector
       return str(chain_id), int(res_id), str(ins_code), str(res_name), bool(hetero)
   raise TypeError(
-    "Residue selectors must be integers, Residue objects, "
-    "(chain_id, res_id) tuples, (chain_id, res_id, ins_code) tuples, or full residue-key tuples."
+    "Residue selectors must be integers, Residue objects, (chain_id, res_id) tuples, (chain_id, res_id, ins_code) tuples, or full residue-key tuples."
   )
 
 
@@ -1187,7 +1188,7 @@ def _structure_selection_mask(
     selected_chains = {str(chain_id) for chain_id in chains}
     missing_chains = sorted(selected_chains - set(structure.chain_ids()))
     if missing_chains:
-      raise ValueError(f'Chain(s) {", ".join(missing_chains)} were not found in the structure.')
+      raise ValueError(f"Chain(s) {', '.join(missing_chains)} were not found in the structure.")
     atom_mask &= np.isin(structure.atom_annotations["chain_id"], list(selected_chains))
 
   if residues is not None:

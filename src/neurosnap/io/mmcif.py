@@ -17,7 +17,7 @@ from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union, Set
 import numpy as np
 
 from neurosnap.log import logger
-from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack, _classify_polymer_residue
+from neurosnap.structure.structure import BondType, InteractionType, Structure, StructureEnsemble, StructureStack, _classify_polymer_residue
 
 __all__ = ["parse_mmcif", "save_cif"]
 
@@ -207,10 +207,8 @@ def parse_mmcif(
   the parser keeps only the highest-occupancy conformer for each atom site and
   emits a :func:`logger.warning` so the user knows this happened.
 
-  Unlike :func:`neurosnap.io.pdb.parse_pdb`, this first mmCIF implementation
-  does not currently parse explicit bond tables such as ``_struct_conn``.
-  Parsed structures therefore keep full atom annotations but default to an
-  empty bond list unless bonds are added later by other code.
+  Explicit ``_struct_conn`` tables are parsed when present and classified into
+  topology-level bonds versus noncovalent interactions.
 
   Parameters:
     mmcif: mmCIF filepath or open file handle.
@@ -273,6 +271,7 @@ def parse_mmcif(
   b_factors = column("_atom_site.B_iso_or_equiv", default="0.0")
   model_ids = column("_atom_site.pdbx_PDB_model_num", default="1")
   charges = column("_atom_site.pdbx_formal_charge", default="0")
+  struct_conn_ids = list(mmcif_dict.get("_struct_conn.id", []))
 
   altloc_sites: Set[Tuple[int, Tuple[str, int, str, str, bool, str]]] = set()
   model_order: List[int] = []
@@ -437,8 +436,12 @@ def parse_mmcif(
       structure.atom_annotations = np.zeros(0, dtype=structure._dtype_atom_annotations)
 
     structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+    structure.interactions = np.zeros(0, dtype=structure._dtype_interaction)
     structure._remove_empty_annotations()
     ensemble.append(structure, model_id=model_id)
+
+  if struct_conn_ids:
+    _apply_struct_conn_tables(ensemble, mmcif_dict)
 
   ensemble.metadata["source_format"] = "mmcif"
 
@@ -557,6 +560,166 @@ def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif
 
   lines.append("#")
   _write_cif_lines(cif, lines)
+
+
+def _apply_struct_conn_tables(ensemble: StructureEnsemble, mmcif_dict: Dict[str, Union[str, List[str]]]) -> None:
+  """Populate bond and interaction tables from an mmCIF ``_struct_conn`` loop."""
+  row_count = len(mmcif_dict.get("_struct_conn.id", []))
+  if row_count == 0:
+    return
+
+  def conn_column(name: str, default: str = "") -> List[str]:
+    values = mmcif_dict.get(name)
+    if values is None:
+      return [default] * row_count
+    return list(values)
+
+  conn_types = conn_column("_struct_conn.conn_type_id")
+  value_orders = conn_column("_struct_conn.pdbx_value_order")
+  chain_ids_1 = conn_column("_struct_conn.ptnr1_label_asym_id")
+  chain_ids_2 = conn_column("_struct_conn.ptnr2_label_asym_id")
+  res_names_1 = conn_column("_struct_conn.ptnr1_label_comp_id")
+  res_names_2 = conn_column("_struct_conn.ptnr2_label_comp_id")
+  res_ids_1 = conn_column("_struct_conn.ptnr1_label_seq_id")
+  res_ids_2 = conn_column("_struct_conn.ptnr2_label_seq_id")
+  atom_names_1 = conn_column("_struct_conn.ptnr1_label_atom_id")
+  atom_names_2 = conn_column("_struct_conn.ptnr2_label_atom_id")
+  ins_codes_1 = conn_column("_struct_conn.pdbx_ptnr1_PDB_ins_code")
+  ins_codes_2 = conn_column("_struct_conn.pdbx_ptnr2_PDB_ins_code")
+
+  for model in ensemble.models():
+    atom_lookup = {}
+    for atom_index in range(len(model)):
+      atom_lookup[
+        (
+          str(model.atom_annotations["chain_id"][atom_index]),
+          int(model.atom_annotations["res_id"][atom_index]),
+          str(model.atom_annotations["ins_code"][atom_index]),
+          str(model.atom_annotations["res_name"][atom_index]),
+          bool(model.atom_annotations["hetero"][atom_index]),
+          str(model.atom_annotations["atom_name"][atom_index]),
+        )
+      ] = atom_index
+
+    bond_rows = [tuple(row[name] for name in model._dtype_bond.names) for row in model.bonds]
+    interaction_rows = [tuple(row[name] for name in model._dtype_interaction.names) for row in model.interactions]
+    seen_bonds = {(int(row[0]), int(row[1])) for row in bond_rows}
+    seen_interactions = {(int(row[0]), int(row[1]), int(row[2])) for row in interaction_rows}
+
+    for row_index in range(row_count):
+      bond_or_interaction = _classify_struct_conn_type(conn_types[row_index])
+      if bond_or_interaction is None:
+        continue
+
+      atom_i = _lookup_struct_conn_atom(
+        atom_lookup,
+        chain_ids_1[row_index],
+        res_ids_1[row_index],
+        ins_codes_1[row_index],
+        res_names_1[row_index],
+        atom_names_1[row_index],
+      )
+      atom_j = _lookup_struct_conn_atom(
+        atom_lookup,
+        chain_ids_2[row_index],
+        res_ids_2[row_index],
+        ins_codes_2[row_index],
+        res_names_2[row_index],
+        atom_names_2[row_index],
+      )
+      if atom_i is None or atom_j is None:
+        continue
+      atom_i, atom_j = sorted((atom_i, atom_j))
+      if atom_i == atom_j:
+        continue
+
+      if isinstance(bond_or_interaction, BondType):
+        row_key = (atom_i, atom_j)
+        if row_key in seen_bonds:
+          continue
+        bond_rows.append((atom_i, atom_j, _parse_struct_conn_bond_order(value_orders[row_index]), int(bond_or_interaction)))
+        seen_bonds.add(row_key)
+      else:
+        row_key = (atom_i, atom_j, int(bond_or_interaction))
+        if row_key in seen_interactions:
+          continue
+        interaction_rows.append((atom_i, atom_j, int(bond_or_interaction)))
+        seen_interactions.add(row_key)
+
+    model.bonds = np.array(bond_rows, dtype=model._dtype_bond) if bond_rows else np.zeros(0, dtype=model._dtype_bond)
+    model.interactions = (
+      np.array(interaction_rows, dtype=model._dtype_interaction) if interaction_rows else np.zeros(0, dtype=model._dtype_interaction)
+    )
+
+
+def _lookup_struct_conn_atom(
+  atom_lookup: Dict[Tuple[str, int, str, str, bool, str], int],
+  chain_id: str,
+  res_id: str,
+  ins_code: str,
+  res_name: str,
+  atom_name: str,
+) -> Optional[int]:
+  """Resolve a ``_struct_conn`` partner to an atom index."""
+  normalized_chain = _normalize_mmcif_value(chain_id)
+  normalized_res_name = _normalize_mmcif_value(res_name)
+  normalized_atom_name = _normalize_mmcif_value(atom_name)
+  normalized_ins_code = _normalize_mmcif_value(ins_code)
+  parsed_res_id = _parse_struct_conn_res_id(res_id)
+  if not normalized_chain or not normalized_res_name or not normalized_atom_name or parsed_res_id is None:
+    return None
+
+  for hetero in (False, True):
+    atom_index = atom_lookup.get((normalized_chain, parsed_res_id, normalized_ins_code, normalized_res_name, hetero, normalized_atom_name))
+    if atom_index is not None:
+      return atom_index
+  return None
+
+
+def _parse_struct_conn_res_id(value: str) -> Optional[int]:
+  """Parse a residue identifier from ``_struct_conn``."""
+  text = _normalize_mmcif_value(value)
+  if not text:
+    return None
+  return int(float(text))
+
+
+def _classify_struct_conn_type(conn_type_id: str) -> Optional[Union[BondType, InteractionType]]:
+  """Classify an mmCIF ``_struct_conn.conn_type_id`` token."""
+  normalized = _normalize_mmcif_value(conn_type_id).lower()
+  if not normalized:
+    return None
+  if normalized.startswith("covale"):
+    return BondType.COVALENT
+  if normalized.startswith("disulf"):
+    return BondType.DISULFIDE
+  if normalized.startswith("metalc"):
+    return BondType.METAL_COORDINATION
+  if normalized.startswith("hydrog"):
+    return InteractionType.HYDROGEN_BOND
+  if normalized.startswith("saltbr"):
+    return InteractionType.SALT_BRIDGE
+  if normalized.startswith("ionic"):
+    return InteractionType.IONIC
+  if normalized.startswith("modres") or normalized.startswith("covale_base"):
+    return BondType.OTHER
+  return InteractionType.OTHER_NONCOVALENT
+
+
+def _parse_struct_conn_bond_order(value_order: str) -> int:
+  """Map ``_struct_conn.pdbx_value_order`` values onto integer bond orders."""
+  normalized = _normalize_mmcif_value(value_order).lower()
+  if normalized in {"arom", "aromatic"}:
+    return 127
+  if normalized in {"sing", "single"}:
+    return 1
+  if normalized in {"doub", "double"}:
+    return 2
+  if normalized in {"trip", "triple"}:
+    return 3
+  if normalized in {"quad", "quadruple"}:
+    return 4
+  return 0
 
 
 def _models_for_cif_output(structure: Union[Structure, StructureEnsemble, StructureStack]) -> List[Tuple[int, Structure]]:

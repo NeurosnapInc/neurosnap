@@ -18,7 +18,7 @@ import numpy as np
 from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.log import logger
-from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
+from neurosnap.structure.structure import BondType, Structure, StructureEnsemble, StructureStack
 
 __all__ = ["parse_pdb", "save_pdb"]
 
@@ -220,13 +220,14 @@ class _ModelAccumulator:
       pair = (min(atom_i, atom_j), max(atom_i, atom_j))
       undirected_bonds[pair] = max(undirected_bonds.get(pair, 0), count)
 
-    for (atom_i, atom_j), bond_type in sorted(undirected_bonds.items()):
-      bond_rows.append((atom_i, atom_j, bond_type))
+    for (atom_i, atom_j), bond_order in sorted(undirected_bonds.items()):
+      bond_rows.append((atom_i, atom_j, bond_order, int(BondType.COVALENT)))
 
     if bond_rows:
       structure.bonds = np.array(bond_rows, dtype=structure._dtype_bond)
     else:
       structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+    structure.interactions = np.zeros(0, dtype=structure._dtype_interaction)
 
     structure._remove_empty_annotations()
     return structure
@@ -586,13 +587,22 @@ def _conect_lines_for_model(model: Structure, serials: np.ndarray) -> List[str]:
 
   atom_index_to_serial = {atom_index: int(serial) for atom_index, serial in enumerate(serials)}
   directed_counts: Counter[Tuple[int, int]] = Counter()
+  warned_aromatic = False
   for bond in model.bonds:
     atom_i = int(bond["atom_i"])
     atom_j = int(bond["atom_j"])
-    bond_type = max(1, int(bond["bond_type"]))
+    bond_order = int(bond["bond_order"])
+    if bond_order == 127:
+      # PDB CONECT cannot encode aromaticity explicitly, so degrade to one
+      # undirected connection record rather than emitting 127 repeats.
+      bond_order = 1
+      if not warned_aromatic:
+        logger.warning("PDB CONECT output does not preserve aromatic bond order; writing aromatic bonds as single connections.")
+        warned_aromatic = True
+    bond_order = max(1, bond_order)
     if atom_i not in atom_index_to_serial or atom_j not in atom_index_to_serial:
       raise ValueError("Bond table contains atom indices outside the atom table.")
-    directed_counts[(atom_i, atom_j)] += bond_type
+    directed_counts[(atom_i, atom_j)] += bond_order
 
   lines = []
   for (atom_i, atom_j), count in sorted(directed_counts.items()):

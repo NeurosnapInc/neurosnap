@@ -65,9 +65,11 @@ def write_single_chain_pdb(structure: Structure, chain_id: str, outfile: Path) -
   single_chain._dtype_atoms = structure._dtype_atoms
   single_chain._dtype_atom_annotations = structure._dtype_atom_annotations
   single_chain._dtype_bond = structure._dtype_bond
+  single_chain._dtype_interaction = structure._dtype_interaction
   single_chain.atoms = structure.atoms.copy()
   single_chain.atom_annotations = structure.atom_annotations.copy()
   single_chain.bonds = structure.bonds.copy()
+  single_chain.interactions = structure.interactions.copy()
   single_chain.metadata = dict(structure.metadata)
   filter_structure_atoms(single_chain, np.asarray(single_chain.atom_annotations["chain_id"] == chain_id, dtype=bool))
   save_pdb(single_chain, outfile)

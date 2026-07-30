@@ -75,7 +75,7 @@ from neurosnap.algos.evoef2_lib.constants import (
 )
 from neurosnap.algos.evoef2_lib.weights import get_weights
 from neurosnap.log import logger
-from neurosnap.structure import Structure as NSStructure
+from neurosnap.structure import BondType, Structure as NSStructure
 
 
 @dataclass
@@ -2022,7 +2022,7 @@ def _evo_structure_to_ns(
   result = NSStructure(remove_annotations=False)
   coords: List[Tuple[float, float, float]] = []
   annotations = {name: [] for name in result._dtype_atom_annotations.names}
-  bond_rows: List[Tuple[int, int, int]] = []
+  bond_rows: List[Tuple[int, int, int, int]] = []
   template_rows = {}
   source_df = source_structure.to_dataframe()
   for row in source_df.itertuples(index=False):
@@ -2063,7 +2063,8 @@ def _evo_structure_to_ns(
         if bond.a.startswith(("+", "-")) or bond.b.startswith(("+", "-")):
           continue
         if bond.a in local_atom_indices and bond.b in local_atom_indices:
-          bond_rows.append((local_atom_indices[bond.a], local_atom_indices[bond.b], int(bond.bond_type)))
+          atom_i, atom_j = sorted((local_atom_indices[bond.a], local_atom_indices[bond.b]))
+          bond_rows.append((atom_i, atom_j, int(bond.bond_type), int(BondType.COVALENT)))
 
   extra_atom_map: Dict[int, int] = {}
   for atom_index, row in enumerate(source_df.itertuples(index=False)):
@@ -2089,13 +2090,15 @@ def _evo_structure_to_ns(
       atom_i = int(bond["atom_i"])
       atom_j = int(bond["atom_j"])
       if atom_i in extra_atom_map and atom_j in extra_atom_map:
-        bond_rows.append((extra_atom_map[atom_i], extra_atom_map[atom_j], int(bond["bond_type"])))
+        remapped_i, remapped_j = sorted((extra_atom_map[atom_i], extra_atom_map[atom_j]))
+        bond_rows.append((remapped_i, remapped_j, int(bond["bond_order"]), int(bond["bond_type"])))
 
   result.atoms = np.array(coords, dtype=result._dtype_atoms)
   result.atom_annotations = np.zeros(len(coords), dtype=result._dtype_atom_annotations)
   for field_name, values in annotations.items():
     result.atom_annotations[field_name] = np.asarray(values, dtype=result._dtype_atom_annotations.fields[field_name][0])
   result.bonds = np.array(bond_rows, dtype=result._dtype_bond) if bond_rows else np.zeros(0, dtype=result._dtype_bond)
+  result.interactions = np.zeros(0, dtype=result._dtype_interaction)
   result.metadata = copy.deepcopy(source_structure.metadata)
   result._remove_empty_annotations()
   return result

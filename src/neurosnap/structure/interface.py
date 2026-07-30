@@ -77,9 +77,11 @@ def calculate_bsa(
     group_structure._dtype_atoms = structure._dtype_atoms
     group_structure._dtype_atom_annotations = structure._dtype_atom_annotations
     group_structure._dtype_bond = structure._dtype_bond
+    group_structure._dtype_interaction = structure._dtype_interaction
     group_structure.atoms = structure.atoms.copy()
     group_structure.atom_annotations = structure.atom_annotations.copy()
     group_structure.bonds = structure.bonds.copy()
+    group_structure.interactions = structure.interactions.copy()
     group_structure.metadata = copy.deepcopy(structure.metadata)
     filter_structure_atoms(group_structure, np.isin(group_structure.atom_annotations["chain_id"], list(keep_chains)))
     group_structures.append(group_structure)

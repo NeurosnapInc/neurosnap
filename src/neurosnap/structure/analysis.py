@@ -273,9 +273,11 @@ def extract_non_biopolymers(structure: Structure, output_dir: str, min_atoms: in
   ligand_structure._dtype_atoms = structure._dtype_atoms
   ligand_structure._dtype_atom_annotations = structure._dtype_atom_annotations
   ligand_structure._dtype_bond = structure._dtype_bond
+  ligand_structure._dtype_interaction = structure._dtype_interaction
   ligand_structure.atoms = structure.atoms.copy()
   ligand_structure.atom_annotations = structure.atom_annotations.copy()
   ligand_structure.bonds = structure.bonds.copy()
+  ligand_structure.interactions = structure.interactions.copy()
   ligand_structure.metadata = dict(structure.metadata)
 
   keep_mask = ~np.isin(ligand_structure.atom_annotations["res_name"], list(biopolymer_keywords))

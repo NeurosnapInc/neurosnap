@@ -58,7 +58,7 @@ def test_structure_select_chain_roundtrips_pdb(tmp_path):
 
 def test_structure_select_predicate_filters_atoms_and_bonds():
   structure = make_structure(MIXED_BACKBONE_ATOMS)
-  structure.bonds = np.array([(0, 1, 1), (1, 2, 1), (2, 3, 1)], dtype=structure._dtype_bond)
+  structure.bonds = np.array([(0, 1, 1, 0), (1, 2, 1, 0), (2, 3, 1, 0)], dtype=structure._dtype_bond)
 
   subset = structure.select(predicate=lambda atom: atom.chain_id == "A" and atom.res_id == 1)
 
@@ -182,7 +182,7 @@ def _ligand_structure():
   )
   structure.atom_annotations["hetero"][:] = True
   structure.bonds = np.array(
-    [(0, 1, 1), (1, 2, 2), (1, 3, 1), (0, 4, 1)],
+    [(0, 1, 1, 0), (1, 2, 2, 0), (1, 3, 1, 0), (0, 4, 1, 0)],
     dtype=structure._dtype_bond,
   )
   structure.metadata["title"] = "Ligand"
@@ -241,7 +241,7 @@ def test_extract_non_biopolymers(tmp_path):
   )
   structure.atom_annotations["hetero"][3:] = True
   structure.bonds = np.array(
-    [(3, 4, 1), (4, 5, 1), (4, 6, 1), (5, 7, 1)],
+    [(3, 4, 1, 0), (4, 5, 1, 0), (4, 6, 1, 0), (5, 7, 1, 0)],
     dtype=structure._dtype_bond,
   )
   output_dir = tmp_path / "ligands"
@@ -307,3 +307,70 @@ def test_parse_pdb_preserves_duplicate_ligand_atom_names_with_renaming(caplog):
   assert len(ligand) == 5
   assert ligand["atom_name"].nunique() == 5
   assert any('Duplicate atom name "C"' in message for message in caplog.messages)
+
+
+def test_parse_mmcif_struct_conn_populates_bonds_for_af3_examples():
+  structure_ptm = mmcif_module.parse_mmcif(FILES / "af3/protenix_dimer_ptm.cif", return_type="ensemble").first()
+  structure_covalent = mmcif_module.parse_mmcif(FILES / "af3/protenix_dimer_ptm_covalent.cif", return_type="ensemble").first()
+
+  assert len(structure_ptm.bonds) == 2
+  assert len(structure_ptm.interactions) == 0
+  assert np.all(structure_ptm.bonds["bond_order"] == 1)
+  assert np.all(structure_ptm.bonds["bond_type"] == 0)
+
+  assert len(structure_covalent.bonds) == 3
+  assert len(structure_covalent.interactions) == 0
+
+
+def test_parse_mmcif_struct_conn_classifies_noncovalent_contacts():
+  cif_text = """data_test
+#
+loop_
+_struct_conn.id
+_struct_conn.conn_type_id
+_struct_conn.pdbx_value_order
+_struct_conn.ptnr1_label_asym_id
+_struct_conn.ptnr2_label_asym_id
+_struct_conn.ptnr1_label_comp_id
+_struct_conn.ptnr2_label_comp_id
+_struct_conn.ptnr1_label_seq_id
+_struct_conn.ptnr2_label_seq_id
+_struct_conn.ptnr1_label_atom_id
+_struct_conn.ptnr2_label_atom_id
+_struct_conn.pdbx_ptnr1_PDB_ins_code
+_struct_conn.pdbx_ptnr2_PDB_ins_code
+1 hydrog ? A A ASN ASP 1 2 ND2 OD1 . .
+2 ionic ? A A LYS GLU 3 4 NZ OE1 . .
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.label_alt_id
+_atom_site.label_comp_id
+_atom_site.label_seq_id
+_atom_site.auth_seq_id
+_atom_site.pdbx_PDB_ins_code
+_atom_site.label_asym_id
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+_atom_site.occupancy
+_atom_site.label_entity_id
+_atom_site.auth_asym_id
+_atom_site.auth_comp_id
+_atom_site.B_iso_or_equiv
+_atom_site.pdbx_PDB_model_num
+_atom_site.pdbx_formal_charge
+ATOM 1 N ND2 . ASN 1 1 ? A 0.000 0.000 0.000 1.000 1 A ASN 10.000 1 0
+ATOM 2 O OD1 . ASP 2 2 ? A 2.800 0.000 0.000 1.000 1 A ASP 10.000 1 0
+ATOM 3 N NZ . LYS 3 3 ? A 5.000 0.000 0.000 1.000 1 A LYS 10.000 1 1
+ATOM 4 O OE1 . GLU 4 4 ? A 7.500 0.000 0.000 1.000 1 A GLU 10.000 1 -1
+#
+"""
+  structure = mmcif_module.parse_mmcif(io.StringIO(cif_text), return_type="ensemble").first()
+
+  assert len(structure.bonds) == 0
+  assert len(structure.interactions) == 2
+  assert {int(value) for value in structure.interactions["interaction_type"]} == {0, 1}

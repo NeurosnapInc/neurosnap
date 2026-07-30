@@ -13,12 +13,14 @@ from .interactions import (
 )
 from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3D
 from .selectors import select_residues
-from .structure import Atom, Chain, Residue, Structure, StructureEnsemble, StructureStack
+from .structure import Atom, BondType, Chain, InteractionType, Residue, Structure, StructureEnsemble, StructureStack
 
 __all__ = [
   "Atom",
+  "BondType",
   "Residue",
   "Chain",
+  "InteractionType",
   "Structure",
   "StructureEnsemble",
   "StructureStack",

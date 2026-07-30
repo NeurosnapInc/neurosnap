@@ -12,7 +12,7 @@ import numpy as np
 from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.io.pdb import save_pdb
 from neurosnap.log import logger
-from neurosnap.structure import Structure
+from neurosnap.structure import BondType, Structure
 
 from ._pdb2pqr_vendor import biomolecule as vendor_biomolecule
 from ._pdb2pqr_vendor import debump as vendor_debump
@@ -374,6 +374,10 @@ def _strip_hydrogens(structure: Structure) -> Structure:
 
   stripped = Structure(remove_annotations=False)
   stripped.metadata = dict(structure.metadata)
+  stripped._dtype_atoms = structure._dtype_atoms
+  stripped._dtype_atom_annotations = structure._dtype_atom_annotations
+  stripped._dtype_bond = structure._dtype_bond
+  stripped._dtype_interaction = structure._dtype_interaction
   stripped.atoms = structure.atoms[keep_mask].copy()
   stripped.atom_annotations = structure.atom_annotations[keep_mask].copy()
 
@@ -383,12 +387,27 @@ def _strip_hydrogens(structure: Structure) -> Structure:
     atom_j = int(bond["atom_j"])
     if atom_i not in index_map or atom_j not in index_map:
       continue
-    bond_rows.append((index_map[atom_i], index_map[atom_j], int(bond["bond_type"])))
+    bond_rows.append(
+      (
+        index_map[atom_i],
+        index_map[atom_j],
+        int(bond["bond_order"]),
+        int(bond["bond_type"]),
+      )
+    )
 
   if bond_rows:
     stripped.bonds = np.array(bond_rows, dtype=structure._dtype_bond)
   else:
     stripped.bonds = np.zeros(0, dtype=structure._dtype_bond)
+  stripped.interactions = structure.interactions[
+    np.isin(structure.interactions["atom_i"], kept_indices) & np.isin(structure.interactions["atom_j"], kept_indices)
+  ].copy()
+  if len(stripped.interactions):
+    stripped.interactions["atom_i"] = np.vectorize(index_map.__getitem__)(stripped.interactions["atom_i"])
+    stripped.interactions["atom_j"] = np.vectorize(index_map.__getitem__)(stripped.interactions["atom_j"])
+  else:
+    stripped.interactions = np.zeros(0, dtype=structure._dtype_interaction)
   return stripped
 
 
@@ -451,9 +470,13 @@ def _build_structure_from_vendor_atoms(vendor_atoms: Sequence[Any], *, source_me
       bond_pairs.add((min(atom_index, bonded_index), max(atom_index, bonded_index)))
 
   if bond_pairs:
-    structure.bonds = np.array([(atom_i, atom_j, 1) for atom_i, atom_j in sorted(bond_pairs)], dtype=structure._dtype_bond)
+    structure.bonds = np.array(
+      [(atom_i, atom_j, 1, int(BondType.COVALENT)) for atom_i, atom_j in sorted(bond_pairs)],
+      dtype=structure._dtype_bond,
+    )
   else:
     structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+  structure.interactions = np.zeros(0, dtype=structure._dtype_interaction)
 
   structure.add_annotation("partial_charge", np.float32, values=partial_charges)
   structure.add_annotation("radius", np.float32, values=radii)

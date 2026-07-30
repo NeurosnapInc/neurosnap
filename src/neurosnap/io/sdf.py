@@ -20,7 +20,7 @@ from rdkit import Chem
 from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 
-from neurosnap.structure.structure import Structure, StructureEnsemble, StructureStack
+from neurosnap.structure.structure import BondType, Structure, StructureEnsemble, StructureStack
 
 __all__ = ["parse_sdf", "save_sdf"]
 
@@ -30,16 +30,15 @@ _RDKIT_BOND_TO_INT = {
   rdchem.BondType.SINGLE: 1,
   rdchem.BondType.DOUBLE: 2,
   rdchem.BondType.TRIPLE: 3,
-  rdchem.BondType.AROMATIC: 4,
-  rdchem.BondType.QUADRUPLE: 5,
+  rdchem.BondType.QUADRUPLE: 4,
 }
 _INT_TO_RDKIT_BOND = {
   1: rdchem.BondType.SINGLE,
   2: rdchem.BondType.DOUBLE,
   3: rdchem.BondType.TRIPLE,
-  4: rdchem.BondType.AROMATIC,
-  5: rdchem.BondType.QUADRUPLE,
+  4: rdchem.BondType.QUADRUPLE,
 }
+_AROMATIC_BOND_ORDER = 127
 
 
 def parse_sdf(
@@ -205,13 +204,15 @@ def _structure_from_rdkit_mol(mol: Chem.Mol, model_id: int) -> Structure:
     )
 
   for bond in mol.GetBonds():
-    bond_type = _RDKIT_BOND_TO_INT.get(bond.GetBondType())
-    if bond_type is None:
+    bond_order = _RDKIT_BOND_TO_INT.get(bond.GetBondType())
+    if bond_order is None:
       if bond.GetIsAromatic():
-        bond_type = 4
+        bond_order = _AROMATIC_BOND_ORDER
       else:
         raise ValueError(f"Unsupported RDKit bond type {bond.GetBondType()} in SDF record.")
-    bond_rows.append((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx(), bond_type))
+    atom_i = min(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
+    atom_j = max(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
+    bond_rows.append((atom_i, atom_j, bond_order, int(BondType.COVALENT)))
 
   structure.atoms = np.array([(x, y, z) for x, y, z, *_rest in atom_defs], dtype=structure._dtype_atoms)
   structure.atom_annotations = np.zeros(len(atom_defs), dtype=structure._dtype_atom_annotations)
@@ -233,6 +234,7 @@ def _structure_from_rdkit_mol(mol: Chem.Mol, model_id: int) -> Structure:
     structure.bonds = np.array(bond_rows, dtype=structure._dtype_bond)
   else:
     structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+  structure.interactions = np.zeros(0, dtype=structure._dtype_interaction)
 
   structure._remove_empty_annotations()
   return structure
@@ -277,13 +279,19 @@ def _rdkit_mol_from_structure(structure: Structure, model_id: int) -> Chem.Mol:
   for bond in structure.bonds:
     atom_i = int(bond["atom_i"])
     atom_j = int(bond["atom_j"])
-    bond_type_value = int(bond["bond_type"])
-    rd_bond_type = _INT_TO_RDKIT_BOND.get(bond_type_value)
-    if rd_bond_type is None:
-      raise ValueError(f"Unsupported bond_type {bond_type_value} for SDF output.")
+    bond_order = int(bond["bond_order"])
+    bond_type = int(bond["bond_type"])
+    if bond_type == int(BondType.METAL_COORDINATION):
+      raise ValueError("SDF output does not support metal-coordination bonds.")
+    if bond_order == _AROMATIC_BOND_ORDER:
+      rd_bond_type = rdchem.BondType.AROMATIC
+    else:
+      rd_bond_type = _INT_TO_RDKIT_BOND.get(bond_order)
+      if rd_bond_type is None:
+        raise ValueError(f"Unsupported bond_order {bond_order} for SDF output.")
 
     rw_mol.AddBond(atom_i, atom_j, rd_bond_type)
-    if rd_bond_type == rdchem.BondType.AROMATIC:
+    if bond_order == _AROMATIC_BOND_ORDER:
       aromatic_atoms.add(atom_i)
       aromatic_atoms.add(atom_j)
 

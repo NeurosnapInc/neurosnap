@@ -97,7 +97,7 @@ def test_assign_pqr_returns_updated_structure(monkeypatch):
   assert updated.metadata["pdb2pqr_forcefield"] == "AMBER"
   assert updated.metadata["pdb2pqr_header"].startswith("REMARK")
   assert len(updated.bonds) == 1
-  assert tuple(updated.bonds[0]) == (0, 1, 1)
+  assert tuple(updated.bonds[0]) == (0, 1, 1, 0)
 
 
 def test_run_vendor_pdb2pqr_retries_assign_only_histidine_failure(monkeypatch):

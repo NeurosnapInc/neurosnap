@@ -10,6 +10,7 @@ The universal length unit is Å.
 
 from collections.abc import Callable, Sequence
 from dataclasses import field
+from enum import IntEnum
 from types import MappingProxyType
 from typing import Any, Dict, Iterator, List, Literal, Mapping, Optional, Tuple, Union
 
@@ -48,6 +49,24 @@ _STRUCTURE_DATAFRAME_COLUMNS = (
   "z",
   "mass",
 )
+
+
+class BondType(IntEnum):
+  """Stable categorical labels for topology-level bonds."""
+
+  COVALENT = 0
+  DISULFIDE = 1
+  METAL_COORDINATION = 2
+  OTHER = 127
+
+
+class InteractionType(IntEnum):
+  """Stable categorical labels for noncovalent interactions."""
+
+  IONIC = 0
+  HYDROGEN_BOND = 1
+  SALT_BRIDGE = 2
+  OTHER_NONCOVALENT = 127
 
 
 class Structure:
@@ -113,12 +132,27 @@ class Structure:
       ]
     )
 
-    # create dtype for bonds array
+    # Create dtype for bonds array.
+    # bond_order conventions:
+    #   0   = unknown / not applicable
+    #   1   = single
+    #   2   = double
+    #   3   = triple
+    #   4   = quadruple
+    #   127 = aromatic
     self._dtype_bond = np.dtype(
       [
         ("atom_i", np.int32),
         ("atom_j", np.int32),
+        ("bond_order", np.int8),
         ("bond_type", np.int8),
+      ]
+    )
+    self._dtype_interaction = np.dtype(
+      [
+        ("atom_i", np.int32),
+        ("atom_j", np.int32),
+        ("interaction_type", np.int8),
       ]
     )
 
@@ -127,6 +161,7 @@ class Structure:
     self.atoms = np.zeros(0, dtype=self._dtype_atoms)
     self.atom_annotations = np.zeros(0, dtype=self._dtype_atom_annotations)
     self.bonds = np.zeros(0, dtype=self._dtype_bond)
+    self.interactions = np.zeros(0, dtype=self._dtype_interaction)
 
     assert isinstance(remove_annotations, bool) # prevent users from mistakenly initialize the class with the incorrect type
     if remove_annotations is True:
@@ -1203,25 +1238,95 @@ def _subset_structure(structure: Structure, atom_mask: np.ndarray) -> Structure:
 
   selected_indices = np.flatnonzero(atom_mask)
   index_map = {int(atom_index): new_index for new_index, atom_index in enumerate(selected_indices)}
-  bond_rows = []
-  for bond in structure.bonds:
-    atom_i = int(bond["atom_i"])
-    atom_j = int(bond["atom_j"])
-    if atom_i in index_map and atom_j in index_map:
-      bond_rows.append((index_map[atom_i], index_map[atom_j], int(bond["bond_type"])))
 
   subset = Structure(remove_annotations=False)
   subset.metadata = dict(structure.metadata)
   subset._dtype_atoms = structure._dtype_atoms
   subset._dtype_atom_annotations = structure._dtype_atom_annotations
   subset._dtype_bond = structure._dtype_bond
+  subset._dtype_interaction = structure._dtype_interaction
   subset.atoms = np.array(structure.atoms[atom_mask], dtype=structure._dtype_atoms, copy=True)
   subset.atom_annotations = np.array(structure.atom_annotations[atom_mask], dtype=structure._dtype_atom_annotations, copy=True)
-  if bond_rows:
-    subset.bonds = np.array(bond_rows, dtype=structure._dtype_bond)
-  else:
-    subset.bonds = np.zeros(0, dtype=structure._dtype_bond)
+  subset.bonds = _subset_atom_pairs(structure.bonds, index_map, structure._dtype_bond)
+  subset.interactions = _subset_atom_pairs(structure.interactions, index_map, structure._dtype_interaction)
   return subset
+
+
+def _subset_atom_pairs(rows: np.ndarray, index_map: Dict[int, int], dtype: np.dtype) -> np.ndarray:
+  """Return remapped atom-pair rows whose endpoints remain selected."""
+  selected_rows = []
+  for row in rows:
+    atom_i = int(row["atom_i"])
+    atom_j = int(row["atom_j"])
+    if atom_i not in index_map or atom_j not in index_map:
+      continue
+    new_row = row.copy()
+    new_row["atom_i"] = index_map[atom_i]
+    new_row["atom_j"] = index_map[atom_j]
+    selected_rows.append(tuple(new_row[name] for name in dtype.names))
+
+  if not selected_rows:
+    return np.zeros(0, dtype=dtype)
+  return np.array(selected_rows, dtype=dtype)
+
+
+def _validate_atom_pair_indices(rows: np.ndarray, atom_count: int, *, row_kind: str):
+  """Validate canonical undirected atom-pair indices."""
+  for row_index, row in enumerate(rows, start=1):
+    atom_i = int(row["atom_i"])
+    atom_j = int(row["atom_j"])
+    if atom_i < 0 or atom_j < 0:
+      raise ValueError(f"{row_kind} row {row_index} contains a negative atom index.")
+    if atom_i >= atom_count or atom_j >= atom_count:
+      raise ValueError(f"{row_kind} row {row_index} references an atom index outside the atom table.")
+    if atom_i == atom_j:
+      raise ValueError(f"{row_kind} row {row_index} connects an atom to itself.")
+    if atom_i > atom_j:
+      raise ValueError(f"{row_kind} row {row_index} must store atom pairs in canonical order (atom_i < atom_j).")
+
+
+def _validate_bonds(bonds: np.ndarray, atom_count: int, expected_dtype: np.dtype) -> None:
+  """Validate a bond table against the current schema."""
+  if bonds.dtype != expected_dtype:
+    raise ValueError("Structure bonds dtype does not match Structure._dtype_bond.")
+
+  _validate_atom_pair_indices(bonds, atom_count, row_kind="Bond")
+  seen_pairs = set()
+  valid_types = {int(value) for value in BondType}
+  for row_index, bond in enumerate(bonds, start=1):
+    atom_pair = (int(bond["atom_i"]), int(bond["atom_j"]))
+    if atom_pair in seen_pairs:
+      raise ValueError(f"Duplicate bond row found for atom pair {atom_pair}.")
+    seen_pairs.add(atom_pair)
+
+    bond_order = int(bond["bond_order"])
+    bond_type = int(bond["bond_type"])
+    if bond_order < 0:
+      raise ValueError(f"Bond row {row_index} has a negative bond_order.")
+    if bond_order not in {0, 1, 2, 3, 4, 127}:
+      raise ValueError(f"Bond row {row_index} has unsupported bond_order {bond_order}.")
+    if bond_type not in valid_types:
+      raise ValueError(f"Bond row {row_index} has unsupported bond_type {bond_type}.")
+    if bond_type == int(BondType.METAL_COORDINATION) and bond_order != 0:
+      raise ValueError("Metal-coordination bonds must use bond_order = 0.")
+
+
+def _validate_interactions(interactions: np.ndarray, atom_count: int, expected_dtype: np.dtype) -> None:
+  """Validate an interaction table against the current schema."""
+  if interactions.dtype != expected_dtype:
+    raise ValueError("Structure interactions dtype does not match Structure._dtype_interaction.")
+
+  _validate_atom_pair_indices(interactions, atom_count, row_kind="Interaction")
+  seen_rows = set()
+  valid_types = {int(value) for value in InteractionType}
+  for row_index, interaction in enumerate(interactions, start=1):
+    interaction_type = int(interaction["interaction_type"])
+    row_key = (int(interaction["atom_i"]), int(interaction["atom_j"]), interaction_type)
+    if row_key in seen_rows:
+      raise ValueError(f"Duplicate interaction row found for key {row_key}.")
+    seen_rows.add(row_key)
+    if interaction_type not in valid_types:
+      raise ValueError(f"Interaction row {row_index} has unsupported interaction_type {interaction_type}.")
 
 
 def _validate_structure_model(model: Structure):
@@ -1240,6 +1345,8 @@ def _validate_structure_model(model: Structure):
     raise ValueError("Structure atoms and atom_annotations must have the same length.")
   if model.atoms.dtype.names != ("x", "y", "z"):
     raise ValueError('Structure atoms dtype must contain the coordinate fields "x", "y", and "z".')
+  _validate_bonds(model.bonds, len(model), model._dtype_bond)
+  _validate_interactions(model.interactions, len(model), model._dtype_interaction)
 
 
 def _structure_chain_ids(structure: Structure) -> List[str]:
@@ -1498,10 +1605,10 @@ class StructureEnsemble:
 
 
 class StructureStack:
-  """Shared-annotation, shared-bond multi-model fast path.
+  """Shared-annotation, shared-connection multi-model fast path.
 
   All models in a stack must share the same atom ordering, per-atom annotations,
-  and bonds. Only the coordinates vary between models.
+  bonds, and interactions. Only the coordinates vary between models.
 
   Parameters:
     models: Optional initial list of stack-compatible models.
@@ -1526,9 +1633,11 @@ class StructureStack:
     self._dtype_atoms = template._dtype_atoms
     self._dtype_atom_annotations = template._dtype_atom_annotations
     self._dtype_bond = template._dtype_bond
+    self._dtype_interaction = template._dtype_interaction
     self.coord = np.zeros((0, 0, 3), dtype=np.float32)
     self.atom_annotations = np.zeros(0, dtype=self._dtype_atom_annotations)
     self.bonds = np.zeros(0, dtype=self._dtype_bond)
+    self.interactions = np.zeros(0, dtype=self._dtype_interaction)
 
     models = models or []
     if model_ids is not None and len(model_ids) != len(models):
@@ -1597,6 +1706,7 @@ class StructureStack:
         self.coord[index].copy(),
         self.atom_annotations.copy(),
         self.bonds.copy(),
+        self.interactions.copy(),
         model_ids=self.model_ids[index],
         metadata=self.metadata,
       )
@@ -1629,9 +1739,11 @@ class StructureStack:
       self._dtype_atoms = model._dtype_atoms
       self._dtype_atom_annotations = model._dtype_atom_annotations
       self._dtype_bond = model._dtype_bond
+      self._dtype_interaction = model._dtype_interaction
       self.coord = coord[np.newaxis, ...]
       self.atom_annotations = np.array(model.atom_annotations, dtype=model.atom_annotations.dtype, copy=True)
       self.bonds = np.array(model.bonds, dtype=model.bonds.dtype, copy=True)
+      self.interactions = np.array(model.interactions, dtype=model.interactions.dtype, copy=True)
     else:
       reference = self._model_to_structure(0)
       self._ensure_stack_compatible(reference, model)
@@ -1740,6 +1852,7 @@ class StructureStack:
     coord: np.ndarray,
     atom_annotations: np.ndarray,
     bonds: np.ndarray,
+    interactions: np.ndarray,
     *,
     model_ids: Optional[List[int]] = None,
     metadata: Optional[Mapping[str, Any]] = None,
@@ -1757,6 +1870,8 @@ class StructureStack:
     stack.atom_annotations = np.array(atom_annotations, dtype=atom_annotations.dtype, copy=True)
     stack._dtype_bond = bonds.dtype
     stack.bonds = np.array(bonds, dtype=bonds.dtype, copy=True)
+    stack._dtype_interaction = interactions.dtype
+    stack.interactions = np.array(interactions, dtype=interactions.dtype, copy=True)
     stack.model_ids = list(range(1, coord.shape[0] + 1)) if model_ids is None else [int(x) for x in model_ids]
     if len(stack.model_ids) != coord.shape[0]:
       raise ValueError("model_ids must match the number of models in coord.")
@@ -1767,7 +1882,7 @@ class StructureStack:
     atoms = self._atoms_from_coord_matrix(self.coord[model_index], self._dtype_atoms)
     metadata = dict(self.metadata)
     metadata["model_id"] = self.model_ids[model_index]
-    return self._structure_from_parts(atoms, self.atom_annotations, self.bonds, metadata=metadata)
+    return self._structure_from_parts(atoms, self.atom_annotations, self.bonds, self.interactions, metadata=metadata)
 
   @staticmethod
   def _coord_matrix_from_structure(model: Structure) -> np.ndarray:
@@ -1794,6 +1909,7 @@ class StructureStack:
     atoms: np.ndarray,
     atom_annotations: np.ndarray,
     bonds: np.ndarray,
+    interactions: np.ndarray,
     metadata: Optional[Mapping[str, Any]] = None,
   ) -> Structure:
     """Build an independent ``Structure`` from array components."""
@@ -1801,9 +1917,11 @@ class StructureStack:
     model._dtype_atoms = atoms.dtype
     model._dtype_atom_annotations = atom_annotations.dtype
     model._dtype_bond = bonds.dtype
+    model._dtype_interaction = interactions.dtype
     model.atoms = np.array(atoms, dtype=atoms.dtype, copy=True)
     model.atom_annotations = np.array(atom_annotations, dtype=atom_annotations.dtype, copy=True)
     model.bonds = np.array(bonds, dtype=bonds.dtype, copy=True)
+    model.interactions = np.array(interactions, dtype=interactions.dtype, copy=True)
     model.metadata = dict(metadata or {})
     return model
 
@@ -1818,3 +1936,5 @@ class StructureStack:
       raise ValueError("StructureStack requires identical atom annotations across all models.")
     if reference.bonds.dtype != candidate.bonds.dtype or not np.array_equal(reference.bonds, candidate.bonds):
       raise ValueError("StructureStack requires identical bonds across all models.")
+    if reference.interactions.dtype != candidate.interactions.dtype or not np.array_equal(reference.interactions, candidate.interactions):
+      raise ValueError("StructureStack requires identical interactions across all models.")

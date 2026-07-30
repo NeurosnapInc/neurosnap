@@ -237,14 +237,24 @@ def test_entity_validation_non_finite_coordinates():
     struct.validate_entities()
 
 
-def test_missing_ligand_topology():
-  struct = make_structure([("C1", "LIG", "A", 1, 0.0, 0.0, 0.0, "C"), ("C2", "LIG", "A", 1, 1.5, 0.0, 0.0, "C")], hetero=[True, True])
-  with pytest.raises(ValueError):
-    struct.detect_interactions()
+def test_missing_ligand_topology(caplog):
+  import logging
 
-  # Requesting only distance-based interactions should succeed without requiring topology
-  df_distance = struct.detect_interactions(interaction_types=["vdw_clash"])
+  struct = make_structure([("C1", "LIG", "A", 1, 0.0, 0.0, 0.0, "C"), ("C2", "LIG", "A", 1, 1.5, 0.0, 0.0, "C")], hetero=[True, True])
+
+  # An untyped ligand warns rather than refusing to run; the ligand's own atoms
+  # simply go untyped for the chemistry-based rules.
+  with caplog.at_level(logging.WARNING):
+    df_all = struct.detect_interactions()
+  assert isinstance(df_all, pd.DataFrame)
+  assert any("no aligned RDKit molecule" in record.message for record in caplog.records)
+
+  # Requesting only distance-based interactions needs no typing and warns nothing
+  caplog.clear()
+  with caplog.at_level(logging.WARNING):
+    df_distance = struct.detect_interactions(interaction_types=["vdw_clash"])
   assert isinstance(df_distance, pd.DataFrame)
+  assert not any("no aligned RDKit molecule" in record.message for record in caplog.records)
 
   # Raw contacts should still work
   df = struct.get_raw_contacts()
@@ -850,23 +860,31 @@ def test_metal_coordination_configurability_and_evidence():
     ]
   )
 
-  # Without candidates (default): only the protein donor ALA should be reported/coordinating
-  df_cc_default = struct_mixed.detect_coordination_centers(include_candidates=False)
-  assert len(df_cc_default) == 1
-  assert df_cc_default.iloc[0]["coordination_number"] == 1
-  assert list(df_cc_default.iloc[0]["donor_elements"]) == ["O"]
-  assert df_cc_default.iloc[0]["evidence"] == "detected"
+  # The coordination shell is geometric, so it describes every donor inside the
+  # cutoff regardless of whether include_candidates is set.
+  for include_candidates in (False, True):
+    df_cc = struct_mixed.detect_coordination_centers(include_candidates=include_candidates)
+    assert len(df_cc) == 1
+    assert df_cc.iloc[0]["coordination_number"] == 3
+    assert sorted(list(df_cc.iloc[0]["donor_atom_indices"])) == [1, 2, 3]
+    assert df_cc.iloc[0]["evidence"] == "detected"  # highest priority among donors
 
-  # With candidates: all three donors should be reported
-  df_cc_candidates = struct_mixed.detect_coordination_centers(include_candidates=True)
-  assert len(df_cc_candidates) == 1
-  assert df_cc_candidates.iloc[0]["coordination_number"] == 3
-  assert sorted(list(df_cc_candidates.iloc[0]["donor_atom_indices"])) == [1, 2, 3]
-  assert df_cc_candidates.iloc[0]["evidence"] == "detected"  # Highest priority
+  # Per-donor interaction rows still honour it: only the typed protein donor is
+  # reported by default, all three once candidates are requested.
+  rows_default = struct_mixed.detect_interactions(interaction_types=["metal_coordination"])
+  rows_candidates = struct_mixed.detect_interactions(interaction_types=["metal_coordination"], include_candidates=True)
+  assert len(rows_default) == 1
+  assert rows_default.iloc[0]["evidence"] == "detected"
+  assert len(rows_candidates) == 3
 
-  # If we only have HOH (water), without candidates -> 0 coordination centers
+  # A water-only shell is still a shell: the centre is reported either way, with
+  # candidate evidence to record that no donor could be chemically typed.
   struct_water_only = make_structure([("ZN", "ZN", "A", 1, 0.0, 0.0, 0.0, "ZN"), ("O", "HOH", "A", 2, 0.0, 2.0, 0.0, "O")])
-  assert len(struct_water_only.detect_coordination_centers(include_candidates=False)) == 0
+  df_cc_water_strict = struct_water_only.detect_coordination_centers(include_candidates=False)
+  assert len(df_cc_water_strict) == 1
+  assert df_cc_water_strict.iloc[0]["evidence"] == "candidate"
+  # no per-donor row is emitted for it unless candidates are requested
+  assert len(struct_water_only.detect_interactions(interaction_types=["metal_coordination"])) == 0
 
   # With candidates -> 1 coordination center of type candidate
   df_cc_water = struct_water_only.detect_coordination_centers(include_candidates=True)
@@ -1007,3 +1025,155 @@ def test_get_coordination_centers_works_with_untyped_ligand_present():
   centers = structure.detect_coordination_centers()
   assert len(centers) == 2
   assert set(centers["element"]) == {"ZN"}
+
+
+def test_untyped_ligand_does_not_block_chemistry_typed_rules(caplog):
+  """An untyped ligand must not stop hydrogen bonds being reported for the polymer.
+
+  Regression: entities default to chain grouping, so a chain normally contains
+  its own heterogens. Requiring an aligned RDKit molecule up front made
+  ``hydrogen_bond`` and ``salt_bridge`` raise on nearly every real structure.
+  """
+  import logging
+
+  from neurosnap.io.pdb import parse_pdb
+  from tests._structure_test_utils import FILES
+
+  structure = parse_pdb(str(FILES / "protein_with_zinc_ions.pdb"), return_type="ensemble").first()
+  assert any(structure.atom_annotations["hetero"])
+  assert all(entity.rdkit_mol is None for entity in structure.entities)
+
+  with caplog.at_level(logging.WARNING):
+    rows = structure.detect_interactions(interaction_types=["hydrogen_bond"], include_candidates=True)
+
+  # the polymer chemistry is still evaluated
+  assert len(rows) > 0
+  # and the caller is told the ligand went untyped rather than being left to guess
+  assert any("no aligned RDKit molecule" in record.message for record in caplog.records)
+
+
+def test_misaligned_rdkit_molecule_still_raises():
+  """A molecule whose atom count disagrees with its entity would type wrong atoms."""
+  from neurosnap.structure import InteractionEntity, analyze_interactions
+
+  structure = make_structure(
+    [("C1", "LIG", "B", 1, 0.0, 0.0, 0.0, "C"), ("O1", "LIG", "B", 1, 1.4, 0.0, 0.0, "O")],
+    hetero=True,
+  )
+
+  class _StubMol:
+    def GetNumAtoms(self):
+      return 5
+
+  entity = InteractionEntity(name="ligand", atom_indices=[0, 1], rdkit_mol=_StubMol())
+  with pytest.raises(ValueError, match="does not match entity atom count"):
+    analyze_interactions(structure, entity, interaction_types=["hydrogen_bond"])
+
+
+def test_coordination_geometry_uses_the_full_observed_shell():
+  """Geometry must not be classified from a typing-filtered subset of donors.
+
+  Regression: donors in an untyped ligand were only ``candidate`` evidence and
+  were dropped before the geometry step, so a five-coordinate centre such as
+  haem iron was reported as coordination number 1 with unknown geometry.
+  """
+  # A square-pyramidal shell: one typed protein donor on the axis and four
+  # untyped ligand donors in the basal plane.
+  atoms = [
+    ("FE", "HEM", "B", 1, 0.0, 0.0, 0.0, "FE"),
+    ("NE2", "HIS", "A", 9, 0.0, 0.0, 2.1, "N"),
+    ("NA", "HEM", "B", 1, 2.0, 0.0, 0.0, "N"),
+    ("NB", "HEM", "B", 1, -2.0, 0.0, 0.0, "N"),
+    ("NC", "HEM", "B", 1, 0.0, 2.0, 0.0, "N"),
+    ("ND", "HEM", "B", 1, 0.0, -2.0, 0.0, "N"),
+  ]
+  structure = make_structure(atoms, hetero=[True, False, True, True, True, True])
+  assert all(entity.rdkit_mol is None for entity in structure.entities)
+
+  centers = structure.detect_coordination_centers()
+  assert len(centers) == 1
+  row = centers.iloc[0]
+  assert row["coordination_number"] == 5
+  assert row["geometry"] == "square pyramidal"
+
+  # the shell does not depend on whether candidate rows are emitted
+  with_candidates = structure.detect_coordination_centers(include_candidates=True)
+  assert with_candidates.iloc[0]["coordination_number"] == 5
+
+  # but the per-donor interaction rows still do
+  strict = structure.detect_interactions(interaction_types=["metal_coordination"])
+  loose = structure.detect_interactions(interaction_types=["metal_coordination"], include_candidates=True)
+  assert len(loose) > len(strict)
+
+
+def test_halides_count_as_metal_coordination_donors():
+  """Chloride is a common inorganic ligand, as in the insulin zinc sites."""
+  structure = make_structure(
+    [
+      ("ZN", "ZN", "B", 1, 0.0, 0.0, 0.0, "ZN"),
+      ("CL", "CL", "B", 2, 2.3, 0.0, 0.0, "CL"),
+      ("CL", "CL", "B", 3, -2.3, 0.0, 0.0, "CL"),
+    ],
+    hetero=True,
+  )
+  centers = structure.detect_coordination_centers()
+  assert len(centers) == 1
+  assert centers.iloc[0]["coordination_number"] == 2
+  assert set(centers.iloc[0]["donor_elements"]) == {"CL"}
+
+
+def test_hydrogen_bond_warns_when_the_structure_has_no_hydrogens(caplog):
+  """An empty result must be distinguishable from 'no hydrogen bonds exist'.
+
+  Regression: experimental structures rarely carry hydrogens, so the angle test
+  could never pass and the rule returned an empty table with no explanation.
+  """
+  import logging
+
+  structure = make_structure(
+    [
+      ("N", "ALA", "A", 1, 0.0, 0.0, 0.0, "N"),
+      ("O", "ALA", "A", 5, 2.9, 0.0, 0.0, "O"),
+    ]
+  )
+  assert not any(str(element).strip().upper() in {"H", "D"} for element in structure.atom_annotations["element"])
+
+  with caplog.at_level(logging.WARNING):
+    rows = structure.detect_interactions(interaction_types=["hydrogen_bond"])
+  assert len(rows) == 0
+  assert any("no hydrogens" in record.message for record in caplog.records)
+
+  # asking for candidates is the documented way through, and must not warn
+  caplog.clear()
+  with caplog.at_level(logging.WARNING):
+    candidates = structure.detect_interactions(interaction_types=["hydrogen_bond"], include_candidates=True)
+  assert len(candidates) > 0
+  assert not any("no hydrogens" in record.message for record in caplog.records)
+
+
+def test_entity_pair_ordering_is_canonical():
+  """One interface must report one (entity1, entity2) pair, not both orderings.
+
+  Regression: endpoints were ordered by atom index, so whichever side held the
+  lower index became entity1 and grouping by the pair split the interface.
+  """
+  from neurosnap.structure import InteractionEntity, analyze_interactions
+
+  # "beta" owns the lower atom indices, so index ordering alone would put it first
+  structure = make_structure(
+    [
+      ("CA", "ALA", "B", 1, 0.0, 0.0, 0.0, "C"),
+      ("CB", "ALA", "B", 1, 1.5, 0.0, 0.0, "C"),
+      ("CA", "GLY", "A", 2, 3.0, 0.0, 0.0, "C"),
+      ("CB", "GLY", "A", 2, 4.2, 0.0, 0.0, "C"),
+    ]
+  )
+  beta = InteractionEntity(name="beta", atom_indices=[0, 1])
+  alpha = InteractionEntity(name="alpha", atom_indices=[2, 3])
+
+  for entities in ((beta, alpha), (alpha, beta)):
+    report = analyze_interactions(structure, *entities, interaction_types=["contact"])
+    frame = report.to_dataframe()
+    assert len(frame) > 0
+    # every row uses the same ordering regardless of how entities were supplied
+    assert set(zip(frame["entity1"], frame["entity2"])) == {("alpha", "beta")}

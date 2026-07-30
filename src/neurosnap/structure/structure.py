@@ -969,7 +969,7 @@ class Structure:
     self.validate_entities()
     types_to_run = engine.resolve_interaction_types(interaction_types)
     entities = self._get_effective_entities()
-    engine.validate_ligand_topology(entities, self.atom_annotations, types_to_run)
+    engine.check_ligand_typing(entities, self.atom_annotations, types_to_run)
 
     params = {
       "contact_cutoff_a": contact_cutoff_a,

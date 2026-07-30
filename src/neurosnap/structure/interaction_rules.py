@@ -69,4 +69,8 @@ PROTEIN_IONIC_NEGATIVE = {
 }
 
 #: Elements accepted as coordinating donors around a metal centre.
-METAL_DONOR_ELEMENTS = {"O", "N", "S"}
+#:
+#: Oxygen, nitrogen, and sulfur cover the protein and nucleic-acid donors, and
+#: the halides are included because they are common inorganic ligands. Insulin
+#: zinc sites, for example, are chloride-coordinated.
+METAL_DONOR_ELEMENTS = {"O", "N", "S", "F", "CL", "BR", "I"}

@@ -18,6 +18,7 @@ import numpy as np
 
 from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import METAL_ELEMENTS, VDW_RADII_BONDI
+from neurosnap.log import logger
 
 from .interaction_report import AtomReference, CoordinationCenterRecord, InteractionRecord
 from .interaction_rules import (
@@ -263,8 +264,18 @@ def resolve_interaction_types(interaction_types: Optional[Sequence[str]]) -> Lis
   return resolved
 
 
-def validate_ligand_topology(entities: Sequence[Any], atom_annotations: np.ndarray, types_to_run: Sequence[str]) -> None:
-  """Require aligned RDKit molecules when chemistry-typed rules involve ligands.
+def check_ligand_typing(entities: Sequence[Any], atom_annotations: np.ndarray, types_to_run: Sequence[str]) -> None:
+  """Report ligands the chemistry-typed rules will not be able to type.
+
+  ``hydrogen_bond`` and ``salt_bridge`` derive ligand donors, acceptors, and
+  formal charges from an aligned RDKit molecule. A ligand without one is simply
+  left untyped: polymer chemistry is still evaluated, so the analysis proceeds
+  and a warning names the entity. Refusing to run at all would make these rules
+  unusable on nearly every experimental structure, because entities default to
+  chain grouping and a chain normally contains its heterogens.
+
+  A molecule whose atom count disagrees with the entity is a different matter.
+  That misalignment would type the wrong atoms, so it raises.
 
   Parameters:
     entities: Entities participating in the analysis.
@@ -272,23 +283,30 @@ def validate_ligand_topology(entities: Sequence[Any], atom_annotations: np.ndarr
     types_to_run: Interaction families that will be evaluated.
 
   Raises:
-    ValueError: If a non-polymer entity lacks an RDKit molecule or its atom
-      count disagrees with the entity size.
+    ValueError: If an aligned RDKit molecule's atom count disagrees with the
+      size of the entity it is aligned to.
   """
   requires_typing = {"hydrogen_bond", "salt_bridge"}
   if not any(name in requires_typing for name in types_to_run):
     return
-  if not any(is_non_polymer_entity(entity, atom_annotations) for entity in entities):
-    return
+
+  untyped = []
   for entity in entities:
     if not is_non_polymer_entity(entity, atom_annotations):
       continue
     if entity.rdkit_mol is None:
-      raise ValueError(f"Entity {entity.name} is missing an aligned RDKit molecule (mismatch).")
+      untyped.append(entity.name)
+      continue
     if entity.rdkit_mol.GetNumAtoms() != len(entity.atom_indices):
       raise ValueError(
         f"RDKit molecule atom count ({entity.rdkit_mol.GetNumAtoms()}) does not match entity atom count ({len(entity.atom_indices)}) (mismatch)."
       )
+
+  if untyped:
+    logger.warning(
+      f"Entities {', '.join(untyped)} contain non-polymer atoms with no aligned RDKit molecule; "
+      "their donors, acceptors, and formal charges are not typed. Attach an rdkit_mol to the entity to include them."
+    )
 
 
 @compat_dataclass()
@@ -551,6 +569,16 @@ def make_record(
   Returns:
     A populated record with an empty ``interaction_id``, assigned downstream.
   """
+  # Endpoints are ordered by entity name first so that one interface always
+  # reports the same (entity1, entity2) pair. Ordering by atom index alone split
+  # a single interface across (A, B) and (B, A) depending on which side happened
+  # to hold the lower index, which broke any grouping by entity pair.
+  name1 = ctx.entity_name(idx1)
+  name2 = ctx.entity_name(idx2)
+  if (name2, idx2) < (name1, idx1):
+    idx1, idx2 = idx2, idx1
+    role1, role2 = role2, role1
+
   ref1 = ctx.atom_refs[idx1]
   ref2 = ctx.atom_refs[idx2]
   if vdw_gap_a is None:
@@ -832,6 +860,18 @@ def detect_hydrogen_bonds(
 
   donors, acceptors = _hbond_donors_and_acceptors(ctx)
   declared = ctx.declared_interaction_pairs(InteractionType.HYDROGEN_BOND)
+
+  # Angle geometry needs an attached hydrogen. Experimental structures usually
+  # have none, in which case every observation is a distance-only candidate and
+  # the rule returns nothing at all unless candidates were requested. Saying so
+  # is better than handing back an empty table that looks like a real answer.
+  if not include_candidates and not any(ref.element in HBOND_HYDROGEN_ELEMENTS for ref in ctx.atom_refs):
+    logger.warning(
+      "Hydrogen-bond detection found no hydrogens in this structure, so donor-H-acceptor angles cannot be measured "
+      "and no hydrogen bonds will be reported. Add hydrogens, or pass include_candidates=True for distance-only candidates."
+    )
+    return []
+
   records = []
   for donor_index in donors:
     for acceptor_index in acceptors:
@@ -1000,12 +1040,14 @@ def detect_metal_coordination(
   """Detect metal coordination shells and classify their geometry.
 
   Coordination centers are always returned so callers can report them even when
-  ``metal_coordination`` records were not requested.
+  ``metal_coordination`` records were not requested. A center always describes
+  the full observed shell; ``include_candidates`` affects only which per-donor
+  interaction records are emitted, not the shell used for geometry.
 
   Parameters:
     ctx: Shared analysis context.
     metal_coordination_cutoff: Maximum metal-donor distance in Å.
-    include_candidates: Whether to keep untyped ``candidate`` donors.
+    include_candidates: Whether to emit records for untyped ``candidate`` donors.
     emit_records: Whether to also emit per-donor interaction records.
 
   Returns:
@@ -1042,14 +1084,17 @@ def detect_metal_coordination(
 
       if evidence is None:
         continue
-      if evidence == "candidate" and not include_candidates:
-        continue
       donors.append({"atom_index": v, "element": donor_ref.element, "distance": distance, "evidence": evidence})
 
     if not donors:
       continue
 
     donors.sort(key=lambda donor: donor["atom_index"])
+    # The coordination shell is a geometric observation: every donor inside the
+    # cutoff shapes it, whether or not its residue could be chemically typed.
+    # Classifying geometry from a typing-filtered subset would report a
+    # confident geometry for a shell that was only partly seen -- haem iron, for
+    # instance, would come out as coordination number 1 rather than 5.
     donor_indices = [donor["atom_index"] for donor in donors]
     geometry, deviation = classify_coordination_geometry(ctx.coords[u], [ctx.coords[idx] for idx in donor_indices])
 
@@ -1087,6 +1132,8 @@ def detect_metal_coordination(
     if not emit_records:
       continue
     for donor in donors:
+      if donor["evidence"] == "candidate" and not include_candidates:
+        continue
       v = donor["atom_index"]
       idx1, idx2 = sorted((u, v))
       records.append(

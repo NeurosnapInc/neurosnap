@@ -49,7 +49,9 @@ DNA_BACKBONE_ATOMS = (
 MIXED_BACKBONE_ATOMS = PROTEIN_BACKBONE_ATOMS + tuple(
   (atom_name, resname, "B", resid, x, y, z, element) for atom_name, resname, _chain_id, resid, x, y, z, element in DNA_BACKBONE_ATOMS
 )
-def make_structure(atom_defs):
+
+
+def make_structure(atom_defs, bonds=None, interactions=None, hetero=False, entity_ids=None):
   """Build a synthetic single-model Structure directly from atom tuples."""
   structure = Structure(remove_annotations=False)
   structure.metadata["model_id"] = 1
@@ -61,7 +63,12 @@ def make_structure(atom_defs):
     structure.atom_annotations["res_id"][atom_index] = resid
     structure.atom_annotations["ins_code"][atom_index] = ""
     structure.atom_annotations["res_name"][atom_index] = resname
-    structure.atom_annotations["hetero"][atom_index] = False
+
+    is_hetero = hetero
+    if isinstance(hetero, (list, tuple)):
+      is_hetero = hetero[atom_index]
+    structure.atom_annotations["hetero"][atom_index] = is_hetero
+
     structure.atom_annotations["atom_name"][atom_index] = atom_name
     structure.atom_annotations["element"][atom_index] = element
     structure.atom_annotations["atom_id"][atom_index] = atom_index + 1
@@ -70,7 +77,17 @@ def make_structure(atom_defs):
     structure.atom_annotations["charge"][atom_index] = 0
     structure.atom_annotations["sym_id"][atom_index] = ""
 
-  structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+    if entity_ids is not None:
+      structure.atom_annotations["entity_id"][atom_index] = entity_ids[atom_index]
+
+  if bonds is not None:
+    structure.bonds = np.array(bonds, dtype=structure._dtype_bond)
+  else:
+    structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+
+  if interactions is not None:
+    structure.interactions = np.array(interactions, dtype=structure._dtype_interaction)
+
   structure._remove_empty_annotations()
   return structure
 

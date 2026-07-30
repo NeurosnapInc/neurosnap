@@ -1,10 +1,18 @@
 """Public structure package exports."""
 
-from .analysis import calculate_protein_volume, calculate_surface_area, ca_distance_matrix, calculate_distance_matrix, extract_non_biopolymers, get_backbone
+from .analysis import (
+  calculate_protein_volume,
+  calculate_surface_area,
+  ca_distance_matrix,
+  calculate_distance_matrix,
+  extract_non_biopolymers,
+  get_backbone,
+)
 from .compare import align, calculate_rmsd
 from .filters import fix_nucleic_termini, remove_atoms, remove_chains, remove_non_biopolymers, remove_nucleotides, remove_waters
 from .interface import calculate_bsa, find_contacts, find_interface_contacts, find_interface_residues, find_non_interface_hydrophobic_patches
 from .interactions import (
+  analyze_interactions,
   calculate_hydrogen_bonds,
   calculate_interface_hydrogen_bonding_residues,
   find_disulfide_bonds,
@@ -27,6 +35,7 @@ __all__ = [
   "InteractionRecord",
   "CoordinationCenterRecord",
   "InteractionReport",
+  "analyze_interactions",
   "Structure",
   "StructureEnsemble",
   "StructureStack",

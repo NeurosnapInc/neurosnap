@@ -97,6 +97,7 @@ class Structure:
     "occupancy": 1.0,
     "charge": 0,
     "sym_id": "",
+    "entity_id": 0,
   }
 
   def __init__(self, *, remove_annotations: bool = True):
@@ -129,6 +130,7 @@ class Structure:
         ("occupancy", "f4"),  # occupancy
         ("charge", "i1"),  # small int (-128 to 127 is enough)
         ("sym_id", "U4"),  # symmetry ID (string, often small)
+        ("entity_id", "i4"),  # entity grouping used by interaction analysis
       ]
     )
 
@@ -735,6 +737,380 @@ class Structure:
       raise ValueError(message)
 
     return masses
+
+  @property
+  def num_atoms(self) -> int:
+    """Return the number of atoms in the structure."""
+    return len(self.atoms)
+
+  def _get_effective_entities(self) -> List[Any]:
+    from neurosnap.structure.interaction_report import InteractionEntity
+
+    # If explicitly set, return it
+    if getattr(self, "_entities", None) is not None:
+      return self._entities
+
+    # Otherwise, check if entity_id in atom_annotations has non-zero values
+    if "entity_id" in self.atom_annotations.dtype.names:
+      entity_ids = self.atom_annotations["entity_id"]
+      unique_eids = []
+      for eid in entity_ids:
+        if eid != 0 and eid not in unique_eids:
+          unique_eids.append(eid)
+
+      if unique_eids:
+        entities = []
+        for eid in unique_eids:
+          indices = np.where(entity_ids == eid)[0]
+          entities.append(InteractionEntity(name=f"Entity_{eid}", atom_indices=indices))
+        return entities
+
+    # Fallback to chain_id grouping if no entity_ids are set
+    chain_ids = self.atom_annotations["chain_id"] if "chain_id" in self.atom_annotations.dtype.names else []
+    unique_chains = []
+    for cid in chain_ids:
+      if cid not in unique_chains:
+        unique_chains.append(cid)
+
+    entities = []
+    for cid in unique_chains:
+      indices = np.where(chain_ids == cid)[0]
+      entities.append(InteractionEntity(name=f"Chain_{cid}", atom_indices=indices))
+    return entities
+
+  @property
+  def entities(self) -> List[Any]:
+    """Return the list of InteractionEntity objects defined on this structure."""
+    if getattr(self, "_entities", None) is not None:
+      return self._entities
+    return self._get_effective_entities()
+
+  @entities.setter
+  def entities(self, val: List[Any]):
+    self._entities = val
+
+  def validate_entities(self, check_rdkit: bool = False):
+    """Validate entity bounds, duplicate IDs, non-finite coordinates, contiguity, and RDKit alignment."""
+    # 1. Non-finite coordinates
+    if len(self) > 0:
+      coords = np.column_stack([self.atoms["x"], self.atoms["y"], self.atoms["z"]])
+      if not np.all(np.isfinite(coords)):
+        raise ValueError("Structure coordinates must be finite.")
+
+    # 2. Duplicate atom IDs
+    if "atom_id" in self.atom_annotations.dtype.names:
+      atom_ids = self.atom_annotations["atom_id"]
+      if len(atom_ids) != len(np.unique(atom_ids)):
+        raise ValueError("duplicate atom serial numbers (atom_id) found in structure.")
+
+    # 3. Contiguous entity IDs in annotations
+    if "entity_id" in self.atom_annotations.dtype.names:
+      entity_ids = self.atom_annotations["entity_id"]
+      non_zero_eids = [eid for eid in entity_ids if eid != 0]
+      if non_zero_eids:
+        # Check that unique entity IDs are sequential starting from 1 (bounds check)
+        unique_eids = sorted(set(non_zero_eids))
+        if list(unique_eids) != list(range(1, len(unique_eids) + 1)):
+          raise ValueError(
+            f"Entity IDs in atom annotations must be sequential integers starting from 1; found unique values {unique_eids} (out of bounds)."
+          )
+
+        # Check for interleaving/contiguity
+        dedup_adjacent = []
+        prev = None
+        for eid in entity_ids:
+          if eid != prev:
+            if eid != 0:
+              dedup_adjacent.append(eid)
+            prev = eid
+        if len(dedup_adjacent) != len(set(dedup_adjacent)):
+          raise ValueError("Entities in atom annotations must be contiguous (cannot overlap or interleave).")
+
+    # Get the entities
+    ents = self.entities
+
+    # 4. Check entity bounds
+    for ent in ents:
+      for idx in ent.atom_indices:
+        if idx < 0 or idx >= len(self):
+          raise ValueError(f"Atom index {idx} in entity {ent.name} is out of bounds for structure of size {len(self)}.")
+
+    # 5. Check RDKit molecule alignment/mismatch
+    if check_rdkit:
+      for ent in ents:
+        if ent.rdkit_mol is None:
+          raise ValueError(f"Entity {ent.name} is missing an aligned RDKit molecule (mismatch).")
+        if ent.rdkit_mol.GetNumAtoms() != len(ent.atom_indices):
+          raise ValueError(
+            f"RDKit molecule atom count ({ent.rdkit_mol.GetNumAtoms()}) does not match entity atom count ({len(ent.atom_indices)}) (mismatch)."
+          )
+
+  def get_raw_contacts(self, cutoff: float = 12.0) -> pd.DataFrame:
+    """Return all pairwise atom-atom contacts within a distance cutoff."""
+    if len(self) == 0:
+      return pd.DataFrame(columns=["atom_index1", "atom_index2", "distance_a"])
+
+    from scipy.spatial import KDTree
+
+    coords = np.column_stack([self.atoms["x"], self.atoms["y"], self.atoms["z"]])
+    tree = KDTree(coords)
+    pairs = tree.query_pairs(cutoff, output_type="ndarray")
+    if len(pairs) == 0:
+      return pd.DataFrame(columns=["atom_index1", "atom_index2", "distance_a"])
+
+    idx1 = pairs[:, 0]
+    idx2 = pairs[:, 1]
+    dist_vals = np.linalg.norm(coords[idx1] - coords[idx2], axis=-1)
+
+    # Sort to ensure stable, deterministic ordering (idx1 ascending, then idx2 ascending)
+    sort_order = np.lexsort((idx2, idx1))
+    idx1 = idx1[sort_order]
+    idx2 = idx2[sort_order]
+    dist_vals = dist_vals[sort_order]
+
+    df = pd.DataFrame({"atom_index1": idx1.astype(np.int32), "atom_index2": idx2.astype(np.int32), "distance_a": dist_vals.astype(np.float32)})
+    return df
+
+  def _analyze_interactions(
+    self,
+    interaction_types: Optional[Sequence[str]] = None,
+    *,
+    entities: Optional[Sequence[Any]] = None,
+    contact_cutoff_a: float = 4.5,
+    vdw_tolerance_a: float = 0.5,
+    clash_overlap_a: float = 0.4,
+    include_hydrogens: bool = False,
+    covalent_candidates: bool = False,
+    covalent_lower_factor: float = 0.8,
+    covalent_upper_factor: float = 1.2,
+    disulfide_cutoff: float = 2.2,
+    salt_bridge_cutoff: float = 4.0,
+    hbond_donor_acceptor_cutoff: float = 3.5,
+    hbond_angle_cutoff: float = 130.0,
+    metal_coordination_cutoff: float = 2.8,
+    include_candidates: bool = False,
+  ) -> Any:
+    old_entities = getattr(self, "_entities", None)
+    if entities is not None:
+      self._entities = list(entities)
+    try:
+      return self._analyze_interactions_impl(
+        interaction_types=interaction_types,
+        contact_cutoff_a=contact_cutoff_a,
+        vdw_tolerance_a=vdw_tolerance_a,
+        clash_overlap_a=clash_overlap_a,
+        include_hydrogens=include_hydrogens,
+        covalent_candidates=covalent_candidates,
+        covalent_lower_factor=covalent_lower_factor,
+        covalent_upper_factor=covalent_upper_factor,
+        disulfide_cutoff=disulfide_cutoff,
+        salt_bridge_cutoff=salt_bridge_cutoff,
+        hbond_donor_acceptor_cutoff=hbond_donor_acceptor_cutoff,
+        hbond_angle_cutoff=hbond_angle_cutoff,
+        metal_coordination_cutoff=metal_coordination_cutoff,
+        include_candidates=include_candidates,
+      )
+    finally:
+      if entities is not None:
+        if old_entities is None:
+          if hasattr(self, "_entities"):
+            delattr(self, "_entities")
+        else:
+          self._entities = old_entities
+
+  def _analyze_interactions_impl(
+    self,
+    interaction_types: Optional[Sequence[str]] = None,
+    *,
+    contact_cutoff_a: float = 4.5,
+    vdw_tolerance_a: float = 0.5,
+    clash_overlap_a: float = 0.4,
+    include_hydrogens: bool = False,
+    covalent_candidates: bool = False,
+    covalent_lower_factor: float = 0.8,
+    covalent_upper_factor: float = 1.2,
+    disulfide_cutoff: float = 2.2,
+    salt_bridge_cutoff: float = 4.0,
+    hbond_donor_acceptor_cutoff: float = 3.5,
+    hbond_angle_cutoff: float = 130.0,
+    metal_coordination_cutoff: float = 2.8,
+    include_candidates: bool = False,
+  ) -> Any:
+    """Run the requested interaction rules and assemble the resulting report.
+
+    Rules are evaluated in a fixed order so record ordering and evidence
+    deduplication stay deterministic. Coordination centers are always computed,
+    even when ``metal_coordination`` records were not requested, so that
+    :meth:`get_coordination_centers` does not depend on the requested types.
+
+    Parameters:
+      interaction_types: Families to evaluate, or ``None`` for every supported family.
+      contact_cutoff_a: Plain contact cutoff in Å.
+      vdw_tolerance_a: Slack added to the van der Waals radius sum.
+      clash_overlap_a: Minimum overlap in Å reported as a clash.
+      include_hydrogens: Whether hydrogen-involving contacts are kept.
+      covalent_candidates: Whether to emit geometric covalent candidates.
+      covalent_lower_factor: Lower multiplier on the covalent radius sum.
+      covalent_upper_factor: Upper multiplier on the covalent radius sum.
+      disulfide_cutoff: Maximum SG-SG distance in Å.
+      salt_bridge_cutoff: Maximum charge-center distance in Å.
+      hbond_donor_acceptor_cutoff: Maximum donor-acceptor distance in Å.
+      hbond_angle_cutoff: Minimum donor-H-acceptor angle in degrees.
+      metal_coordination_cutoff: Maximum metal-donor distance in Å.
+      include_candidates: Whether to emit distance-only candidate rows.
+
+    Returns:
+      An :class:`~neurosnap.structure.interaction_report.InteractionReport`.
+    """
+    from neurosnap.structure.interaction_report import InteractionReport
+
+    from . import _interaction_engine as engine
+
+    self.validate_entities()
+    types_to_run = engine.resolve_interaction_types(interaction_types)
+    entities = self._get_effective_entities()
+    engine.validate_ligand_topology(entities, self.atom_annotations, types_to_run)
+
+    params = {
+      "contact_cutoff_a": contact_cutoff_a,
+      "vdw_tolerance_a": vdw_tolerance_a,
+      "clash_overlap_a": clash_overlap_a,
+      "include_hydrogens": include_hydrogens,
+      "covalent_candidates": covalent_candidates,
+      "covalent_lower_factor": covalent_lower_factor,
+      "covalent_upper_factor": covalent_upper_factor,
+      "disulfide_cutoff": disulfide_cutoff,
+      "salt_bridge_cutoff": salt_bridge_cutoff,
+      "hbond_donor_acceptor_cutoff": hbond_donor_acceptor_cutoff,
+      "hbond_angle_cutoff": hbond_angle_cutoff,
+      "metal_coordination_cutoff": metal_coordination_cutoff,
+      "include_candidates": include_candidates,
+    }
+
+    largest_cutoff = engine.compute_largest_cutoff(
+      engine.atom_elements(self),
+      types_to_run,
+      contact_cutoff_a=contact_cutoff_a,
+      vdw_tolerance_a=vdw_tolerance_a,
+      disulfide_cutoff=disulfide_cutoff,
+      salt_bridge_cutoff=salt_bridge_cutoff,
+      hbond_donor_acceptor_cutoff=hbond_donor_acceptor_cutoff,
+      metal_coordination_cutoff=metal_coordination_cutoff,
+      covalent_candidates=covalent_candidates,
+      covalent_upper_factor=covalent_upper_factor,
+    )
+    ctx = engine.build_context(self, entities, largest_cutoff)
+
+    records = []
+    if "disulfide" in types_to_run:
+      records.extend(engine.detect_disulfides(ctx, disulfide_cutoff=disulfide_cutoff))
+    if "salt_bridge" in types_to_run:
+      records.extend(engine.detect_salt_bridges(ctx, salt_bridge_cutoff=salt_bridge_cutoff))
+    if "hydrogen_bond" in types_to_run:
+      records.extend(
+        engine.detect_hydrogen_bonds(
+          ctx,
+          hbond_donor_acceptor_cutoff=hbond_donor_acceptor_cutoff,
+          hbond_angle_cutoff=hbond_angle_cutoff,
+          include_candidates=include_candidates,
+        )
+      )
+    if "vdw_clash" in types_to_run:
+      records.extend(engine.detect_vdw_clashes(ctx, clash_overlap_a=clash_overlap_a))
+
+    metal_records, coordination_centers = engine.detect_metal_coordination(
+      ctx,
+      metal_coordination_cutoff=metal_coordination_cutoff,
+      include_candidates=include_candidates,
+      emit_records="metal_coordination" in types_to_run,
+    )
+    records.extend(metal_records)
+
+    records.extend(
+      engine.detect_cross_entity_candidates(
+        ctx,
+        types_to_run,
+        contact_cutoff_a=contact_cutoff_a,
+        vdw_tolerance_a=vdw_tolerance_a,
+        clash_overlap_a=clash_overlap_a,
+        include_hydrogens=include_hydrogens,
+        covalent_candidates=covalent_candidates,
+        covalent_lower_factor=covalent_lower_factor,
+        covalent_upper_factor=covalent_upper_factor,
+      )
+    )
+
+    return InteractionReport(engine.deduplicate_records(records, params), coordination_centers, metadata={"params": params})
+
+  def detect_interactions(
+    self,
+    interaction_types: Optional[Sequence[str]] = None,
+    *,
+    contact_cutoff_a: float = 4.5,
+    vdw_tolerance_a: float = 0.5,
+    clash_overlap_a: float = 0.4,
+    include_hydrogens: bool = False,
+    covalent_candidates: bool = False,
+    covalent_lower_factor: float = 0.8,
+    covalent_upper_factor: float = 1.2,
+    disulfide_cutoff: float = 2.2,
+    salt_bridge_cutoff: float = 4.0,
+    hbond_donor_acceptor_cutoff: float = 3.5,
+    hbond_angle_cutoff: float = 130.0,
+    metal_coordination_cutoff: float = 2.8,
+    include_candidates: bool = False,
+  ) -> pd.DataFrame:
+    """Detect structural interactions and return them as a pandas DataFrame.
+
+    Named ``detect_`` rather than ``get_`` because this computes interactions
+    from geometry and chemistry; it does not read the declared
+    :attr:`interactions` table, though declared rows raise an observation's
+    evidence to ``explicit``.
+    """
+    report = self._analyze_interactions(
+      interaction_types=interaction_types,
+      contact_cutoff_a=contact_cutoff_a,
+      vdw_tolerance_a=vdw_tolerance_a,
+      clash_overlap_a=clash_overlap_a,
+      include_hydrogens=include_hydrogens,
+      covalent_candidates=covalent_candidates,
+      covalent_lower_factor=covalent_lower_factor,
+      covalent_upper_factor=covalent_upper_factor,
+      disulfide_cutoff=disulfide_cutoff,
+      salt_bridge_cutoff=salt_bridge_cutoff,
+      hbond_donor_acceptor_cutoff=hbond_donor_acceptor_cutoff,
+      hbond_angle_cutoff=hbond_angle_cutoff,
+      metal_coordination_cutoff=metal_coordination_cutoff,
+      include_candidates=include_candidates,
+    )
+    return report.to_dataframe()
+
+  def detect_coordination_centers(
+    self,
+    *,
+    metal_coordination_cutoff: float = 2.8,
+    include_candidates: bool = False,
+  ) -> pd.DataFrame:
+    """Analyze and return coordination centers as a pandas DataFrame.
+
+    Only the metal coordination rule is evaluated. Requesting every rule here
+    would inherit the aligned-RDKit-molecule requirement of the chemistry-typed
+    rules, which would make this method unusable on any structure containing a
+    ligand even when no ligand participates in a coordination shell.
+
+    Parameters:
+      metal_coordination_cutoff: Maximum metal-donor distance in Å.
+      include_candidates: Whether to keep untyped ``candidate`` donors.
+
+    Returns:
+      One row per coordination center, with its donors and classified geometry.
+    """
+    report = self._analyze_interactions(
+      interaction_types=["metal_coordination"],
+      metal_coordination_cutoff=metal_coordination_cutoff,
+      include_candidates=include_candidates,
+    )
+    return report.coordination_centers_dataframe()
 
   def _atom_view(self, atom_index: int) -> "Atom":
     """Create an immutable :class:`Atom` view for one atom index."""

@@ -26,12 +26,19 @@ def find_contacts(atoms1: List[Atom], atoms2: List[Atom], cutoff: float = 4.5) -
   if not atoms1 or not atoms2:
     return []
 
-  coords2 = np.asarray([np.asarray(atom.coord, dtype=np.float32) for atom in atoms2], dtype=np.float32)
+  from neurosnap.structure.interactions import _find_neighbor_candidates
+
+  # A KD-tree query keeps this near-linear in the number of contacts rather than
+  # quadratic in the number of atoms.
+  coords1 = np.asarray([atom.coord for atom in atoms1], dtype=np.float32)
+  coords2 = np.asarray([atom.coord for atom in atoms2], dtype=np.float32)
+  coords = np.vstack([coords1, coords2])
+  indices1 = np.arange(len(atoms1), dtype=np.int32)
+  indices2 = np.arange(len(atoms1), len(atoms1) + len(atoms2), dtype=np.int32)
+
   contacts = []
-  for atom1 in atoms1:
-    distances = np.linalg.norm(coords2 - np.asarray(atom1.coord, dtype=np.float32), axis=1)
-    for atom2_index in np.where(distances <= cutoff)[0]:
-      contacts.append((atom1, atoms2[atom2_index]))
+  for u, v, _ in _find_neighbor_candidates(coords, indices1, indices2, cutoff):
+    contacts.append((atoms1[u], atoms2[v - len(atoms1)]))
   return contacts
 
 
@@ -224,7 +231,7 @@ def find_non_interface_hydrophobic_patches(
     target_chain_set = {chain_id.strip() for chain_id in target_chains}
     missing = target_chain_set - available_chains
     if missing:
-      raise ValueError(f'Chain(s) {", ".join(sorted(missing))} were not found.')
+      raise ValueError(f"Chain(s) {', '.join(sorted(missing))} were not found.")
 
   interface_residue_keys = set()
   for chain1, chain2 in chain_pairs:

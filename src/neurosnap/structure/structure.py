@@ -20,7 +20,7 @@ import pandas as pd
 from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.constants.sequence import AA_RECORDS
-from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NUC_DNA_CODES, NUC_RNA_CODES, STANDARD_NUCLEOTIDES
+from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NA_DNA_CODES, NA_RNA_CODES, STANDARD_NUCLEOTIDES
 from neurosnap.log import logger
 
 ### IMPORTANT NOTES
@@ -993,9 +993,9 @@ class Chain:
         # Nucleotide handling mirrors the protein path but uses canonical
         # one-letter base codes and a simple parent-code inference fallback for
         # modified residues.
-        if residue_name in NUC_RNA_CODES:
+        if residue_name in NA_RNA_CODES:
           residue_token = residue_name
-        elif residue_name in NUC_DNA_CODES:
+        elif residue_name in NA_DNA_CODES:
           residue_token = residue_name[1]
         elif not include_modifications:
           residue_token = None
@@ -1378,9 +1378,9 @@ def _classify_polymer_residue(residue: Residue) -> Optional[str]:
   residue_name = residue.res_name.strip().upper()
   if residue_name in AA_RECORDS:
     return "protein"
-  if residue_name in NUC_DNA_CODES:
+  if residue_name in NA_DNA_CODES:
     return "dna"
-  if residue_name in NUC_RNA_CODES:
+  if residue_name in NA_RNA_CODES:
     return "rna"
 
   atom_names = {atom.atom_name.strip().upper() for atom in residue._atoms}

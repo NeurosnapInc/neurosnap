@@ -71,7 +71,7 @@ from neurosnap.algos.evoef2_lib.constants import (
 )
 from neurosnap.algos.evoef2_lib.weights import get_weights
 from neurosnap.constants.sequence import AA_RECORDS, STANDARD_AAs
-from neurosnap.constants.structure import BACKBONE_ATOMS_NUCLEOTIDE, NUC_ALL_CODES, NUC_RESIDUE_MAP
+from neurosnap.constants.structure import BACKBONE_ATOMS_NUCLEOTIDE, NA_ALL_CODES, NA_RESIDUE_MAP
 from neurosnap.log import logger
 from neurosnap.structure import BondType, Structure as NSStructure
 from neurosnap.sequence.protein import getAA
@@ -465,7 +465,7 @@ def _default_evoef2_root() -> Path:
 
 
 def _is_nucleic_res_name(res_name: str) -> bool:
-  return res_name in NUC_ALL_CODES or res_name in NUC_RESIDUE_MAP
+  return res_name in NA_ALL_CODES or res_name in NA_RESIDUE_MAP
 
 
 def _is_polymer_residue(res: Residue) -> bool:
@@ -1552,8 +1552,8 @@ def rebuild_missing_atoms(
           res_name = "HSE"
         elif res_name == "HIP":
           res_name = "HSP"
-        if res_name in NUC_RESIDUE_MAP:
-          res_name = NUC_RESIDUE_MAP[res_name]
+        if res_name in NA_RESIDUE_MAP:
+          res_name = NA_RESIDUE_MAP[res_name]
         is_protein = _protein_one_letter_code(res_name) is not None
         is_nucleic = _is_nucleic_res_name(res_name)
         res = Residue(
@@ -1600,8 +1600,8 @@ def rebuild_missing_atoms(
         res_name = "HSE"
       elif res_name == "HIP":
         res_name = "HSP"
-      if res_name in NUC_RESIDUE_MAP:
-        res_name = NUC_RESIDUE_MAP[res_name]
+      if res_name in NA_RESIDUE_MAP:
+        res_name = NA_RESIDUE_MAP[res_name]
       is_protein = _protein_one_letter_code(res_name) is not None
       is_nucleic = _is_nucleic_res_name(res_name)
       res = Residue(

@@ -5,7 +5,7 @@ from typing import Literal, Optional, Tuple
 import numpy as np
 
 from neurosnap.constants.sequence import AA_RECORDS
-from neurosnap.constants.structure import BACKBONE_ATOMS_AA, BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NUC_DNA_CODES, NUC_RNA_CODES
+from neurosnap.constants.structure import BACKBONE_ATOMS_AA, BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NA_DNA_CODES, NA_RNA_CODES
 
 from .structure import Residue, Structure, StructureStack
 
@@ -24,9 +24,9 @@ def classify_polymer_residue(residue: Residue) -> Optional[PolymerType]:
   residue_name = residue.res_name.strip().upper()
   if residue_name in AA_RECORDS:
     return "protein"
-  if residue_name in NUC_DNA_CODES:
+  if residue_name in NA_DNA_CODES:
     return "dna"
-  if residue_name in NUC_RNA_CODES:
+  if residue_name in NA_RNA_CODES:
     return "rna"
 
   atom_names = {atom.atom_name.strip().upper() for atom in residue.atoms()}

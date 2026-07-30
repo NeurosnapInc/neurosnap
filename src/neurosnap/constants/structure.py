@@ -38,18 +38,18 @@ BACKBONE_ATOMS_NUCLEOTIDE = BACKBONE_ATOMS_RNA + ("OP3",)
 
 ## Nucleotide Codes
 # Single-letter PDB residue codes for standard DNA residues
-NUC_DNA_CODES = {"DA", "DT", "DC", "DG", "DI"}
+NA_DNA_CODES = {"DA", "DT", "DC", "DG", "DI"}
 # Single-letter PDB residue codes for standard RNA residues
-NUC_RNA_CODES = {"A", "U", "C", "G", "I"}
+NA_RNA_CODES = {"A", "U", "C", "G", "I"}
 # Codes for standard nucleotides (both RNA and DNA)
-STANDARD_NUCLEOTIDES = NUC_DNA_CODES.union(NUC_RNA_CODES)
+STANDARD_NUCLEOTIDES = NA_DNA_CODES.union(NA_RNA_CODES)
 # Canonical CHARMM residue names for standard nucleic acid bases.
-NUC_CHARMM_RESIDUES = {"ADE", "GUA", "CYT", "THY", "URA"} # TODO: Kinda redundant with NUC_RESIDUE_MAP.values()
+NA_CHARMM_RESIDUES = {"ADE", "GUA", "CYT", "THY", "URA"} # TODO: Kinda redundant with NA_RESIDUE_MAP.values()
 # Combined set of standard nucleic-acid residue names across common PDB and
 # CHARMM conventions.
-NUC_ALL_CODES = STANDARD_NUCLEOTIDES.union(NUC_CHARMM_RESIDUES)
+NA_ALL_CODES = STANDARD_NUCLEOTIDES.union(NA_CHARMM_RESIDUES)
 # Map common PDB nucleic acid residue names to their corresponding CHARMM residue names for topology and parameter lookup.
-NUC_RESIDUE_MAP = {
+NA_RESIDUE_MAP = {
   "A": "ADE",
   "G": "GUA",
   "C": "CYT",
@@ -77,11 +77,11 @@ __all__ = [
   "BACKBONE_ATOMS_NUCLEOTIDE",
   "BACKBONE_ATOMS_RNA",
   "HYDROPHOBIC_RESIDUES",
-  "NUC_ALL_CODES",
-  "NUC_CHARMM_RESIDUES",
-  "NUC_DNA_CODES",
-  "NUC_RNA_CODES",
-  "NUC_RESIDUE_MAP",
+  "NA_ALL_CODES",
+  "NA_CHARMM_RESIDUES",
+  "NA_DNA_CODES",
+  "NA_RNA_CODES",
+  "NA_RESIDUE_MAP",
   "STANDARD_NUCLEOTIDES",
   "FIVE_PRIME_TERMINAL_ATOMS",
   "THREE_PRIME_TERMINAL_ATOMS",

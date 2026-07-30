@@ -441,3 +441,89 @@ def test_pdb_duplicate_link_records_collapse_to_one_bond():
   assert len(structure.bonds) == 1
   assert int(structure.bonds[0]["bond_type"]) == int(BondType.METAL_COORDINATION)
   assert int(structure.bonds[0]["bond_order"]) == 0
+
+
+def _metalc_cif(conn_type: str, value_order: str) -> str:
+  """Return a minimal mmCIF with one ``_struct_conn`` row between a zinc and a histidine."""
+  return "\n".join(
+    [
+      "data_test",
+      "loop_",
+      "_atom_site.group_PDB",
+      "_atom_site.id",
+      "_atom_site.type_symbol",
+      "_atom_site.label_atom_id",
+      "_atom_site.label_comp_id",
+      "_atom_site.label_asym_id",
+      "_atom_site.label_seq_id",
+      "_atom_site.pdbx_PDB_ins_code",
+      "_atom_site.Cartn_x",
+      "_atom_site.Cartn_y",
+      "_atom_site.Cartn_z",
+      "_atom_site.occupancy",
+      "_atom_site.B_iso_or_equiv",
+      "_atom_site.pdbx_PDB_model_num",
+      "HETATM 1 ZN ZN ZN B 1 ? 0.000 0.000 0.000 1.00 20.00 1",
+      "ATOM   2 N  NE2 HIS A 9 ? 2.100 0.000 0.000 1.00 20.00 1",
+      "loop_",
+      "_struct_conn.id",
+      "_struct_conn.conn_type_id",
+      "_struct_conn.pdbx_value_order",
+      "_struct_conn.ptnr1_label_asym_id",
+      "_struct_conn.ptnr1_label_comp_id",
+      "_struct_conn.ptnr1_label_seq_id",
+      "_struct_conn.ptnr1_label_atom_id",
+      "_struct_conn.pdbx_ptnr1_PDB_ins_code",
+      "_struct_conn.ptnr2_label_asym_id",
+      "_struct_conn.ptnr2_label_comp_id",
+      "_struct_conn.ptnr2_label_seq_id",
+      "_struct_conn.ptnr2_label_atom_id",
+      "_struct_conn.pdbx_ptnr2_PDB_ins_code",
+      f"conn1 {conn_type} {value_order} B ZN 1 ZN ? A HIS 9 NE2 ?",
+    ]
+  )
+
+
+def test_mmcif_metal_coordination_discards_a_stated_bond_order(tmp_path):
+  """A depositor-stated order on a metalc row must not build an invalid structure.
+
+  Regression: the bond schema requires ``bond_order = 0`` for metal
+  coordination, but the parser copied whatever the file said, so the structure
+  parsed cleanly and then failed validation later, for instance on stacking.
+  """
+  from neurosnap.io.mmcif import parse_mmcif
+  from neurosnap.structure import BondType, StructureStack
+
+  path = tmp_path / "metalc.cif"
+  path.write_text(_metalc_cif("metalc", "sing"))
+  structure = parse_mmcif(str(path), return_type="ensemble").first()
+
+  assert len(structure.bonds) == 1
+  assert int(structure.bonds[0]["bond_type"]) == int(BondType.METAL_COORDINATION)
+  assert int(structure.bonds[0]["bond_order"]) == 0
+
+  # the structure is schema-valid, so downstream validation accepts it
+  StructureStack([structure])
+
+
+def test_mmcif_unrecognized_bond_order_warns(tmp_path, caplog):
+  """An unparseable order token is distinguishable from an absent one."""
+  import logging
+
+  from neurosnap.io.mmcif import parse_mmcif
+
+  path = tmp_path / "badorder.cif"
+  path.write_text(_metalc_cif("covale", "wibble"))
+  with caplog.at_level(logging.WARNING):
+    structure = parse_mmcif(str(path), return_type="ensemble").first()
+  assert int(structure.bonds[0]["bond_order"]) == 0
+  assert any("pdbx_value_order" in record.message for record in caplog.records)
+
+  # an absent value means the depositor said nothing, which is not worth warning about
+  caplog.clear()
+  quiet_path = tmp_path / "noorder.cif"
+  quiet_path.write_text(_metalc_cif("covale", "?"))
+  with caplog.at_level(logging.WARNING):
+    quiet = parse_mmcif(str(quiet_path), return_type="ensemble").first()
+  assert int(quiet.bonds[0]["bond_order"]) == 0
+  assert not any("pdbx_value_order" in record.message for record in caplog.records)

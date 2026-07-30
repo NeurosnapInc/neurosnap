@@ -10,7 +10,7 @@ helpers for reading and writing
 import io
 import pathlib
 from collections import Counter
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Literal, Optional, Tuple, Union
 
 import numpy as np
@@ -18,6 +18,7 @@ import numpy as np
 from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.log import logger
+from neurosnap.constants.chemistry import METAL_ELEMENTS
 from neurosnap.structure.structure import BondType, Structure, StructureEnsemble, StructureStack
 
 __all__ = ["parse_pdb", "save_pdb"]
@@ -52,6 +53,32 @@ class _AtomRecord:
   atom_key: AtomKey
 
 
+@dataclass
+class _ExplicitBond:
+  """A ``SSBOND`` or ``LINK`` record before its endpoints are resolved to indices.
+
+  PDB stores these records once for the whole file rather than per model, and
+  they identify atoms by chain, residue, and atom name, so resolution has to
+  wait until every model's atom table exists.
+  """
+
+  record_id: str
+  atom1_name: str
+  altloc1: str
+  res_name1: str
+  chain1: str
+  res_id1: int
+  ins_code1: str
+  atom2_name: str
+  altloc2: str
+  res_name2: str
+  chain2: str
+  res_id2: int
+  ins_code2: str
+  #: ``None`` for ``LINK``, whose category depends on whether an endpoint is a metal.
+  bond_type: Optional[BondType]
+
+
 @compat_dataclass(slots=True)
 class _ModelAccumulator:
   """Mutable builder used while parsing a single PDB model."""
@@ -78,6 +105,8 @@ class _ModelAccumulator:
   _atom_key_to_index: Dict[AtomKey, int] = field(default_factory=dict)
   _selected_altloc: Dict[AtomKey, Tuple[float, str, int]] = field(default_factory=dict)
   _residue_atom_name_counts: Dict[ResidueKey, Counter[str]] = field(default_factory=dict)
+  #: Explicit bonds resolved from ``SSBOND`` / ``LINK``, keyed by sorted atom pair.
+  explicit_bonds: Dict[Tuple[int, int], Tuple[int, int]] = field(default_factory=dict)
   directed_bonds: Counter[Tuple[int, int]] = field(default_factory=Counter)
 
   def add_atom(self, atom: _AtomRecord):
@@ -220,8 +249,16 @@ class _ModelAccumulator:
       pair = (min(atom_i, atom_j), max(atom_i, atom_j))
       undirected_bonds[pair] = max(undirected_bonds.get(pair, 0), count)
 
-    for (atom_i, atom_j), bond_order in sorted(undirected_bonds.items()):
-      bond_rows.append((atom_i, atom_j, bond_order, int(BondType.COVALENT)))
+    # Explicit SSBOND / LINK records classify a pair that CONECT may also have
+    # reported. The bond table allows only one row per pair, so the explicit
+    # classification replaces the inferred covalent one rather than adding a row.
+    merged_bonds: Dict[Tuple[int, int], Tuple[int, int]] = {
+      pair: (bond_order, int(BondType.COVALENT)) for pair, bond_order in undirected_bonds.items()
+    }
+    merged_bonds.update(self.explicit_bonds)
+
+    for (atom_i, atom_j), (bond_order, bond_type) in sorted(merged_bonds.items()):
+      bond_rows.append((atom_i, atom_j, bond_order, bond_type))
 
     if bond_rows:
       structure.bonds = np.array(bond_rows, dtype=structure._dtype_bond)
@@ -339,6 +376,11 @@ def save_pdb(structure: Union[Structure, StructureEnsemble, StructureStack], pdb
     shared_conect_lines = _shared_conect_lines(models)
 
   lines: List[str] = []
+  # SSBOND and LINK records precede the coordinate section per PDB convention,
+  # and describe topology shared by every model, so they are written once.
+  if models:
+    lines.extend(_explicit_bond_lines(models[0][1]))
+
   for model_position, (model_id, model) in enumerate(models):
     serials = _atom_serials_for_model(model)
     if len(models) > 1:
@@ -373,6 +415,7 @@ def _parse_pdb_models(
   records only after all atoms are known so serial-number lookups are complete.
   """
   pending_conect: List[ConectRecord] = []
+  pending_explicit: List[_ExplicitBond] = []
   models: List[_ModelAccumulator] = []
   current_model: Optional[_ModelAccumulator] = None
   implicit_model_id = 1
@@ -415,6 +458,18 @@ def _parse_pdb_models(
         pending_conect.append(conect)
       continue
 
+    if record_type == "SSBOND":
+      ssbond = _parse_ssbond_record(padded_line, line_number, malformed_conect=malformed_conect)
+      if ssbond is not None:
+        pending_explicit.append(ssbond)
+      continue
+
+    if record_type == "LINK  ":
+      link = _parse_link_record(padded_line, line_number, malformed_conect=malformed_conect)
+      if link is not None:
+        pending_explicit.append(link)
+      continue
+
     if record_type == "TER   ":
       continue
 
@@ -422,6 +477,7 @@ def _parse_pdb_models(
     raise ValueError("No models or atoms were found in the PDB file.")
 
   _apply_conect_records(models, pending_conect, malformed_conect=malformed_conect)
+  _apply_explicit_bonds(models, pending_explicit, altloc_sites, malformed_conect=malformed_conect)
   ensemble = StructureEnsemble()
   for model in models:
     ensemble.append(model.to_structure(), model_id=model.model_id)
@@ -580,6 +636,65 @@ def _format_charge_field(charge: int) -> str:
   return f"{abs(charge)}{sign}"
 
 
+def _name_and_element(annotations: np.ndarray, names: Tuple[str, ...], atom_index: int) -> Tuple[str, str]:
+  """Return an atom's name and element for record formatting."""
+  atom_name = str(annotations["atom_name"][atom_index]) if "atom_name" in names else ""
+  element = str(annotations["element"][atom_index]) if "element" in names else ""
+  return atom_name, element
+
+
+def _explicit_bond_lines(model: Structure) -> List[str]:
+  """Return ``SSBOND`` and ``LINK`` lines for a model's classified bonds.
+
+  Disulfides are written as ``SSBOND`` and metal coordination as ``LINK``.
+  Covalent bonds are left to ``CONECT``, which already expresses them along with
+  their bond order, so writing both would duplicate the same topology.
+
+  Parameters:
+    model: Single-model structure whose bond table is written.
+
+  Returns:
+    Record lines in PDB order, ``SSBOND`` records first.
+  """
+  if len(model.bonds) == 0:
+    return []
+
+  annotations = model.atom_annotations
+  names = annotations.dtype.names
+
+  def atom_fields(atom_index: int) -> Tuple[str, str, str, int, str]:
+    return (
+      str(annotations["atom_name"][atom_index]) if "atom_name" in names else "",
+      str(annotations["res_name"][atom_index]) if "res_name" in names else "",
+      str(annotations["chain_id"][atom_index]) if "chain_id" in names else "",
+      int(annotations["res_id"][atom_index]) if "res_id" in names else 0,
+      str(annotations["ins_code"][atom_index]) if "ins_code" in names else "",
+    )
+
+  ssbond_lines: List[str] = []
+  link_lines: List[str] = []
+  for bond in model.bonds:
+    bond_type = int(bond["bond_type"])
+    if bond_type not in (int(BondType.DISULFIDE), int(BondType.METAL_COORDINATION)):
+      continue
+    _, res_name1, chain1, res_id1, ins1 = atom_fields(int(bond["atom_i"]))
+    _, res_name2, chain2, res_id2, ins2 = atom_fields(int(bond["atom_j"]))
+
+    if bond_type == int(BondType.DISULFIDE):
+      serial = len(ssbond_lines) + 1
+      ssbond_lines.append(
+        f"SSBOND {serial:3d} {res_name1:3} {chain1:1} {res_id1:4d}{ins1 or ' ':1}   {res_name2:3} {chain2:1} {res_id2:4d}{ins2 or ' ':1}"
+      )
+    else:
+      atom_name1 = _format_atom_name(*_name_and_element(annotations, names, int(bond["atom_i"])))
+      atom_name2 = _format_atom_name(*_name_and_element(annotations, names, int(bond["atom_j"])))
+      link_lines.append(
+        f"LINK        {atom_name1}{' ':1}{res_name1:3} {chain1:1}{res_id1:4d}{ins1 or ' ':1}"
+        f"               {atom_name2}{' ':1}{res_name2:3} {chain2:1}{res_id2:4d}{ins2 or ' ':1}"
+      )
+  return ssbond_lines + link_lines
+
+
 def _conect_lines_for_model(model: Structure, serials: np.ndarray) -> List[str]:
   """Return ``CONECT`` lines for a model."""
   if len(model.bonds) == 0:
@@ -589,6 +704,11 @@ def _conect_lines_for_model(model: Structure, serials: np.ndarray) -> List[str]:
   directed_counts: Counter[Tuple[int, int]] = Counter()
   warned_aromatic = False
   for bond in model.bonds:
+    if int(bond["bond_type"]) == int(BondType.METAL_COORDINATION):
+      # CONECT cannot express bond_order 0, and coercing it to 1 would turn a
+      # coordination bond into a covalent one on re-read. These are written as
+      # LINK records instead.
+      continue
     atom_i = int(bond["atom_i"])
     atom_j = int(bond["atom_j"])
     bond_order = int(bond["bond_order"])
@@ -624,6 +744,177 @@ def _format_conect_records(source_serial: int, target_serial: int, count: int) -
     fields = "".join(f"{serial:5d}" for serial in chunk)
     lines.append(f"CONECT{source_serial:5d}{fields}")
   return lines
+
+
+def _parse_ssbond_record(line: str, line_number: int, malformed_conect: ConectErrorMode) -> Optional[_ExplicitBond]:
+  """Parse a ``SSBOND`` record into an unresolved disulfide bond."""
+  try:
+    return _ExplicitBond(
+      record_id=f"SSBOND_{line_number}",
+      atom1_name="SG",
+      altloc1="",
+      res_name1=line[11:14].strip(),
+      chain1=line[15].strip(),
+      res_id1=int(line[17:21].strip()),
+      ins_code1=line[21].strip(),
+      atom2_name="SG",
+      altloc2="",
+      res_name2=line[25:28].strip(),
+      chain2=line[29].strip(),
+      res_id2=int(line[31:35].strip()),
+      ins_code2=line[35].strip(),
+      bond_type=BondType.DISULFIDE,
+    )
+  except ValueError:
+    _handle_malformed_conect(f"Invalid SSBOND record at line {line_number}.", malformed_conect=malformed_conect)
+    return None
+
+
+def _parse_link_record(line: str, line_number: int, malformed_conect: ConectErrorMode) -> Optional[_ExplicitBond]:
+  """Parse a ``LINK`` record into an unresolved bond of undetermined category."""
+  try:
+    return _ExplicitBond(
+      record_id=f"LINK_{line_number}",
+      atom1_name=line[12:16].strip(),
+      altloc1=line[16].strip(),
+      res_name1=line[17:20].strip(),
+      chain1=line[21].strip(),
+      res_id1=int(line[22:26].strip()),
+      ins_code1=line[26].strip(),
+      atom2_name=line[42:46].strip(),
+      altloc2=line[46].strip(),
+      res_name2=line[47:50].strip(),
+      chain2=line[51].strip(),
+      res_id2=int(line[52:56].strip()),
+      ins_code2=line[56].strip(),
+      bond_type=None,
+    )
+  except ValueError:
+    _handle_malformed_conect(f"Invalid LINK record at line {line_number}.", malformed_conect=malformed_conect)
+    return None
+
+
+def _atom_index_by_identity(model: _ModelAccumulator) -> Dict[AtomKey, int]:
+  """Build a complete atom-key to index map for a model under construction.
+
+  ``_ModelAccumulator._atom_key_to_index`` only tracks atoms that carried an
+  altloc identifier, because that is all the altloc collapsing needs. Resolving
+  ``SSBOND`` / ``LINK`` endpoints needs every atom, so the map is rebuilt here.
+  """
+  annotations = model.annotations
+  index_by_key: Dict[AtomKey, int] = {}
+  for atom_index in range(len(model.atoms)):
+    key = (
+      str(annotations["chain_id"][atom_index]),
+      int(annotations["res_id"][atom_index]),
+      str(annotations["ins_code"][atom_index]),
+      str(annotations["res_name"][atom_index]),
+      bool(annotations["hetero"][atom_index]),
+      str(annotations["atom_name"][atom_index]),
+    )
+    index_by_key.setdefault(key, atom_index)
+  return index_by_key
+
+
+def _resolve_explicit_endpoint(
+  model: _ModelAccumulator,
+  index_by_key: Dict[AtomKey, int],
+  chain_id: str,
+  res_id: int,
+  ins_code: str,
+  res_name: str,
+  atom_name: str,
+  altloc: str,
+  record_id: str,
+  endpoint_number: int,
+  altloc_sites: set,
+  malformed_conect: ConectErrorMode,
+) -> Optional[int]:
+  """Resolve one ``SSBOND`` / ``LINK`` endpoint to an atom index in *model*.
+
+  Returns ``None`` when the endpoint is absent from this model or is ambiguous,
+  after reporting the reason through the malformed-record policy.
+  """
+  polymer_key = (chain_id, res_id, ins_code, res_name, False, atom_name)
+  hetero_key = (chain_id, res_id, ins_code, res_name, True, atom_name)
+  atom_index = index_by_key.get(polymer_key, index_by_key.get(hetero_key))
+  if atom_index is None:
+    _handle_malformed_conect(
+      f"Explicit bond {record_id} endpoint {endpoint_number} is missing in model {model.model_id}.",
+      malformed_conect=malformed_conect,
+    )
+    return None
+
+  atom_key = polymer_key if polymer_key in index_by_key else hetero_key
+  _, selected_altloc, _ = model._selected_altloc.get(atom_key, (0.0, "", 0))
+  if altloc and selected_altloc and altloc != selected_altloc:
+    _handle_malformed_conect(
+      f"Explicit bond {record_id} endpoint {endpoint_number} specifies altloc {altloc} but {selected_altloc} was selected, skipping.",
+      malformed_conect=malformed_conect,
+    )
+    return None
+  return int(atom_index)
+
+
+def _apply_explicit_bonds(
+  models: List[_ModelAccumulator],
+  pending_explicit: List[_ExplicitBond],
+  altloc_sites: set,
+  malformed_conect: ConectErrorMode,
+):
+  """Resolve ``SSBOND`` / ``LINK`` records against every model's atom table.
+
+  ``LINK`` is classified as metal coordination when either endpoint is a metal,
+  and as a covalent bond otherwise. Metal-coordination bonds carry
+  ``bond_order = 0`` because bond order is not meaningful for them.
+  """
+  if not pending_explicit:
+    return
+
+  for model in models:
+    index_by_key = _atom_index_by_identity(model)
+    for record in pending_explicit:
+      atom_i = _resolve_explicit_endpoint(
+        model,
+        index_by_key,
+        record.chain1,
+        record.res_id1,
+        record.ins_code1,
+        record.res_name1,
+        record.atom1_name,
+        record.altloc1,
+        record.record_id,
+        1,
+        altloc_sites,
+        malformed_conect,
+      )
+      atom_j = _resolve_explicit_endpoint(
+        model,
+        index_by_key,
+        record.chain2,
+        record.res_id2,
+        record.ins_code2,
+        record.res_name2,
+        record.atom2_name,
+        record.altloc2,
+        record.record_id,
+        2,
+        altloc_sites,
+        malformed_conect,
+      )
+      if atom_i is None or atom_j is None or atom_i == atom_j:
+        continue
+
+      bond_type = record.bond_type
+      if bond_type is None:
+        elements = {
+          str(model.annotations["element"][atom_i]).strip().upper(),
+          str(model.annotations["element"][atom_j]).strip().upper(),
+        }
+        bond_type = BondType.METAL_COORDINATION if elements & METAL_ELEMENTS else BondType.COVALENT
+
+      bond_order = 0 if bond_type is BondType.METAL_COORDINATION else 1
+      model.explicit_bonds[(min(atom_i, atom_j), max(atom_i, atom_j))] = (bond_order, int(bond_type))
 
 
 def _apply_conect_records(

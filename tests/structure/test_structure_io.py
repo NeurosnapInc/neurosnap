@@ -85,7 +85,7 @@ def test_parse_pdb_infers_missing_hydrogen_elements_from_processed_pdb(caplog):
 
   assert len(structure) > 0
   assert any(element == "H" for element in structure.atom_annotations["element"])
-  assert any("Missing element assignment at line 4; inferred element \"H\"" in message for message in caplog.messages)
+  assert any('Missing element assignment at line 4; inferred element "H"' in message for message in caplog.messages)
 
 
 def test_save_and_reload_mmcif(tmp_path):
@@ -374,3 +374,70 @@ ATOM 4 O OE1 . GLU 4 4 ? A 7.500 0.000 0.000 1.000 1 A GLU 10.000 1 -1
   assert len(structure.bonds) == 0
   assert len(structure.interactions) == 2
   assert {int(value) for value in structure.interactions["interaction_type"]} == {0, 1}
+
+
+def test_pdb_ssbond_and_link_records_round_trip_bond_types():
+  """SSBOND and LINK must preserve bond classification across a PDB round trip.
+
+  CONECT alone cannot express either category: it has no bond-type field and
+  cannot represent the ``bond_order = 0`` that metal coordination requires.
+  """
+  import numpy as np
+
+  from neurosnap.io.pdb import parse_pdb, save_pdb
+  from neurosnap.structure import BondType
+  from tests._structure_test_utils import make_structure
+
+  structure = make_structure(
+    [
+      ("SG", "CYS", "A", 1, 0.0, 0.0, 0.0, "S"),
+      ("SG", "CYS", "A", 5, 2.05, 0.0, 0.0, "S"),
+      ("ZN", "ZN", "B", 1, 6.0, 0.0, 0.0, "ZN"),
+      ("NE2", "HIS", "A", 9, 8.0, 0.0, 0.0, "N"),
+      ("C", "ALA", "A", 12, 12.0, 0.0, 0.0, "C"),
+      ("N", "ALA", "A", 13, 13.4, 0.0, 0.0, "N"),
+    ]
+  )
+  structure.bonds = np.array(
+    [
+      (0, 1, 1, int(BondType.DISULFIDE)),
+      (2, 3, 0, int(BondType.METAL_COORDINATION)),
+      (4, 5, 1, int(BondType.COVALENT)),
+    ],
+    dtype=structure._dtype_bond,
+  )
+
+  path = "/tmp/test_ssbond_link_roundtrip.pdb"
+  save_pdb(structure, path)
+  written = open(path).read()
+  assert any(line.startswith("SSBOND") for line in written.splitlines())
+  assert any(line.startswith("LINK") for line in written.splitlines())
+
+  reloaded = parse_pdb(path, return_type="ensemble").first()
+  by_pair = {(int(b["atom_i"]), int(b["atom_j"])): (int(b["bond_order"]), int(b["bond_type"])) for b in reloaded.bonds}
+  assert by_pair[(0, 1)] == (1, int(BondType.DISULFIDE))
+  assert by_pair[(2, 3)] == (0, int(BondType.METAL_COORDINATION))
+  assert by_pair[(4, 5)] == (1, int(BondType.COVALENT))
+
+
+def test_pdb_duplicate_link_records_collapse_to_one_bond():
+  """The bond table allows one row per atom pair, so repeated LINKs must merge."""
+  import io as _io
+
+  from neurosnap.io.pdb import parse_pdb
+  from neurosnap.structure import BondType
+
+  pdb_text = "\n".join(
+    [
+      "LINK        ZN    ZN B  31                CL    CL B  33    ",
+      "LINK        ZN    ZN B  31                CL    CL B  33    ",
+      "LINK        ZN    ZN B  31                CL    CL B  33    ",
+      "HETATM    1 ZN    ZN B  31       0.000   0.000   0.000  1.00 20.00          ZN",
+      "HETATM    2 CL    CL B  33       2.300   0.000   0.000  1.00 20.00          CL",
+      "END",
+    ]
+  )
+  structure = parse_pdb(_io.StringIO(pdb_text), return_type="ensemble").first()
+  assert len(structure.bonds) == 1
+  assert int(structure.bonds[0]["bond_type"]) == int(BondType.METAL_COORDINATION)
+  assert int(structure.bonds[0]["bond_order"]) == 0

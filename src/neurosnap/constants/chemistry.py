@@ -347,5 +347,3 @@ VDW_RADII_UFF = {
   "No": 3.248,
   "Lr": 3.236,
 }
-
-__all__ = ["ATOMIC_MASSES", "VDW_RADII_BONDI", "VDW_RADII_UFF"]

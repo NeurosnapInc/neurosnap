@@ -11,6 +11,13 @@ from .interactions import (
   find_hydrophobic_residues,
   find_salt_bridges,
 )
+from .prepare import (
+  add_hydrogens_with_pdb2pqr,
+  has_hydrogens,
+  optimize_hydrogens_with_pdb2pqr,
+  rebuild_missing_atoms_with_evoef2,
+  strip_hydrogens,
+)
 from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3D
 from .selectors import select_residues
 from .structure import Atom, BondType, Chain, InteractionType, Residue, Structure, StructureEnsemble, StructureStack
@@ -41,6 +48,11 @@ __all__ = [
   "find_hydrophobic_residues",
   "calculate_hydrogen_bonds",
   "calculate_interface_hydrogen_bonding_residues",
+  "has_hydrogens",
+  "strip_hydrogens",
+  "add_hydrogens_with_pdb2pqr",
+  "optimize_hydrogens_with_pdb2pqr",
+  "rebuild_missing_atoms_with_evoef2",
   "render_pseudo3D",
   "render_structure_pseudo3D",
   "animate_frames",

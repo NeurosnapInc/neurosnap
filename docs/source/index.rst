@@ -47,6 +47,7 @@ Documentation Map
 **Start here:**
 
 * :doc:`getting_started`
+* :doc:`structure_interactions`
 
 **Core SDK modules:**
 
@@ -77,6 +78,7 @@ Documentation Map
    :maxdepth: 2
 
    getting_started
+   structure_interactions
    modules
 
 Learning Resources

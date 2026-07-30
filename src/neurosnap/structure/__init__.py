@@ -23,6 +23,7 @@ from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3
 from .selectors import select_residues
 from .structure import Atom, BondType, Chain, InteractionType, Residue, Structure, StructureEnsemble, StructureStack
 from .interaction_report import AtomReference, CoordinationCenterRecord, InteractionEntity, InteractionRecord, InteractionReport
+from .confidence import PLDDTReport, summarize_plddt
 
 __all__ = [
   "Atom",
@@ -36,6 +37,8 @@ __all__ = [
   "CoordinationCenterRecord",
   "InteractionReport",
   "analyze_interactions",
+  "PLDDTReport",
+  "summarize_plddt",
   "Structure",
   "StructureEnsemble",
   "StructureStack",

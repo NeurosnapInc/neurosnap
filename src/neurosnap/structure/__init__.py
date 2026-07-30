@@ -14,6 +14,7 @@ from .interactions import (
 from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3D
 from .selectors import select_residues
 from .structure import Atom, BondType, Chain, InteractionType, Residue, Structure, StructureEnsemble, StructureStack
+from .interaction_report import AtomReference, CoordinationCenterRecord, InteractionEntity, InteractionRecord, InteractionReport
 
 __all__ = [
   "Atom",
@@ -21,6 +22,11 @@ __all__ = [
   "Residue",
   "Chain",
   "InteractionType",
+  "InteractionEntity",
+  "AtomReference",
+  "InteractionRecord",
+  "CoordinationCenterRecord",
+  "InteractionReport",
   "Structure",
   "StructureEnsemble",
   "StructureStack",

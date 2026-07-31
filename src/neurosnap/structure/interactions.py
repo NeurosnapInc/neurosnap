@@ -1,18 +1,20 @@
 """Interaction analysis helpers for Neurosnap structures."""
 
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
 from neurosnap.constants.structure import HYDROPHOBIC_RESIDUES
 
+from .interaction_report import InteractionEntity, InteractionReport
 from .structure import Atom, Residue, Structure
 
 
-def find_disulfide_bonds(
-  structure: Structure, chain: Optional[str] = None, threshold: float = 2.05
-) -> List[Tuple[Residue, Residue]]:
+def find_disulfide_bonds(structure: Structure, chain: Optional[str] = None, threshold: float = 2.05) -> List[Tuple[Residue, Residue]]:
   """Find disulfide bonds between cysteine residues using SG-SG distance.
+
+  This is a legacy helper maintained alongside the
+  :func:`analyze_interactions` engine.
 
   Parameters:
     structure: Input single-model :class:`Structure`.
@@ -25,59 +27,81 @@ def find_disulfide_bonds(
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"find_disulfide_bonds() expects a Structure, found {type(structure).__name__}.")
-  disulfide_pairs = []
 
+  report = analyze_interactions(structure, interaction_types=["disulfide"], disulfide_cutoff=threshold)
+
+  atom_to_residue = {}
   for chain_view in structure.chains():
-    if chain is not None and chain_view.chain_id != chain:
-      continue
-    cysteines = [residue for residue in chain_view.residues() if residue.res_name.strip().upper() == "CYS"]
-    for index, residue1 in enumerate(cysteines):
-      residue1_sg = _atom_by_name(residue1, "SG")
-      if residue1_sg is None:
-        continue
-      for residue2 in cysteines[index + 1 :]:
-        residue2_sg = _atom_by_name(residue2, "SG")
-        if residue2_sg is None:
-          continue
-        if np.linalg.norm(residue1_sg.coord - residue2_sg.coord) < threshold:
-          disulfide_pairs.append((residue1, residue2))
+    for residue in chain_view.residues():
+      for idx in residue.atom_indices():
+        atom_to_residue[idx] = residue
+
+  disulfide_pairs = []
+  seen = set()
+  for rec in report.records:
+    if rec.interaction_type == "disulfide":
+      res1 = atom_to_residue.get(rec.atom_index1)
+      res2 = atom_to_residue.get(rec.atom_index2)
+      if res1 is not None and res2 is not None:
+        if chain is not None:
+          if res1.chain_id != chain or res2.chain_id != chain:
+            continue
+        pair = (res1, res2)
+        pair_key = (res1.key(), res2.key())
+        if pair_key not in seen:
+          seen.add(pair_key)
+          disulfide_pairs.append(pair)
 
   return disulfide_pairs
 
 
 def find_salt_bridges(structure: Structure, chain: Optional[str] = None, cutoff: float = 4.0) -> List[Tuple[Residue, Residue]]:
-  """Identify salt bridges using CA-CA distance as a simple proxy.
+  """Identify salt bridges using charged side-chain atoms/groups.
+
+  This is a legacy helper maintained alongside the
+  :func:`analyze_interactions` engine.
 
   Parameters:
     structure: Input single-model :class:`Structure`.
-    chain: Optional chain ID to restrict the search to.
-    cutoff: Maximum CA-CA distance in Å used to classify a salt bridge.
+    chain: Optional chain ID to restrict the search to. When None, both intra-
+      and inter-chain salt bridges are returned. When specified, only salt
+      bridges where both residues are within the specified chain are returned.
+    cutoff: Maximum atom/group distance in Å used to classify a salt bridge.
 
   Returns:
     List of ``(positive_residue, negative_residue)`` pairs that satisfy the
-    distance cutoff.
+    ionic contact rules.
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"find_salt_bridges() expects a Structure, found {type(structure).__name__}.")
-  positive_residues = {"LYS", "ARG"}
-  negative_residues = {"ASP", "GLU"}
-  salt_bridges = []
 
+  report = analyze_interactions(structure, interaction_types=["salt_bridge"], salt_bridge_cutoff=cutoff)
+
+  atom_to_residue = {}
   for chain_view in structure.chains():
-    if chain is not None and chain_view.chain_id != chain:
-      continue
-    positive = [residue for residue in chain_view.residues() if residue.res_name.strip().upper() in positive_residues]
-    negative = [residue for residue in chain_view.residues() if residue.res_name.strip().upper() in negative_residues]
-    for positive_residue in positive:
-      positive_ca = _atom_by_name(positive_residue, "CA")
-      if positive_ca is None:
-        continue
-      for negative_residue in negative:
-        negative_ca = _atom_by_name(negative_residue, "CA")
-        if negative_ca is None:
-          continue
-        if np.linalg.norm(positive_ca.coord - negative_ca.coord) < cutoff:
-          salt_bridges.append((positive_residue, negative_residue))
+    for residue in chain_view.residues():
+      for idx in residue.atom_indices():
+        atom_to_residue[idx] = residue
+
+  salt_bridges = []
+  seen = set()
+  for rec in report.records:
+    if rec.interaction_type == "salt_bridge":
+      res1 = atom_to_residue.get(rec.atom_index1)
+      res2 = atom_to_residue.get(rec.atom_index2)
+      if res1 is not None and res2 is not None:
+        if chain is not None:
+          if res1.chain_id != chain or res2.chain_id != chain:
+            continue
+        if rec.role1 == "positive":
+          pos_res, neg_res = res1, res2
+        else:
+          pos_res, neg_res = res2, res1
+
+        pair_key = (pos_res.key(), neg_res.key())
+        if pair_key not in seen:
+          seen.add(pair_key)
+          salt_bridges.append((pos_res, neg_res))
 
   return salt_bridges
 
@@ -117,10 +141,14 @@ def calculate_hydrogen_bonds(
 ) -> int:
   """Count hydrogen bonds using explicit hydrogens and simple geometric cutoffs.
 
+  This is a legacy helper maintained alongside the
+  :func:`analyze_interactions` engine.
+
   Parameters:
     structure: Input single-model :class:`Structure`.
     chain: Optional donor-chain ID. When omitted, all chains are searched.
-    chain_other: Optional acceptor-chain ID for inter-chain counting.
+    chain_other: Optional acceptor-chain ID for inter-chain counting. Both must
+      be provided if chain_other is specified.
     donor_acceptor_cutoff: Maximum donor-acceptor distance in Å.
     angle_cutoff: Minimum donor-H-acceptor angle in degrees.
 
@@ -131,40 +159,27 @@ def calculate_hydrogen_bonds(
     raise TypeError(f"calculate_hydrogen_bonds() expects a Structure, found {type(structure).__name__}.")
   _validate_hydrogen_bond_inputs(structure, chain=chain, chain_other=chain_other)
 
-  hydrogen_distance_cutoff = 1.2
+  report = analyze_interactions(
+    structure, interaction_types=["hydrogen_bond"], hbond_donor_acceptor_cutoff=donor_acceptor_cutoff, hbond_angle_cutoff=angle_cutoff
+  )
+
   hydrogen_bond_count = 0
-  chain_lookup = {chain_view.chain_id: chain_view for chain_view in structure.chains()}
-  donor_chain_ids = [chain] if chain is not None else list(chain_lookup)
+  for rec in report.records:
+    if rec.interaction_type == "hydrogen_bond" and rec.evidence == "detected":
+      d_chain = rec.chain1 if rec.role1 == "donor" else rec.chain2
+      a_chain = rec.chain2 if rec.role1 == "donor" else rec.chain1
 
-  for donor_chain_id in donor_chain_ids:
-    donor_chain = chain_lookup[donor_chain_id]
-    acceptor_chain_ids = [chain_other] if chain_other else ([donor_chain_id] if chain is not None else list(chain_lookup))
-
-    for donor_residue in donor_chain.residues():
-      for donor_atom in donor_residue.atoms():
-        if donor_atom.element not in {"N", "O"}:
+      if chain is not None:
+        if d_chain != chain:
           continue
-        bonded_hydrogens = [
-          atom for atom in donor_residue.atoms() if atom.element == "H" and np.linalg.norm(donor_atom.coord - atom.coord) <= hydrogen_distance_cutoff
-        ]
-        if not bonded_hydrogens:
-          continue
+        if chain_other is not None:
+          if a_chain != chain_other:
+            continue
+        else:
+          if a_chain != chain:
+            continue
 
-        for acceptor_chain_id in acceptor_chain_ids:
-          acceptor_chain = chain_lookup[acceptor_chain_id]
-          for acceptor_residue in acceptor_chain.residues():
-            for acceptor_atom in acceptor_residue.atoms():
-              if acceptor_atom.element not in {"N", "O"}:
-                continue
-              if acceptor_atom == donor_atom:
-                continue
-              if np.linalg.norm(donor_atom.coord - acceptor_atom.coord) > donor_acceptor_cutoff:
-                continue
-
-              for hydrogen in bonded_hydrogens:
-                if _hydrogen_bond_angle(donor_atom, hydrogen, acceptor_atom) >= angle_cutoff:
-                  hydrogen_bond_count += 1
-                  break
+      hydrogen_bond_count += 1
 
   return hydrogen_bond_count
 
@@ -178,6 +193,9 @@ def calculate_interface_hydrogen_bonding_residues(
   angle_cutoff: float = 120.0,
 ) -> int:
   """Count unique residues that participate in inter- or intra-chain hydrogen bonds.
+
+  This is a legacy helper maintained alongside the
+  :func:`analyze_interactions` engine.
 
   Parameters:
     structure: Input single-model :class:`Structure`.
@@ -194,43 +212,41 @@ def calculate_interface_hydrogen_bonding_residues(
     raise TypeError(f"calculate_interface_hydrogen_bonding_residues() expects a Structure, found {type(structure).__name__}.")
   _validate_hydrogen_bond_inputs(structure, chain=chain, chain_other=chain_other)
 
-  hydrogen_distance_cutoff = 1.2
-  chain_lookup = {chain_view.chain_id: chain_view for chain_view in structure.chains()}
-  donor_chain_ids = [chain] if chain is not None else list(chain_lookup)
-  hydrogen_bonding_residues: Set[Residue] = set()
+  report = analyze_interactions(
+    structure, interaction_types=["hydrogen_bond"], hbond_donor_acceptor_cutoff=donor_acceptor_cutoff, hbond_angle_cutoff=angle_cutoff
+  )
 
-  for donor_chain_id in donor_chain_ids:
-    donor_chain = chain_lookup[donor_chain_id]
-    acceptor_chain_ids = [chain_other] if chain_other else ([donor_chain_id] if chain is not None else list(chain_lookup))
+  atom_to_residue = {}
+  for chain_view in structure.chains():
+    for residue in chain_view.residues():
+      for idx in residue.atom_indices():
+        atom_to_residue[idx] = residue
 
-    for donor_residue in donor_chain.residues():
-      for donor_atom in donor_residue.atoms():
-        if donor_atom.element not in {"N", "O"}:
+  hydrogen_bonding_residues = set()
+  for rec in report.records:
+    if rec.interaction_type == "hydrogen_bond" and rec.evidence == "detected":
+      d_chain = rec.chain1 if rec.role1 == "donor" else rec.chain2
+      a_chain = rec.chain2 if rec.role1 == "donor" else rec.chain1
+
+      if chain is not None:
+        if d_chain != chain:
           continue
-        bonded_hydrogens = [
-          atom for atom in donor_residue.atoms() if atom.element == "H" and np.linalg.norm(donor_atom.coord - atom.coord) <= hydrogen_distance_cutoff
-        ]
-        if not bonded_hydrogens:
-          continue
-
-        for acceptor_chain_id in acceptor_chain_ids:
-          acceptor_chain = chain_lookup[acceptor_chain_id]
-          if chain_other and acceptor_chain_id == donor_chain_id:
+        if chain_other is not None:
+          if a_chain != chain_other:
             continue
-          for acceptor_residue in acceptor_chain.residues():
-            for acceptor_atom in acceptor_residue.atoms():
-              if acceptor_atom.element not in {"N", "O"}:
-                continue
-              if acceptor_atom == donor_atom:
-                continue
-              if np.linalg.norm(donor_atom.coord - acceptor_atom.coord) > donor_acceptor_cutoff:
-                continue
+        else:
+          if a_chain != chain:
+            continue
 
-              for hydrogen in bonded_hydrogens:
-                if _hydrogen_bond_angle(donor_atom, hydrogen, acceptor_atom) >= angle_cutoff:
-                  hydrogen_bonding_residues.add(donor_residue)
-                  hydrogen_bonding_residues.add(acceptor_residue)
-                  break
+      if chain_other is not None and d_chain == a_chain:
+        continue
+
+      res1 = atom_to_residue.get(rec.atom_index1)
+      res2 = atom_to_residue.get(rec.atom_index2)
+      if res1 is not None:
+        hydrogen_bonding_residues.add(res1)
+      if res2 is not None:
+        hydrogen_bonding_residues.add(res2)
 
   return len(hydrogen_bonding_residues)
 
@@ -255,14 +271,126 @@ def _validate_hydrogen_bond_inputs(structure: Structure, chain: Optional[str], c
     raise ValueError(f"Chain {chain_other} does not exist within the input structure.")
 
 
-def _hydrogen_bond_angle(donor_atom: Atom, hydrogen_atom: Atom, acceptor_atom: Atom) -> float:
-  """Return the donor-H-acceptor angle in degrees."""
-  donor_h_vector = hydrogen_atom.coord - donor_atom.coord
-  donor_acceptor_vector = acceptor_atom.coord - donor_atom.coord
-  donor_h_norm = np.linalg.norm(donor_h_vector)
-  donor_acceptor_norm = np.linalg.norm(donor_acceptor_vector)
-  if donor_h_norm == 0 or donor_acceptor_norm == 0:
-    return 0.0
-  cos_theta = np.dot(donor_h_vector, donor_acceptor_vector) / (donor_h_norm * donor_acceptor_norm)
-  cos_theta = max(min(float(cos_theta), 1.0), -1.0)
-  return float(np.degrees(np.arccos(cos_theta)))
+def _find_neighbor_candidates(
+  coords: np.ndarray,
+  indices1: np.ndarray,
+  indices2: np.ndarray,
+  cutoff: float,
+) -> List[Tuple[int, int, float]]:
+  """Find neighbor candidates between two disjoint sets of atom indices using cKDTree."""
+  if len(indices1) == 0 or len(indices2) == 0:
+    return []
+
+  c1 = coords[indices1]
+  c2 = coords[indices2]
+
+  # Reject NaN/Inf coordinates before building the tree
+  if not np.all(np.isfinite(c1)) or not np.all(np.isfinite(c2)):
+    import logging
+
+    logging.getLogger("neurosnap").warning("Non-finite coordinates detected in neighbor search. Filtering them out.")
+    finite1 = np.all(np.isfinite(c1), axis=1)
+    finite2 = np.all(np.isfinite(c2), axis=1)
+    indices1 = indices1[finite1]
+    indices2 = indices2[finite2]
+    c1 = c1[finite1]
+    c2 = c2[finite2]
+    if len(indices1) == 0 or len(indices2) == 0:
+      return []
+
+  from scipy.spatial import cKDTree
+
+  tree1 = cKDTree(c1)
+  tree2 = cKDTree(c2)
+
+  # Dual-tree query
+  pairs_list = tree1.query_ball_tree(tree2, cutoff)
+
+  results = []
+  for i, neighbors in enumerate(pairs_list):
+    idx1 = indices1[i]
+    for j in neighbors:
+      idx2 = indices2[j]
+      dist = float(np.linalg.norm(c1[i] - c2[j]))
+      u, v = sorted((idx1, idx2))
+      results.append((u, v, dist))
+
+  # Deduplicate
+  seen = set()
+  unique_results = []
+  for u, v, dist in results:
+    if (u, v) not in seen:
+      seen.add((u, v))
+      unique_results.append((u, v, dist))
+
+  # Deterministic sort
+  unique_results.sort(key=lambda x: (x[0], x[1]))
+  return unique_results
+
+
+def analyze_interactions(
+  structure: Structure,
+  *entities: "InteractionEntity",
+  interaction_types: Optional[List[str]] = None,
+  contact_cutoff_a: float = 4.5,
+  vdw_tolerance_a: float = 0.5,
+  clash_overlap_a: float = 0.4,
+  include_hydrogens: bool = False,
+  covalent_candidates: bool = False,
+  covalent_lower_factor: float = 0.8,
+  covalent_upper_factor: float = 1.2,
+  disulfide_cutoff: float = 2.2,
+  salt_bridge_cutoff: float = 4.0,
+  hbond_donor_acceptor_cutoff: float = 3.5,
+  hbond_angle_cutoff: float = 130.0,
+  metal_coordination_cutoff: float = 2.8,
+  include_candidates: bool = False,
+) -> "InteractionReport":
+  """High-level interaction analyzer orchestrator.
+
+  Parameters:
+    structure: Input single-model :class:`Structure`.
+    *entities: Positional InteractionEntity objects to analyze.
+    interaction_types: Interaction types to analyze. Defaults to conservative
+      ["contact", "covalent"].
+    contact_cutoff_a: Maximum contact cutoff distance.
+    vdw_tolerance_a: Tolerance added to VDW radii sum.
+    clash_overlap_a: Overlap distance to classify VDW clash.
+    include_hydrogens: Whether to include hydrogens.
+    covalent_candidates: Whether to calculate covalent candidate interactions.
+    covalent_lower_factor: Lower factor for covalent candidate bond distance.
+    covalent_upper_factor: Upper factor for covalent candidate bond distance.
+    disulfide_cutoff: Cutoff distance for disulfide bonds.
+    salt_bridge_cutoff: Cutoff distance for salt bridges.
+    hbond_donor_acceptor_cutoff: Cutoff distance for hydrogen bonds.
+    hbond_angle_cutoff: Minimum angle for hydrogen bonds.
+    metal_coordination_cutoff: Cutoff distance for metal coordination.
+    include_candidates: Whether to include candidate interactions.
+
+  Returns:
+    InteractionReport containing deterministically sorted records and center summaries.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"analyze_interactions() expects a Structure, found {type(structure).__name__}.")
+
+  # Validate options
+  if interaction_types is None:
+    interaction_types = ["contact", "covalent"]
+
+  return structure._analyze_interactions(
+    interaction_types=interaction_types,
+    entities=entities if entities else None,
+    contact_cutoff_a=contact_cutoff_a,
+    vdw_tolerance_a=vdw_tolerance_a,
+    clash_overlap_a=clash_overlap_a,
+    include_hydrogens=include_hydrogens,
+    covalent_candidates=covalent_candidates,
+    covalent_lower_factor=covalent_lower_factor,
+    covalent_upper_factor=covalent_upper_factor,
+    disulfide_cutoff=disulfide_cutoff,
+    salt_bridge_cutoff=salt_bridge_cutoff,
+    hbond_donor_acceptor_cutoff=hbond_donor_acceptor_cutoff,
+    hbond_angle_cutoff=hbond_angle_cutoff,
+    metal_coordination_cutoff=metal_coordination_cutoff,
+    include_candidates=include_candidates,
+  )

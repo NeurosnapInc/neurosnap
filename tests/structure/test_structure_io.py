@@ -85,7 +85,7 @@ def test_parse_pdb_infers_missing_hydrogen_elements_from_processed_pdb(caplog):
 
   assert len(structure) > 0
   assert any(element == "H" for element in structure.atom_annotations["element"])
-  assert any("Missing element assignment at line 4; inferred element \"H\"" in message for message in caplog.messages)
+  assert any('Missing element assignment at line 4; inferred element "H"' in message for message in caplog.messages)
 
 
 def test_save_and_reload_mmcif(tmp_path):
@@ -374,3 +374,156 @@ ATOM 4 O OE1 . GLU 4 4 ? A 7.500 0.000 0.000 1.000 1 A GLU 10.000 1 -1
   assert len(structure.bonds) == 0
   assert len(structure.interactions) == 2
   assert {int(value) for value in structure.interactions["interaction_type"]} == {0, 1}
+
+
+def test_pdb_ssbond_and_link_records_round_trip_bond_types():
+  """SSBOND and LINK must preserve bond classification across a PDB round trip.
+
+  CONECT alone cannot express either category: it has no bond-type field and
+  cannot represent the ``bond_order = 0`` that metal coordination requires.
+  """
+  import numpy as np
+
+  from neurosnap.io.pdb import parse_pdb, save_pdb
+  from neurosnap.structure import BondType
+  from tests._structure_test_utils import make_structure
+
+  structure = make_structure(
+    [
+      ("SG", "CYS", "A", 1, 0.0, 0.0, 0.0, "S"),
+      ("SG", "CYS", "A", 5, 2.05, 0.0, 0.0, "S"),
+      ("ZN", "ZN", "B", 1, 6.0, 0.0, 0.0, "ZN"),
+      ("NE2", "HIS", "A", 9, 8.0, 0.0, 0.0, "N"),
+      ("C", "ALA", "A", 12, 12.0, 0.0, 0.0, "C"),
+      ("N", "ALA", "A", 13, 13.4, 0.0, 0.0, "N"),
+    ]
+  )
+  structure.bonds = np.array(
+    [
+      (0, 1, 1, int(BondType.DISULFIDE)),
+      (2, 3, 0, int(BondType.METAL_COORDINATION)),
+      (4, 5, 1, int(BondType.COVALENT)),
+    ],
+    dtype=structure._dtype_bond,
+  )
+
+  path = "/tmp/test_ssbond_link_roundtrip.pdb"
+  save_pdb(structure, path)
+  written = open(path).read()
+  assert any(line.startswith("SSBOND") for line in written.splitlines())
+  assert any(line.startswith("LINK") for line in written.splitlines())
+
+  reloaded = parse_pdb(path, return_type="ensemble").first()
+  by_pair = {(int(b["atom_i"]), int(b["atom_j"])): (int(b["bond_order"]), int(b["bond_type"])) for b in reloaded.bonds}
+  assert by_pair[(0, 1)] == (1, int(BondType.DISULFIDE))
+  assert by_pair[(2, 3)] == (0, int(BondType.METAL_COORDINATION))
+  assert by_pair[(4, 5)] == (1, int(BondType.COVALENT))
+
+
+def test_pdb_duplicate_link_records_collapse_to_one_bond():
+  """The bond table allows one row per atom pair, so repeated LINKs must merge."""
+  import io as _io
+
+  from neurosnap.io.pdb import parse_pdb
+  from neurosnap.structure import BondType
+
+  pdb_text = "\n".join(
+    [
+      "LINK        ZN    ZN B  31                CL    CL B  33    ",
+      "LINK        ZN    ZN B  31                CL    CL B  33    ",
+      "LINK        ZN    ZN B  31                CL    CL B  33    ",
+      "HETATM    1 ZN    ZN B  31       0.000   0.000   0.000  1.00 20.00          ZN",
+      "HETATM    2 CL    CL B  33       2.300   0.000   0.000  1.00 20.00          CL",
+      "END",
+    ]
+  )
+  structure = parse_pdb(_io.StringIO(pdb_text), return_type="ensemble").first()
+  assert len(structure.bonds) == 1
+  assert int(structure.bonds[0]["bond_type"]) == int(BondType.METAL_COORDINATION)
+  assert int(structure.bonds[0]["bond_order"]) == 0
+
+
+def _metalc_cif(conn_type: str, value_order: str) -> str:
+  """Return a minimal mmCIF with one ``_struct_conn`` row between a zinc and a histidine."""
+  return "\n".join(
+    [
+      "data_test",
+      "loop_",
+      "_atom_site.group_PDB",
+      "_atom_site.id",
+      "_atom_site.type_symbol",
+      "_atom_site.label_atom_id",
+      "_atom_site.label_comp_id",
+      "_atom_site.label_asym_id",
+      "_atom_site.label_seq_id",
+      "_atom_site.pdbx_PDB_ins_code",
+      "_atom_site.Cartn_x",
+      "_atom_site.Cartn_y",
+      "_atom_site.Cartn_z",
+      "_atom_site.occupancy",
+      "_atom_site.B_iso_or_equiv",
+      "_atom_site.pdbx_PDB_model_num",
+      "HETATM 1 ZN ZN ZN B 1 ? 0.000 0.000 0.000 1.00 20.00 1",
+      "ATOM   2 N  NE2 HIS A 9 ? 2.100 0.000 0.000 1.00 20.00 1",
+      "loop_",
+      "_struct_conn.id",
+      "_struct_conn.conn_type_id",
+      "_struct_conn.pdbx_value_order",
+      "_struct_conn.ptnr1_label_asym_id",
+      "_struct_conn.ptnr1_label_comp_id",
+      "_struct_conn.ptnr1_label_seq_id",
+      "_struct_conn.ptnr1_label_atom_id",
+      "_struct_conn.pdbx_ptnr1_PDB_ins_code",
+      "_struct_conn.ptnr2_label_asym_id",
+      "_struct_conn.ptnr2_label_comp_id",
+      "_struct_conn.ptnr2_label_seq_id",
+      "_struct_conn.ptnr2_label_atom_id",
+      "_struct_conn.pdbx_ptnr2_PDB_ins_code",
+      f"conn1 {conn_type} {value_order} B ZN 1 ZN ? A HIS 9 NE2 ?",
+    ]
+  )
+
+
+def test_mmcif_metal_coordination_discards_a_stated_bond_order(tmp_path):
+  """A depositor-stated order on a metalc row must not build an invalid structure.
+
+  Regression: the bond schema requires ``bond_order = 0`` for metal
+  coordination, but the parser copied whatever the file said, so the structure
+  parsed cleanly and then failed validation later, for instance on stacking.
+  """
+  from neurosnap.io.mmcif import parse_mmcif
+  from neurosnap.structure import BondType, StructureStack
+
+  path = tmp_path / "metalc.cif"
+  path.write_text(_metalc_cif("metalc", "sing"))
+  structure = parse_mmcif(str(path), return_type="ensemble").first()
+
+  assert len(structure.bonds) == 1
+  assert int(structure.bonds[0]["bond_type"]) == int(BondType.METAL_COORDINATION)
+  assert int(structure.bonds[0]["bond_order"]) == 0
+
+  # the structure is schema-valid, so downstream validation accepts it
+  StructureStack([structure])
+
+
+def test_mmcif_unrecognized_bond_order_warns(tmp_path, caplog):
+  """An unparseable order token is distinguishable from an absent one."""
+  import logging
+
+  from neurosnap.io.mmcif import parse_mmcif
+
+  path = tmp_path / "badorder.cif"
+  path.write_text(_metalc_cif("covale", "wibble"))
+  with caplog.at_level(logging.WARNING):
+    structure = parse_mmcif(str(path), return_type="ensemble").first()
+  assert int(structure.bonds[0]["bond_order"]) == 0
+  assert any("pdbx_value_order" in record.message for record in caplog.records)
+
+  # an absent value means the depositor said nothing, which is not worth warning about
+  caplog.clear()
+  quiet_path = tmp_path / "noorder.cif"
+  quiet_path.write_text(_metalc_cif("covale", "?"))
+  with caplog.at_level(logging.WARNING):
+    quiet = parse_mmcif(str(quiet_path), return_type="ensemble").first()
+  assert int(quiet.bonds[0]["bond_order"]) == 0
+  assert not any("pdbx_value_order" in record.message for record in caplog.records)

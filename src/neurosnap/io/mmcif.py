@@ -240,7 +240,7 @@ def parse_mmcif(
   }
   missing_columns = sorted(column for column in required_columns if column not in mmcif_dict)
   if missing_columns:
-    raise ValueError(f'Missing required mmCIF atom-site column(s): {", ".join(missing_columns)}.')
+    raise ValueError(f"Missing required mmCIF atom-site column(s): {', '.join(missing_columns)}.")
 
   row_count = len(atom_groups)
   for column_name, values in mmcif_dict.items():
@@ -574,6 +574,7 @@ def _apply_struct_conn_tables(ensemble: StructureEnsemble, mmcif_dict: Dict[str,
       return [default] * row_count
     return list(values)
 
+  conn_ids = conn_column("_struct_conn.id")
   conn_types = conn_column("_struct_conn.conn_type_id")
   value_orders = conn_column("_struct_conn.pdbx_value_order")
   chain_ids_1 = conn_column("_struct_conn.ptnr1_label_asym_id")
@@ -637,7 +638,14 @@ def _apply_struct_conn_tables(ensemble: StructureEnsemble, mmcif_dict: Dict[str,
         row_key = (atom_i, atom_j)
         if row_key in seen_bonds:
           continue
-        bond_rows.append((atom_i, atom_j, _parse_struct_conn_bond_order(value_orders[row_index]), int(bond_or_interaction)))
+        if bond_or_interaction is BondType.METAL_COORDINATION:
+          # Bond order is not meaningful for coordination, and the bond schema
+          # requires 0. Some depositors still state one, so it is discarded here
+          # rather than being allowed to build a structure that fails validation.
+          bond_order = UNKNOWN_BOND_ORDER
+        else:
+          bond_order = _parse_struct_conn_bond_order(value_orders[row_index], conn_ids[row_index])
+        bond_rows.append((atom_i, atom_j, bond_order, int(bond_or_interaction)))
         seen_bonds.add(row_key)
       else:
         row_key = (atom_i, atom_j, int(bond_or_interaction))
@@ -706,20 +714,48 @@ def _classify_struct_conn_type(conn_type_id: str) -> Optional[Union[BondType, In
   return InteractionType.OTHER_NONCOVALENT
 
 
-def _parse_struct_conn_bond_order(value_order: str) -> int:
-  """Map ``_struct_conn.pdbx_value_order`` values onto integer bond orders."""
+#: Bond order used when ``_struct_conn.pdbx_value_order`` says nothing usable.
+#: Matches the ``bond_order`` convention where ``0`` means unknown or not applicable.
+UNKNOWN_BOND_ORDER = 0
+
+_STRUCT_CONN_BOND_ORDERS = {
+  "arom": 127,
+  "aromatic": 127,
+  "sing": 1,
+  "single": 1,
+  "doub": 2,
+  "double": 2,
+  "trip": 3,
+  "triple": 3,
+  "quad": 4,
+  "quadruple": 4,
+}
+
+
+def _parse_struct_conn_bond_order(value_order: str, conn_id: str = "") -> int:
+  """Map a ``_struct_conn.pdbx_value_order`` value onto an integer bond order.
+
+  An absent value and an unrecognised value both fall back to
+  :data:`UNKNOWN_BOND_ORDER`, but only the unrecognised case is worth reporting:
+  an empty field simply means the depositor left the order unstated, whereas a
+  token this function does not know indicates the file says something it cannot
+  represent.
+
+  Parameters:
+    value_order: Raw ``pdbx_value_order`` token.
+    conn_id: Optional ``_struct_conn.id`` used to identify the row in a warning.
+
+  Returns:
+    The bond order, or :data:`UNKNOWN_BOND_ORDER` when none could be determined.
+  """
   normalized = _normalize_mmcif_value(value_order).lower()
-  if normalized in {"arom", "aromatic"}:
-    return 127
-  if normalized in {"sing", "single"}:
-    return 1
-  if normalized in {"doub", "double"}:
-    return 2
-  if normalized in {"trip", "triple"}:
-    return 3
-  if normalized in {"quad", "quadruple"}:
-    return 4
-  return 0
+  if not normalized:
+    return UNKNOWN_BOND_ORDER
+  if normalized in _STRUCT_CONN_BOND_ORDERS:
+    return _STRUCT_CONN_BOND_ORDERS[normalized]
+  label = f" on _struct_conn row {conn_id}" if conn_id else ""
+  logger.warning(f'Unrecognized _struct_conn.pdbx_value_order value "{normalized}"{label}; recording the bond order as unknown.')
+  return UNKNOWN_BOND_ORDER
 
 
 def _models_for_cif_output(structure: Union[Structure, StructureEnsemble, StructureStack]) -> List[Tuple[int, Structure]]:
@@ -782,7 +818,7 @@ def _append_cif_entity_metadata(lines: List[str], chain_metadata: Dict[str, Dict
   for chain_info in chain_metadata.values():
     chain_label = str(chain_info["auth_asym_id"])
     entity_type = "polymer" if chain_info["polymer_type"] is not None else "non-polymer"
-    lines.append(f'{chain_info["entity_id"]} {entity_type} man {_format_mmcif_token(f"Chain {chain_label}")} . 1 .')
+    lines.append(f"{chain_info['entity_id']} {entity_type} man {_format_mmcif_token(f'Chain {chain_label}')} . 1 .")
   lines.append("#")
 
   polymer_entities = [chain_info for chain_info in chain_metadata.values() if chain_info["polymer_type"] is not None]
@@ -804,8 +840,8 @@ def _append_cif_entity_metadata(lines: List[str], chain_metadata: Dict[str, Dict
       lines.extend(
         [
           (
-            f'{chain_info["entity_id"]} {_mmcif_entity_poly_type(str(chain_info["polymer_type"]))} '
-            f'no no {_format_mmcif_token(str(chain_info["auth_asym_id"]))}'
+            f"{chain_info['entity_id']} {_mmcif_entity_poly_type(str(chain_info['polymer_type']))} "
+            f"no no {_format_mmcif_token(str(chain_info['auth_asym_id']))}"
           ),
           f";{sequence_code}",
           ";",
@@ -826,7 +862,7 @@ def _append_cif_entity_metadata(lines: List[str], chain_metadata: Dict[str, Dict
     )
     for chain_info in polymer_entities:
       for seq_index, residue in enumerate(chain_info["polymer_residues"], start=1):
-        lines.append(f'{chain_info["entity_id"]} {seq_index} {_format_mmcif_token(residue.res_name)} .')
+        lines.append(f"{chain_info['entity_id']} {seq_index} {_format_mmcif_token(residue.res_name)} .")
     lines.append("#")
 
   lines.extend(
@@ -839,13 +875,19 @@ def _append_cif_entity_metadata(lines: List[str], chain_metadata: Dict[str, Dict
   )
   for chain_info in chain_metadata.values():
     chain_label = str(chain_info["auth_asym_id"])
-    lines.append(f'{_format_mmcif_token(str(chain_info["label_asym_id"]))} {chain_info["entity_id"]} {_format_mmcif_token(f"Chain {chain_label}")}')
+    lines.append(f"{_format_mmcif_token(str(chain_info['label_asym_id']))} {chain_info['entity_id']} {_format_mmcif_token(f'Chain {chain_label}')}")
   lines.append("#")
 
 
 def _chain_polymer_type(chain) -> Optional[str]:
   """Return a normalized polymer type for a chain."""
-  polymer_types = {polymer_type for residue in chain.residues() if not residue.hetero for polymer_type in [_classify_polymer_residue(residue)] if polymer_type is not None}
+  polymer_types = {
+    polymer_type
+    for residue in chain.residues()
+    if not residue.hetero
+    for polymer_type in [_classify_polymer_residue(residue)]
+    if polymer_type is not None
+  }
   if not polymer_types:
     return None
   if len(polymer_types) > 1:

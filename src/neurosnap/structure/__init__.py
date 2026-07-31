@@ -1,10 +1,18 @@
 """Public structure package exports."""
 
-from .analysis import calculate_protein_volume, calculate_surface_area, ca_distance_matrix, calculate_distance_matrix, extract_non_biopolymers, get_backbone
+from .analysis import (
+  calculate_protein_volume,
+  calculate_surface_area,
+  ca_distance_matrix,
+  calculate_distance_matrix,
+  extract_non_biopolymers,
+  get_backbone,
+)
 from .compare import align, calculate_rmsd
 from .filters import fix_nucleic_termini, remove_atoms, remove_chains, remove_non_biopolymers, remove_nucleotides, remove_waters
 from .interface import calculate_bsa, find_contacts, find_interface_contacts, find_interface_residues, find_non_interface_hydrophobic_patches
 from .interactions import (
+  analyze_interactions,
   calculate_hydrogen_bonds,
   calculate_interface_hydrogen_bonding_residues,
   find_disulfide_bonds,
@@ -21,6 +29,8 @@ from .prepare import (
 from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3D
 from .selectors import select_residues
 from .structure import Atom, BondType, Chain, InteractionType, Residue, Structure, StructureEnsemble, StructureStack
+from .interaction_report import AtomReference, CoordinationCenterRecord, InteractionEntity, InteractionRecord, InteractionReport
+from .confidence import PLDDTReport, summarize_plddt
 
 __all__ = [
   "Atom",
@@ -28,6 +38,14 @@ __all__ = [
   "Residue",
   "Chain",
   "InteractionType",
+  "InteractionEntity",
+  "AtomReference",
+  "InteractionRecord",
+  "CoordinationCenterRecord",
+  "InteractionReport",
+  "analyze_interactions",
+  "PLDDTReport",
+  "summarize_plddt",
   "Structure",
   "StructureEnsemble",
   "StructureStack",

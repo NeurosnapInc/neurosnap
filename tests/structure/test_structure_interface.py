@@ -152,8 +152,8 @@ def test_find_disulfide_bonds_detects_close_cysteines():
 def test_find_salt_bridges_and_hydrophobic_residues():
   structure = make_structure(
     [
-      ("CA", "LYS", "A", 1, 0.0, 0.0, 0.0, "C"),
-      ("CA", "ASP", "A", 2, 3.0, 0.0, 0.0, "C"),
+      ("NZ", "LYS", "A", 1, 0.0, 0.0, 0.0, "N"),
+      ("OD1", "ASP", "A", 2, 3.0, 0.0, 0.0, "O"),
       ("CA", "VAL", "A", 3, 10.0, 0.0, 0.0, "C"),
       ("CA", "SER", "B", 1, 20.0, 0.0, 0.0, "C"),
     ]
@@ -170,7 +170,7 @@ def test_calculate_interface_hydrogen_bonding_residues_counts_unique_residues():
   structure = make_structure(
     [
       ("N", "SER", "A", 1, 0.0, 0.0, 0.0, "N"),
-      ("H", "SER", "A", 1, 0.0, 0.0, -1.0, "H"),
+      ("H", "SER", "A", 1, 0.0, 0.0, 1.0, "H"),
       ("O", "ASP", "B", 2, 0.0, 0.0, 2.8, "O"),
     ]
   )
@@ -187,3 +187,16 @@ def test_calculate_bsa_dimer():
 
   buried_surface_area = calculate_bsa(structure, [chains[0]], chains[1:])
   assert isinstance(buried_surface_area, float) and buried_surface_area >= 0.0
+
+
+def test_reversed_hydrogen_bond_arrangement_fails():
+  # H=(0,0,-1) puts Donor (0,0,0) between H and Acceptor (0,0,2.8).
+  # Under the correct D-H-A angle (angle at H), this is not a hydrogen bond.
+  structure = make_structure(
+    [
+      ("N", "SER", "A", 1, 0.0, 0.0, 0.0, "N"),
+      ("H", "SER", "A", 1, 0.0, 0.0, -1.0, "H"),
+      ("O", "ASP", "B", 2, 0.0, 0.0, 2.8, "O"),
+    ]
+  )
+  assert calculate_hydrogen_bonds(structure, chain="A", chain_other="B") == 0

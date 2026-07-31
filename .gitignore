@@ -14,3 +14,4 @@ docs/source/neurosnap.*.rst
 .local.secrets.env
 # docs/source/
 # !docs/source/conf.py
+.worktrees/

@@ -102,15 +102,20 @@ def filter_stack_atoms(stack: StructureStack, keep_mask: np.ndarray):
     new_bonds["atom_i"] = index_map[new_bonds["atom_i"]]
     new_bonds["atom_j"] = index_map[new_bonds["atom_j"]]
 
-  interaction_keep_mask = np.ones(len(stack.interactions), dtype=bool)
-  if len(stack.interactions):
-    interaction_keep_mask = keep_mask[stack.interactions["atom_i"]] & keep_mask[stack.interactions["atom_j"]]
-  new_interactions = stack.interactions[interaction_keep_mask].copy()
-  if len(new_interactions):
-    new_interactions["atom_i"] = index_map[new_interactions["atom_i"]]
-    new_interactions["atom_j"] = index_map[new_interactions["atom_j"]]
+  # Each model owns its own interaction table, so every one is remapped.
+  new_interaction_tables = []
+  for table in stack.interactions:
+    if len(table):
+      table_keep_mask = keep_mask[table["atom_i"]] & keep_mask[table["atom_j"]]
+      remapped = table[table_keep_mask].copy()
+      if len(remapped):
+        remapped["atom_i"] = index_map[remapped["atom_i"]]
+        remapped["atom_j"] = index_map[remapped["atom_j"]]
+    else:
+      remapped = table.copy()
+    new_interaction_tables.append(remapped)
 
   stack.coord = stack.coord[:, keep_mask, :].copy()
   stack.atom_annotations = stack.atom_annotations[keep_mask].copy()
   stack.bonds = new_bonds
-  stack.interactions = new_interactions
+  stack.interactions = new_interaction_tables

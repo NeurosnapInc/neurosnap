@@ -6,7 +6,7 @@ there is a single list of metals in the package.
 """
 
 RULE_SET = "default"
-RULE_VERSION = "1.0"
+RULE_VERSION = "1"
 
 # Canonical amino acids
 CANONICAL_AMINO_ACIDS = {

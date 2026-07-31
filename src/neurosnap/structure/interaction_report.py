@@ -116,7 +116,7 @@ class InteractionRecord:
   vdw_gap_a: Optional[float] = None
   source: str = "geometric_rules"
   rule_set: str = "default"
-  rule_version: str = "1.0"
+  rule_version: str = "1"
   model_id: int = 1
   details: Optional[dict] = None
 
@@ -141,7 +141,7 @@ class CoordinationCenterRecord:
   geometry_deviation_deg: Optional[float] = None
   evidence: str = "distance_cutoff"
   rule_set: str = "default"
-  rule_version: str = "1.0"
+  rule_version: str = "1"
   model_id: int = 1
 
 
@@ -247,7 +247,12 @@ class InteractionReport:
           "details": rec.details,
         }
       )
-    return pd.DataFrame(data, columns=EXPECTED_INTERACTION_COLUMNS)
+    frame = pd.DataFrame(data, columns=EXPECTED_INTERACTION_COLUMNS)
+    if "rule_set" in frame.columns:
+      frame["rule_set"] = frame["rule_set"].astype("string")
+    if "rule_version" in frame.columns:
+      frame["rule_version"] = frame["rule_version"].astype("string")
+    return frame
 
   def coordination_centers_dataframe(self) -> pd.DataFrame:
     """Convert coordination centers to a pandas DataFrame with the expected columns."""
@@ -275,7 +280,12 @@ class InteractionReport:
           "model_id": rec.model_id,
         }
       )
-    return pd.DataFrame(data, columns=EXPECTED_COORDINATION_COLUMNS)
+    frame = pd.DataFrame(data, columns=EXPECTED_COORDINATION_COLUMNS)
+    if "rule_set" in frame.columns:
+      frame["rule_set"] = frame["rule_set"].astype("string")
+    if "rule_version" in frame.columns:
+      frame["rule_version"] = frame["rule_version"].astype("string")
+    return frame
 
   def to_csv(self, **kwargs) -> str:
     """Export the interaction records DataFrame as a CSV string."""

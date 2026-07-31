@@ -2104,6 +2104,8 @@ def _evo_structure_to_ns(
   result.atoms = np.array(coords, dtype=result._dtype_atoms)
   result.atom_annotations = np.zeros(len(coords), dtype=result._dtype_atom_annotations)
   for field_name, values in annotations.items():
+    if not values:
+      continue
     result.atom_annotations[field_name] = np.asarray(values, dtype=result._dtype_atom_annotations.fields[field_name][0])
   result.bonds = np.array(bond_rows, dtype=result._dtype_bond) if bond_rows else np.zeros(0, dtype=result._dtype_bond)
   result.interactions = np.zeros(0, dtype=result._dtype_interaction)

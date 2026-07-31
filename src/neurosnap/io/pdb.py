@@ -255,7 +255,12 @@ class _ModelAccumulator:
     merged_bonds: Dict[Tuple[int, int], Tuple[int, int]] = {
       pair: (bond_order, int(BondType.COVALENT)) for pair, bond_order in undirected_bonds.items()
     }
-    merged_bonds.update(self.explicit_bonds)
+    for pair, (explicit_order, explicit_type) in self.explicit_bonds.items():
+      existing = merged_bonds.get(pair)
+      if explicit_type == int(BondType.COVALENT) and existing is not None and existing[1] == int(BondType.COVALENT):
+        merged_bonds[pair] = (existing[0], explicit_type)
+      else:
+        merged_bonds[pair] = (explicit_order, explicit_type)
 
     for (atom_i, atom_j), (bond_order, bond_type) in sorted(merged_bonds.items()):
       bond_rows.append((atom_i, atom_j, bond_order, bond_type))
@@ -372,14 +377,19 @@ def save_pdb(structure: Union[Structure, StructureEnsemble, StructureStack], pdb
   """
   models = _models_for_pdb_output(structure)
   shared_conect_lines: Optional[List[str]] = None
+  shared_explicit_bond_lines: Optional[List[str]] = None
   if len(models) > 1:
     shared_conect_lines = _shared_conect_lines(models)
+    shared_explicit_bond_lines = _shared_explicit_bond_lines(models)
 
   lines: List[str] = []
-  # SSBOND and LINK records precede the coordinate section per PDB convention,
-  # and describe topology shared by every model, so they are written once.
-  if models:
+  # SSBOND and LINK records precede the coordinate section per PDB convention.
+  # Multi-model outputs can only write them once, so they are emitted only when
+  # every model shares the same explicit typed-bond set.
+  if len(models) == 1 and models:
     lines.extend(_explicit_bond_lines(models[0][1]))
+  elif shared_explicit_bond_lines is not None:
+    lines.extend(shared_explicit_bond_lines)
 
   for model_position, (model_id, model) in enumerate(models):
     serials = _atom_serials_for_model(model)
@@ -392,8 +402,11 @@ def save_pdb(structure: Union[Structure, StructureEnsemble, StructureStack], pdb
 
     if len(models) == 1:
       lines.extend(_conect_lines_for_model(model, serials))
-    elif shared_conect_lines is None and len(model.bonds) > 0 and model_position == 0:
-      logger.warning("Omitting CONECT records for multi-model PDB output because the models do not share identical bonds and atom serials.")
+    elif model_position == 0:
+      if shared_conect_lines is None and len(model.bonds) > 0:
+        logger.warning("Omitting CONECT records for multi-model PDB output because the models do not share identical bonds and atom serials.")
+      if shared_explicit_bond_lines is None and _explicit_bond_lines(model):
+        logger.warning("Omitting SSBOND/LINK records for multi-model PDB output because the models do not share identical typed explicit bonds.")
 
     if len(models) > 1:
       lines.append("ENDMDL")
@@ -519,6 +532,18 @@ def _shared_conect_lines(models: List[Tuple[int, Structure]]) -> Optional[List[s
       return None
 
   return _conect_lines_for_model(reference_model, reference_serials)
+
+
+def _shared_explicit_bond_lines(models: List[Tuple[int, Structure]]) -> Optional[List[str]]:
+  """Return shared ``SSBOND`` / ``LINK`` lines for compatible multi-model outputs."""
+  if not models:
+    return []
+
+  reference_lines = _explicit_bond_lines(models[0][1])
+  for _, model in models[1:]:
+    if _explicit_bond_lines(model) != reference_lines:
+      return None
+  return reference_lines
 
 
 def _atom_serials_for_model(model: Structure) -> np.ndarray:

@@ -437,10 +437,67 @@ def test_pdb_duplicate_link_records_collapse_to_one_bond():
       "END",
     ]
   )
-  structure = parse_pdb(_io.StringIO(pdb_text), return_type="ensemble").first()
+  structure = parse_pdb(io.StringIO(pdb_text), return_type="ensemble").first()
   assert len(structure.bonds) == 1
   assert int(structure.bonds[0]["bond_type"]) == int(BondType.METAL_COORDINATION)
   assert int(structure.bonds[0]["bond_order"]) == 0
+
+
+def test_pdb_link_preserves_higher_covalent_bond_order_from_conect():
+  """LINK should classify a bond without downgrading a stronger CONECT order."""
+  from neurosnap.io.pdb import parse_pdb
+  from neurosnap.structure import BondType
+
+  pdb_text = "\n".join(
+    [
+      "LINK        C1   LIG A   1                O1   LIG A   1    ",
+      "HETATM    1 C1   LIG A   1       0.000   0.000   0.000  1.00 20.00           C",
+      "HETATM    2 O1   LIG A   1       1.200   0.000   0.000  1.00 20.00           O",
+      "CONECT    1    2    2",
+      "END",
+    ]
+  )
+  structure = parse_pdb(io.StringIO(pdb_text), return_type="ensemble").first()
+
+  assert len(structure.bonds) == 1
+  assert int(structure.bonds[0]["bond_type"]) == int(BondType.COVALENT)
+  assert int(structure.bonds[0]["bond_order"]) == 2
+
+
+def test_save_pdb_omits_nonshared_explicit_bonds_for_multimodel_output(caplog):
+  """SSBOND/LINK records cannot be written once when models disagree."""
+  import logging
+  import numpy as np
+
+  from neurosnap.io.pdb import save_pdb
+  from neurosnap.structure import BondType, StructureEnsemble
+  from tests._structure_test_utils import make_structure
+
+  model_one = make_structure(
+    [
+      ("SG", "CYS", "A", 1, 0.0, 0.0, 0.0, "S"),
+      ("SG", "CYS", "A", 5, 2.05, 0.0, 0.0, "S"),
+    ]
+  )
+  model_one.bonds = np.array([(0, 1, 1, int(BondType.DISULFIDE))], dtype=model_one._dtype_bond)
+
+  model_two = make_structure(
+    [
+      ("ZN", "ZN", "B", 1, 0.0, 0.0, 0.0, "ZN"),
+      ("NE2", "HIS", "A", 9, 2.1, 0.0, 0.0, "N"),
+    ]
+  )
+  model_two.bonds = np.array([(0, 1, 0, int(BondType.METAL_COORDINATION))], dtype=model_two._dtype_bond)
+
+  ensemble = StructureEnsemble([model_one, model_two], model_ids=[1, 2])
+  handle = io.StringIO()
+  with caplog.at_level(logging.WARNING):
+    save_pdb(ensemble, handle)
+  written = handle.getvalue()
+
+  assert "SSBOND" not in written
+  assert "LINK" not in written
+  assert any("SSBOND/LINK" in record.message for record in caplog.records)
 
 
 def _metalc_cif(conn_type: str, value_order: str) -> str:
@@ -527,3 +584,4 @@ def test_mmcif_unrecognized_bond_order_warns(tmp_path, caplog):
     quiet = parse_mmcif(str(quiet_path), return_type="ensemble").first()
   assert int(quiet.bonds[0]["bond_order"]) == 0
   assert not any("pdbx_value_order" in record.message for record in caplog.records)
+import io

@@ -1,7 +1,7 @@
 """Database and remote-search helpers."""
 
 from .blast import run_blast
-from .ccd import CCD, get_ccd, get_ccd_entries, get_ccd_standard_aa
+from .ccd import CCD, get_ccd, get_ccd_canonical_aa, get_ccd_entries
 from .foldseek import foldseek_search
 from .uniprot import fetch_accessions, fetch_uniprot
 
@@ -11,7 +11,7 @@ __all__ = [
   "fetch_uniprot",
   "foldseek_search",
   "get_ccd",
-  "get_ccd_standard_aa",
+  "get_ccd_canonical_aa",
   "get_ccd_entries",
   "run_blast",
 ]

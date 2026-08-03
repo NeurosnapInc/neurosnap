@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from neurosnap.constants.chemistry import ATOMIC_MASSES
-from neurosnap.constants.sequence import AA_ALIASES, AA_RECORDS
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 from neurosnap.constants.structure import NA_ALL_CODES, NA_RESIDUE_MAP
 from neurosnap.log import logger
 
@@ -59,21 +59,31 @@ def _is_nucleic_res_name(res_name: str) -> bool:
 
 def _normalize_internal_residue_name(res_name: str) -> str:
   """Map public residue names onto EvoEF2/CHARMM residue identifiers."""
-  canonical_name = AA_ALIASES.get(res_name, res_name)
-  if canonical_name == "HIS":
-    return "HSE" if res_name in {"HIE", "HSE"} else ("HSP" if res_name in {"HIP", "HSP"} else "HSD")
-  if res_name in {"HIE", "HSE"}:
+  if res_name in {"HIE", "HSE", "HISE"}:
     return "HSE"
-  if res_name in {"HIP", "HSP"}:
+  if res_name in {"HIP", "HSP", "HISH"}:
     return "HSP"
+  if res_name in {"HIS", "HID", "HSD", "HISD"}:
+    return "HSD"
+  if res_name in {"ASH", "ASPH", "ASPP"}:
+    return "ASP"
+  if res_name in {"GLH", "GLUH", "GLUP"}:
+    return "GLU"
+  if res_name in {"CYSH", "CYM", "CYX", "CYS2"}:
+    return "CYS"
+  if res_name in {"LYN", "LYSN"}:
+    return "LYS"
+  if res_name in {"ARN", "ARGN"}:
+    return "ARG"
+  if res_name == "CSE":
+    return "SEC"
   return NA_RESIDUE_MAP.get(res_name, res_name)
 
 
 def _protein_one_letter_code(res_name: str) -> Optional[str]:
   """Return the canonical one-letter code for a protein residue name."""
-  canonical_name = AA_ALIASES.get(res_name, res_name)
-  record = AA_RECORDS.get(canonical_name)
-  if record is None or not record.is_standard:
+  record = AA_RECORDS_CANONICAL.get_by_abr(res_name) or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(res_name)
+  if record is None or record.code is None:
     return None
   return record.code
 

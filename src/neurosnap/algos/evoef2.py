@@ -70,18 +70,15 @@ from neurosnap.algos.evoef2_lib.constants import (
   SSBOND_DISTANCE,
 )
 from neurosnap.algos.evoef2_lib.weights import get_weights
-from neurosnap.constants.sequence import AA_RECORDS, STANDARD_AAs
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 from neurosnap.constants.structure import BACKBONE_ATOMS_NUCLEOTIDE, NA_ALL_CODES, NA_RESIDUE_MAP
 from neurosnap.log import logger
 from neurosnap.structure import BondType, Structure as NSStructure
-from neurosnap.sequence.protein import getAA
 
 def _protein_one_letter_code(res_name: str) -> Optional[str]:
   """Return the canonical one-letter code for a protein residue name."""
-  if res_name in {"HSD", "HSE", "HSP"}:
-    return "H"
-  record = AA_RECORDS.get(res_name)
-  if record is None or not record.is_standard:
+  record = AA_RECORDS_CANONICAL.get_by_abr(res_name) or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(res_name)
+  if record is None or record.code is None:
     return None
   return record.code
 
@@ -1669,7 +1666,7 @@ def rebuild_missing_atoms(
   return Structure(chains=chains)
 
 
-_AA_ONE_TO_THREE = {code: abr for abr, record in AA_RECORDS.items() if record.is_standard and (code := record.code) is not None}
+_AA_ONE_TO_THREE = {record.code: abr for abr, record in AA_RECORDS_CANONICAL.items() if record.code is not None}
 
 
 def _clone_evo_residue(res: Residue) -> Residue:
@@ -1709,9 +1706,9 @@ def _canonical_mutation_targets(target_residue: str) -> List[str]:
   if len(target) == 1:
     if target == "H":
       return ["HSD", "HSE"]
-    if target not in STANDARD_AAs:
+    if target not in _AA_ONE_TO_THREE:
       raise ValueError(f'Unsupported target amino acid code "{target_residue}".')
-    return [getAA(target).abr]
+    return [_AA_ONE_TO_THREE[target]]
   if target in {"HIS", "HID", "HSD"}:
     return ["HSD", "HSE"] if target == "HIS" else ["HSD"]
   if target in {"HIE", "HSE"}:

@@ -2,24 +2,33 @@
 
 import pytest
 
-from neurosnap.sequence.protein import getAA, isoelectric_point, molecular_weight, net_charge, sanitize_aa_seq
+from neurosnap.constants.sequence import AA_RECORDS_AMBIGUOUS, AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
+from neurosnap.sequence.protein import isoelectric_point, molecular_weight, net_charge, sanitize_aa_seq
 
 
-def test_getAA_and_sanitize_and_mw_and_charge_and_pi():
-  record = getAA("A")
+def test_aa_records_and_sanitize_and_mw_and_charge_and_pi():
+  record = AA_RECORDS_CANONICAL.get_by_code("A")
   assert (record.code, record.abr, record.name) == ("A", "ALA", "ALANINE")
 
-  record = getAA("ala")
+  record = AA_RECORDS_CANONICAL.get_by_abr("ala")
   assert (record.code, record.abr, record.name) == ("A", "ALA", "ALANINE")
 
-  with pytest.raises(ValueError, match=r"Unknown amino acid identifier"):
-    getAA("???")
+  record = AA_RECORDS_CANONICAL.get_by_name("alanine")
+  assert (record.code, record.abr, record.name) == ("A", "ALA", "ALANINE")
+
+  assert AA_RECORDS_CANONICAL.get_by_abr("???") is None
+  assert AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr("???") is None
 
   sequence = sanitize_aa_seq(" a c d e f * \n", non_standard="reject", trim_term=True)
   assert sequence == "ACDEF"
   assert sanitize_aa_seq("ACDZX", non_standard="allow") == "ACDZX"
+  assert sanitize_aa_seq("ABZJ", non_standard="convert") == "ADEL"
   with pytest.raises(ValueError):
     sanitize_aa_seq("ACDZ?", non_standard="reject")
+  with pytest.raises(ValueError):
+    sanitize_aa_seq("AX", non_standard="convert")
+  with pytest.raises(ValueError):
+    sanitize_aa_seq("*", non_standard="convert", trim_term=False)
 
   from neurosnap.constants import AA_MASS_PROTEIN_AVG as aa_mass_average
 
@@ -37,14 +46,26 @@ def test_getAA_and_sanitize_and_mw_and_charge_and_pi():
   assert 0.0 <= pi <= 14.0
 
 
-def test_getAA_non_standard_handling():
-  with pytest.raises(ValueError, match=r"Encountered non-standard amino acid"):
-    getAA("MSE", non_standard="reject")
+def test_aa_record_tables_separate_forcefield_variants_from_ambiguous_records():
+  record = AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr("HID")
+  assert record.abr == "HID"
+  assert record.name.upper().startswith("HISTIDINE")
+  assert record.code == "H"
 
-  record = getAA("MSE", non_standard="allow")
-  assert record.abr == "MSE"
-  assert record.name.upper().startswith("SELENO")
-  assert record.code in (None, "?")
+  converted = AA_RECORDS_CANONICAL.get_canonical_record(record)
+  assert (converted.code, converted.abr, converted.name) == ("H", "HIS", "HISTIDINE")
 
-  converted = getAA("MSE", non_standard="convert")
-  assert (converted.code, converted.abr, converted.name) == ("M", "MET", "METHIONINE")
+  assert AA_RECORDS_CANONICAL.get_by_abr("ASX") is None
+  assert AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr("ASX") is None
+  assert AA_RECORDS_AMBIGUOUS.get_by_abr("ASX").standard_equiv_abr == "ASP"
+
+
+def test_aa_records_handles_protonation_variants():
+  standard = AA_RECORDS_CANONICAL.get_by_code("H")
+  assert standard.abr == "HIS"
+
+  histidine_alias = AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr("HID")
+  assert (histidine_alias.code, histidine_alias.abr, histidine_alias.standard_equiv_abr) == ("H", "HID", "HIS")
+
+  aspartate_alias = AA_RECORDS_CANONICAL.get_canonical_record(AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr("ASH"))
+  assert (aspartate_alias.code, aspartate_alias.abr) == ("D", "ASP")

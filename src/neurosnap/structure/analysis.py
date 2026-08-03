@@ -10,7 +10,7 @@ import numpy as np
 from rdkit import Chem
 
 from neurosnap.constants.chemistry import VDW_RADII_BONDI
-from neurosnap.constants.sequence import AA_RECORDS
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 from neurosnap.constants.structure import STANDARD_NUCLEOTIDES
 from neurosnap.log import logger
 
@@ -242,12 +242,13 @@ def _vdw_radius(element: str) -> float:
 def extract_non_biopolymers(structure: Structure, output_dir: str, min_atoms: int = 0):
   """Extract non-biopolymer fragments from a structure and write them as SDF files.
 
-  Biopolymer residues are removed using the same residue-name logic as the old
-  implementation: any residue present in ``AA_RECORDS`` or
-  ``STANDARD_NUCLEOTIDES`` is treated as part of a protein or nucleotide
-  polymer, except ``UNK`` which is preserved. The remaining atoms are written to
-  a temporary PDB, read into RDKit, split into disconnected fragments, and then
-  exported as individual SDF files.
+  Biopolymer residues are removed using the same residue-name logic as the
+  structure filters: any residue present in ``AA_RECORDS_CANONICAL``,
+  ``AA_RECORDS_FORCEFIELD_VARIANTS``, or ``STANDARD_NUCLEOTIDES`` is treated as
+  part of a protein or nucleotide polymer. Ambiguous placeholders such as
+  ``ASX``, ``GLX``, ``XLE``, and ``UNK`` are preserved as non-biopolymers. The
+  remaining atoms are written to a temporary PDB, read into RDKit, split into
+  disconnected fragments, and then exported as individual SDF files.
 
   Parameters:
     structure: Input single-model :class:`Structure`.
@@ -261,9 +262,6 @@ def extract_non_biopolymers(structure: Structure, output_dir: str, min_atoms: in
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"extract_non_biopolymers() expects a Structure, found {type(structure).__name__}.")
-
-  biopolymer_keywords = set(AA_RECORDS.keys()).union(STANDARD_NUCLEOTIDES)
-  biopolymer_keywords.discard("UNK")
 
   if os.path.exists(output_dir):
     shutil.rmtree(output_dir)
@@ -280,7 +278,17 @@ def extract_non_biopolymers(structure: Structure, output_dir: str, min_atoms: in
   ligand_structure.interactions = structure.interactions.copy()
   ligand_structure.metadata = dict(structure.metadata)
 
-  keep_mask = ~np.isin(ligand_structure.atom_annotations["res_name"], list(biopolymer_keywords))
+  residue_names = np.char.upper(np.char.strip(ligand_structure.atom_annotations["res_name"].astype("U")))
+  is_biopolymer = np.array(
+    [
+      name in STANDARD_NUCLEOTIDES
+      or AA_RECORDS_CANONICAL.get_by_abr(name) is not None
+      or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(name) is not None
+      for name in residue_names
+    ],
+    dtype=bool,
+  )
+  keep_mask = ~is_biopolymer
   filter_structure_atoms(ligand_structure, keep_mask)
 
   if len(ligand_structure) == 0:

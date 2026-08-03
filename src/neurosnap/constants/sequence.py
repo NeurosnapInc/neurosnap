@@ -1,6 +1,6 @@
 """Sequence- and amino-acid-related constants."""
 
-from typing import Dict, Optional
+from typing import List, Optional
 
 from neurosnap._compat import compat_dataclass
 
@@ -15,72 +15,212 @@ class AARecord:
   code: Optional[str]  # 1-letter code; None for if unavailable
   abr: str  # 3-letter abbreviation or CCD code
   name: str  # full name (upper-cased)
-  is_standard: bool  # True for the 20 canonical AAs
-  standard_equiv_abr: Optional[str]  # e.g., "LYS" for KCX; None if standard or unknown
+  standard_equiv_abr: Optional[str]  # Standard parent residue when one exists (e.g., "HIS" for HID or "LYS" for PYL); otherwise None.
 
 
-## Amino acids keyed by ABR
-AA_RECORDS: Dict[str, AARecord] = {
-  "ALA": AARecord("A", "ALA", "ALANINE", True, None),
-  "ARG": AARecord("R", "ARG", "ARGININE", True, None),
-  "ASN": AARecord("N", "ASN", "ASPARAGINE", True, None),
-  "ASP": AARecord("D", "ASP", "ASPARTIC ACID", True, None),
-  "CYS": AARecord("C", "CYS", "CYSTEINE", True, None),
-  "GLN": AARecord("Q", "GLN", "GLUTAMINE", True, None),
-  "GLU": AARecord("E", "GLU", "GLUTAMIC ACID", True, None),
-  "GLY": AARecord("G", "GLY", "GLYCINE", True, None),
-  "HIS": AARecord("H", "HIS", "HISTIDINE", True, None),
-  "ILE": AARecord("I", "ILE", "ISOLEUCINE", True, None),
-  "LEU": AARecord("L", "LEU", "LEUCINE", True, None),
-  "LYS": AARecord("K", "LYS", "LYSINE", True, None),
-  "MET": AARecord("M", "MET", "METHIONINE", True, None),
-  "PHE": AARecord("F", "PHE", "PHENYLALANINE", True, None),
-  "PRO": AARecord("P", "PRO", "PROLINE", True, None),
-  "SER": AARecord("S", "SER", "SERINE", True, None),
-  "THR": AARecord("T", "THR", "THREONINE", True, None),
-  "TRP": AARecord("W", "TRP", "TRYPTOPHAN", True, None),
-  "TYR": AARecord("Y", "TYR", "TYROSINE", True, None),
-  "VAL": AARecord("V", "VAL", "VALINE", True, None),
-  "PYL": AARecord("O", "PYL", "PYRROLYSINE", False, "LYS"),
-  "SEC": AARecord("U", "SEC", "SELENOCYSTEINE", False, "CYS"),
-  "ASX": AARecord("B", "ASX", "ASPARAGINE/ASPARTIC ACID", False, "ASP"),
-  "GLX": AARecord("Z", "GLX", "GLUTAMINE/GLUTAMIC ACID", False, "GLU"),
-  "XLE": AARecord("J", "XLE", "LEUCINE/ISOLEUCINE", False, "LEU"),
-  "UNK": AARecord("X", "UNK", "UNKNOWN", False, None),
-  "TRM": AARecord("*", "TRM", "TERMINATION", False, None),
-  "LLP": AARecord(None, "LLP", "Nε-LIPOYL-LYSINE", False, "LYS"),
-  "TPO": AARecord(None, "TPO", "O-PHOSPHOTHREONINE", False, "THR"),
-  "CSS": AARecord(None, "CSS", "SULFONATED CYSTEINE", False, "CYS"),
-  "OCS": AARecord(None, "OCS", "CYSTEINE-S-SULFONIC ACID", False, "CYS"),
-  "CSO": AARecord(None, "CSO", "S-HYDROXYCYSTEINE (CYSTEINE SULFINIC ACID)", False, "CYS"),
-  "PCA": AARecord(None, "PCA", "PYROGLUTAMIC ACID", False, "GLU"),
-  "KCX": AARecord(None, "KCX", "CARBOXYLYSINE", False, "LYS"),
-  "CME": AARecord(None, "CME", "S-METHYLCYSTEINE", False, "CYS"),
-  "MLY": AARecord(None, "MLY", "Nε-METHYLLYSINE", False, "LYS"),
-  "SEP": AARecord(None, "SEP", "O-PHOSPHOSERINE", False, "SER"),
-  "CSX": AARecord(None, "CSX", "CYSTEINE OXIDATION PRODUCT (UNSPECIFIED)", False, "CYS"),
-  "CSD": AARecord(None, "CSD", "CYSTEINE DISULFIDE", False, "CYS"),
-  "MSE": AARecord(None, "MSE", "SELENOMETHIONINE", False, "MET"),
-  "MHO": AARecord(None, "MHO", "METHIONINE SULFOXIDE", False, "MET"),
-}
+class AARecordTable:
+  """Indexed lookup wrapper for a single amino-acid record table.
 
-# Alias map: every searchable token → ABR
-# (1-letter codes, 3-letter codes, and names)
-AA_ALIASES: Dict[str, str] = {}
-for abr, rec in AA_RECORDS.items():
-  if rec.code is not None:
-    AA_ALIASES[rec.code] = abr
-  AA_ALIASES[abr] = abr
-  AA_ALIASES[rec.name] = abr
+  The table preserves the input record order for iteration while also exposing
+  direct lookups by one-letter code, three-letter/CCD abbreviation, and full
+  residue name.
+  """
 
-# Common histidine protonation/tautomer residue names should resolve to the
-# canonical histidine record rather than requiring per-caller special cases.
-AA_ALIASES["HSD"] = "HIS"
-AA_ALIASES["HSE"] = "HIS"
-AA_ALIASES["HSP"] = "HIS"
-AA_ALIASES["HID"] = "HIS"
-AA_ALIASES["HIE"] = "HIS"
-AA_ALIASES["HIP"] = "HIS"
+  def __init__(self, records: List[AARecord]):
+    """Build indexed lookups for a single amino-acid record table.
+
+    Parameters:
+      records: Ordered amino-acid records to include in the table.
+    """
+    self.records = list(records)
+    self.code_to_rec = {record.code: record for record in self.records if record.code is not None}
+    self.abr_to_rec = {record.abr: record for record in self.records}
+    self.name_to_rec = {record.name: record for record in self.records}
+
+  def __iter__(self):
+    """Iterate records in their original table order.
+
+    Returns:
+      Iterator over :class:`AARecord` objects.
+    """
+    yield from self.records
+
+  def items(self):
+    """Return abbreviation-keyed record pairs.
+
+    Returns:
+      A dynamic view of ``(abr, record)`` pairs for the table.
+    """
+    return self.abr_to_rec.items()
+
+  def values(self):
+    """Return the records keyed by residue abbreviation.
+
+    Returns:
+      A dynamic view of the table's :class:`AARecord` objects.
+    """
+    return self.abr_to_rec.values()
+
+  def get_by_code(self, code: str) -> Optional[AARecord]:
+    """Look up a record by one-letter amino-acid code.
+
+    Parameters:
+      code: One-letter residue code.
+
+    Returns:
+      Matching :class:`AARecord`, or ``None`` when the code is absent.
+    """
+    query = str(code).strip().upper()
+    if len(query) != 1:
+      return None
+    return self.code_to_rec.get(query)
+
+  def get_by_abr(self, abr: str) -> Optional[AARecord]:
+    """Look up a record by residue abbreviation.
+
+    Parameters:
+      abr: Three-letter or CCD-style residue abbreviation.
+
+    Returns:
+      Matching :class:`AARecord`, or ``None`` when the abbreviation is absent.
+    """
+    return self.abr_to_rec.get(str(abr).strip().upper())
+
+  def get_by_name(self, name: str) -> Optional[AARecord]:
+    """Look up a record by full residue name.
+
+    Parameters:
+      name: Full residue name.
+
+    Returns:
+      Matching :class:`AARecord`, or ``None`` when the name is absent.
+    """
+    return self.name_to_rec.get(str(name).strip().upper())
+
+  def get_canonical_record(self, record_or_abr: str | AARecord) -> Optional[AARecord]:
+    """Resolve a record or abbreviation to its canonical-table record.
+
+    Parameters:
+      record_or_abr: Either an :class:`AARecord` instance already associated
+        with this table family, or a residue abbreviation to resolve against
+        the table.
+
+    Returns:
+      The canonical-table :class:`AARecord` when one can be determined. If the
+      supplied record is already present in this table, that record is returned
+      unchanged. Returns ``None`` when the residue is unknown to the table or
+      does not declare a standard parent that exists in this table.
+    """
+    record = record_or_abr if isinstance(record_or_abr, AARecord) else self.get_by_abr(record_or_abr)
+    if record is None:
+      return None
+    if self.get_by_abr(record.abr) is not None:
+      return record
+    if record.standard_equiv_abr is None:
+      return None
+    return self.get_by_abr(record.standard_equiv_abr)
+
+  def get_standard_record(self, record_or_abr: str | AARecord) -> Optional[AARecord]:
+    """Resolve a record or abbreviation to its standard parent record.
+
+    Parameters:
+      record_or_abr: Either an :class:`AARecord` instance or a residue
+        abbreviation to resolve.
+
+    Returns:
+      The standard-parent :class:`AARecord` when one can be determined.
+      Returns the input record unchanged when it is already a standard amino
+      acid. Returns ``None`` when the residue is unknown or has no standard
+      parent mapping.
+    """
+    record = record_or_abr if isinstance(record_or_abr, AARecord) else self.get_by_abr(record_or_abr)
+    if record is None:
+      return None
+    if self.get_by_abr(record.abr) is not None and record.standard_equiv_abr is None:
+      return record
+    if record.standard_equiv_abr is None:
+      return None
+    return self.get_by_abr(record.standard_equiv_abr)
+
+
+## Canonical / standard amino acids keyed by ABR.
+# This is the primary amino-acid reference table used for one-letter-code
+# lookup, canonical parent resolution, and sequence-facing normalization.
+# It contains the standard residues plus pyrrolysine (PYL) and
+# selenocysteine (SEC), which are treated as first-class canonical records here
+# because they have stable one-letter codes even though they still map to
+# conventional parent residues through ``standard_equiv_abr``.
+AA_RECORDS_CANONICAL = AARecordTable([
+  AARecord("A", "ALA", "ALANINE", None),
+  AARecord("R", "ARG", "ARGININE", None),
+  AARecord("N", "ASN", "ASPARAGINE", None),
+  AARecord("D", "ASP", "ASPARTIC ACID", None),
+  AARecord("C", "CYS", "CYSTEINE", None),
+  AARecord("Q", "GLN", "GLUTAMINE", None),
+  AARecord("E", "GLU", "GLUTAMIC ACID", None),
+  AARecord("G", "GLY", "GLYCINE", None),
+  AARecord("H", "HIS", "HISTIDINE", None),
+  AARecord("I", "ILE", "ISOLEUCINE", None),
+  AARecord("L", "LEU", "LEUCINE", None),
+  AARecord("K", "LYS", "LYSINE", None),
+  AARecord("M", "MET", "METHIONINE", None),
+  AARecord("F", "PHE", "PHENYLALANINE", None),
+  AARecord("P", "PRO", "PROLINE", None),
+  AARecord("S", "SER", "SERINE", None),
+  AARecord("T", "THR", "THREONINE", None),
+  AARecord("W", "TRP", "TRYPTOPHAN", None),
+  AARecord("Y", "TYR", "TYROSINE", None),
+  AARecord("V", "VAL", "VALINE", None),
+  AARecord("O", "PYL", "PYRROLYSINE", "LYS"),
+  AARecord("U", "SEC", "SELENOCYSTEINE", "CYS"),
+])
+
+# Ambiguous amino-acid placeholders are tracked separately so callers can make
+# an explicit decision about whether to support them. These codes do not denote
+# a concrete residue identity in structure-preparation or MD workflows:
+# ``ASX`` and ``GLX`` collapse acidic/amido side-chain identities, ``XLE``
+# merges leucine/isoleucine, ``UNK`` means the residue identity is unknown, and
+# ``TRM`` is a translation termination token rather than a physical residue.
+# They are intentionally excluded from standard amino-acid lookup and from
+# protein-residue classification helpers.
+AA_RECORDS_AMBIGUOUS = AARecordTable([
+  AARecord("B", "ASX", "ASPARAGINE/ASPARTIC ACID", "ASP"),
+  AARecord("Z", "GLX", "GLUTAMINE/GLUTAMIC ACID", "GLU"),
+  AARecord("J", "XLE", "LEUCINE/ISOLEUCINE", "LEU"),
+  AARecord("X", "UNK", "UNKNOWN", None),
+  AARecord("*", "TRM", "TERMINATION", None),
+])
+
+# Force-field and protonation-state residue names represent concrete protein
+# residues that appear in prepared structures and MD/topology workflows. These
+# entries should remain valid for protein-residue classification and sequence
+# parent mapping, but they are not treated as canonical residue names.
+AA_RECORDS_FORCEFIELD_VARIANTS = AARecordTable([
+  AARecord("H", "HID", "HISTIDINE DELTA-PROTONATED", "HIS"),
+  AARecord("H", "HIE", "HISTIDINE EPSILON-PROTONATED", "HIS"),
+  AARecord("H", "HIP", "HISTIDINE DOUBLY PROTONATED", "HIS"),
+  AARecord("H", "HSD", "HISTIDINE DELTA-PROTONATED", "HIS"),
+  AARecord("H", "HSE", "HISTIDINE EPSILON-PROTONATED", "HIS"),
+  AARecord("H", "HSP", "HISTIDINE DOUBLY PROTONATED", "HIS"),
+  AARecord("H", "HISD", "HISTIDINE DELTA-PROTONATED", "HIS"),
+  AARecord("H", "HISE", "HISTIDINE EPSILON-PROTONATED", "HIS"),
+  AARecord("H", "HISH", "HISTIDINE DOUBLY PROTONATED", "HIS"),
+  AARecord("D", "ASH", "ASPARTIC ACID PROTONATED", "ASP"),
+  AARecord("D", "ASPH", "ASPARTIC ACID PROTONATED", "ASP"),
+  AARecord("D", "ASPP", "ASPARTIC ACID PROTONATED", "ASP"),
+  AARecord("E", "GLH", "GLUTAMIC ACID PROTONATED", "GLU"),
+  AARecord("E", "GLUH", "GLUTAMIC ACID PROTONATED", "GLU"),
+  AARecord("E", "GLUP", "GLUTAMIC ACID PROTONATED", "GLU"),
+  AARecord("C", "CYSH", "CYSTEINE THIOL", "CYS"),
+  AARecord("C", "CYM", "CYSTEINE THIOLATE", "CYS"),
+  AARecord("C", "CYX", "CYSTEINE DISULFIDE", "CYS"),
+  AARecord("C", "CYS2", "CYSTEINE DISULFIDE", "CYS"),
+  AARecord("K", "LYN", "LYSINE NEUTRAL", "LYS"),
+  AARecord("K", "LYSN", "LYSINE NEUTRAL", "LYS"),
+  AARecord("R", "ARN", "ARGININE NEUTRAL", "ARG"),
+  AARecord("R", "ARGN", "ARGININE NEUTRAL", "ARG"),
+])
+
 
 ## Amino acid molecular masses
 # Average residue masses (in Daltons) for amino acids *as incorporated into peptides/proteins*.
@@ -187,11 +327,13 @@ DEFAULT_PKA = {
 
 __all__ = [
   "AARecord",
-  "AA_ALIASES",
+  "AARecordTable",
   "AA_MASS_FREE",
   "AA_MASS_PROTEIN_AVG",
   "AA_MASS_PROTEIN_MONO",
-  "AA_RECORDS",
+  "AA_RECORDS_AMBIGUOUS",
+  "AA_RECORDS_CANONICAL",
+  "AA_RECORDS_FORCEFIELD_VARIANTS",
   "DEFAULT_PKA",
   "STANDARD_AAs",
 ]

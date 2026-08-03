@@ -4,7 +4,7 @@ from typing import Literal, Optional, Tuple
 
 import numpy as np
 
-from neurosnap.constants.sequence import AA_ALIASES, AA_RECORDS
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 from neurosnap.constants.structure import BACKBONE_ATOMS_AA, BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NA_DNA_CODES, NA_RNA_CODES
 
 from .structure import Residue, Structure, StructureStack
@@ -22,8 +22,7 @@ def coord_matrix(structure: Structure) -> np.ndarray:
 def classify_polymer_residue(residue: Residue) -> Optional[PolymerType]:
   """Classify a residue as protein, DNA, RNA, or non-polymer."""
   residue_name = residue.res_name.strip().upper()
-  canonical_residue_name = AA_ALIASES.get(residue_name, residue_name)
-  if canonical_residue_name in AA_RECORDS:
+  if AA_RECORDS_CANONICAL.get_by_abr(residue_name) is not None or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(residue_name) is not None:
     return "protein"
   if residue_name in NA_DNA_CODES:
     return "dna"

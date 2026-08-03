@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from rdkit import Chem
 
-from neurosnap.database.ccd import CCD, get_ccd, get_ccd_entries, get_ccd_rcsb, get_ccd_standard_aa
+from neurosnap.database.ccd import CCD, get_ccd, get_ccd_canonical_aa, get_ccd_entries, get_ccd_rcsb
 
 
 class _MockCCDResponse:
@@ -28,7 +28,9 @@ def ccd_payload():
       "ATP": {"name": "ATP", "smiles": "Nc1ncnc2n(cnc12)[C@@H]1O[C@H](COP(=O)(O)OP(=O)(O)OP(=O)(O)O)[C@@H](O)[C@H]1O"},
       "EOH": {"name": "ethanol", "smiles": "CCO"},
       "GLY": {"name": "glycine", "smiles": "NCC(=O)O"},
+      "MET": {"name": "methionine", "smiles": "CSCC[C@H](N)C(=O)O"},
       "MSE": {"name": "selenomethionine", "smiles": "C[Se]CC[C@H](N)C(=O)O"},
+      "SEC": {"name": "selenocysteine", "smiles": "N[C@@H](C[SeH])C(=O)O"},
       "VAL": {"name": "valine", "smiles": "CC(C)[C@H](N)C(=O)O"},
       "XAA": {"name": "alanine analog", "smiles": "C[C@H](N)C(=O)O"},
     },
@@ -97,17 +99,28 @@ def test_ccd_smiles_canonical_rejects_invalid_smiles():
     ccd.smiles_canonical()
 
 
-def test_get_ccd_standard_aa_uses_explicit_mapping(monkeypatch, tmp_path: Path, ccd_payload):
+def test_get_ccd_canonical_aa_maps_selenium_analogs_by_similarity(monkeypatch, tmp_path: Path, ccd_payload):
   cache = tmp_path / "ccd_entries.json"
   monkeypatch.setattr("neurosnap.database.ccd.requests.get", lambda url, timeout=None: _MockCCDResponse(ccd_payload))
 
-  record = get_ccd_standard_aa("mse", cache_path=str(cache))
+  record = get_ccd_canonical_aa("mse", cache_path=str(cache))
   assert (record.code, record.abr, record.name) == ("M", "MET", "METHIONINE")
 
 
-def test_get_ccd_standard_aa_uses_similarity_for_unknown_ccd(monkeypatch, tmp_path: Path, ccd_payload):
+def test_get_ccd_canonical_aa_respects_standard_flag_for_exact_canonical_matches(monkeypatch, tmp_path: Path, ccd_payload):
   cache = tmp_path / "ccd_entries.json"
   monkeypatch.setattr("neurosnap.database.ccd.requests.get", lambda url, timeout=None: _MockCCDResponse(ccd_payload))
 
-  record = get_ccd_standard_aa(CCD(code="XAA", name="alanine analog", smiles=ccd_payload["entries"]["XAA"]["smiles"]), cache_path=str(cache))
+  standard_record = get_ccd_canonical_aa("sec", cache_path=str(cache))
+  canonical_record = get_ccd_canonical_aa("sec", cache_path=str(cache), standard=False)
+
+  assert (standard_record.code, standard_record.abr, standard_record.name) == ("C", "CYS", "CYSTEINE")
+  assert (canonical_record.code, canonical_record.abr, canonical_record.name) == ("U", "SEC", "SELENOCYSTEINE")
+
+
+def test_get_ccd_canonical_aa_uses_similarity_for_unknown_ccd(monkeypatch, tmp_path: Path, ccd_payload):
+  cache = tmp_path / "ccd_entries.json"
+  monkeypatch.setattr("neurosnap.database.ccd.requests.get", lambda url, timeout=None: _MockCCDResponse(ccd_payload))
+
+  record = get_ccd_canonical_aa(CCD(code="XAA", name="alanine analog", smiles=ccd_payload["entries"]["XAA"]["smiles"]), cache_path=str(cache))
   assert (record.code, record.abr, record.name) == ("A", "ALA", "ALANINE")

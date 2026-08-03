@@ -11,7 +11,7 @@ from rdkit.Chem import rdFingerprintGenerator
 from rdkit.DataStructs import TanimotoSimilarity
 
 from neurosnap._compat import compat_dataclass
-from neurosnap.constants.sequence import AA_RECORDS, AARecord
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS, AARecord
 from neurosnap.log import logger
 
 CCD_ENTRIES_URL = "https://neurosnap.ai/assets/ccd/entries.json"
@@ -110,30 +110,37 @@ def get_ccd(
   return get_ccd_entries(cache_path=cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout).get(str(code).upper().strip())
 
 
-def get_ccd_standard_aa(
+def get_ccd_canonical_aa(
   ccd: Union[str, CCD],
   *,
+  standard: bool = False,
   cache_path: str = DEFAULT_CCD_CACHE,
   overwrite: bool = False,
   max_age_days: int = 7,
   timeout: int = 30,
 ) -> AARecord:
-  """Return the most similar standard amino acid for a CCD entry.
+  """Return the most similar canonical or standard amino acid for a CCD entry.
 
-  If the input CCD code already has an explicit standard mapping in
-  ``AA_RECORDS``, that mapping is reused directly. Otherwise, the CCD entry is
-  compared against the 20 canonical amino-acid CCD entries using RDKit Morgan
-  fingerprints and the highest-similarity standard amino acid is returned.
+  If the input CCD code already has an explicit amino-acid mapping in the
+  amino-acid residue tables, that mapping is reused directly. Otherwise, the
+  CCD entry is compared against canonical amino-acid CCD entries using RDKit
+  Morgan fingerprints and the highest-similarity amino acid is
+  returned. Selenium-containing residues are also compared after conservative
+  selenium-to-sulfur normalization so common analogs such as MSE can map to
+  their sulfur parent without being hard-coded into the amino-acid constants.
 
   Parameters:
     ccd: CCD code string or a :class:`CCD` instance.
+    standard: If ``True``, collapse results to the 20 standard amino
+      acids. If ``False`` (default), allow all canonical residues, including ``SEC`` and
+      ``PYL``.
     cache_path: Local cache file path for the CCD JSON payload.
     overwrite: If ``True``, force a fresh CCD payload download.
     max_age_days: Maximum accepted payload age in days.
     timeout: HTTP timeout in seconds for CCD payload downloads.
 
   Returns:
-    The best-matching standard amino-acid record.
+    The best-matching amino-acid record under the requested mode.
 
   Raises:
     TypeError: If ``ccd`` is not a string or :class:`CCD`.
@@ -150,34 +157,47 @@ def get_ccd_standard_aa(
   else:
     raise TypeError(f"Expected `ccd` to be a str or CCD, found {type(ccd).__name__}.")
 
-  aa_record = AA_RECORDS.get(query_code)
+  aa_record = AA_RECORDS_CANONICAL.get_by_abr(query_code) or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(
+    query_code
+  )
   if aa_record is not None:
-    if aa_record.is_standard:
-      return aa_record
-    if aa_record.standard_equiv_abr is not None:
-      return AA_RECORDS[aa_record.standard_equiv_abr]
+    mapped_record = AA_RECORDS_CANONICAL.get_standard_record(aa_record) if standard else AA_RECORDS_CANONICAL.get_canonical_record(aa_record)
+    if mapped_record is not None:
+      return mapped_record
 
   entries = get_ccd_entries(cache_path=cache_path, overwrite=overwrite, max_age_days=max_age_days, timeout=timeout)
   fp_generator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
-  query_fp = fp_generator.GetFingerprint(ccd_entry.to_mol())
+  query_mol = ccd_entry.to_mol()
+  query_fps = [fp_generator.GetFingerprint(query_mol)]
+  if any(atom.GetAtomicNum() == 34 for atom in query_mol.GetAtoms()):
+    sulfur_query_mol = Chem.RWMol(query_mol)
+    for atom in sulfur_query_mol.GetAtoms():
+      if atom.GetAtomicNum() == 34:
+        atom.SetAtomicNum(16)
+    normalized_query_mol = sulfur_query_mol.GetMol()
+    try:
+      Chem.SanitizeMol(normalized_query_mol)
+      query_fps.append(fp_generator.GetFingerprint(normalized_query_mol))
+    except Exception:
+      logger.debug('Failed to sanitize selenium-normalized CCD "%s"; using original molecule only.', query_code)
 
   best_match: Optional[AARecord] = None
   best_similarity = -1.0
-  for aa in AA_RECORDS.values():
-    if not aa.is_standard:
+  for aa in AA_RECORDS_CANONICAL.values():
+    if standard and aa.standard_equiv_abr is not None:
       continue
-
     standard_ccd = entries.get(aa.abr)
     if standard_ccd is None:
       continue
 
-    similarity = TanimotoSimilarity(query_fp, fp_generator.GetFingerprint(standard_ccd.to_mol()))
+    standard_fp = fp_generator.GetFingerprint(standard_ccd.to_mol())
+    similarity = max(TanimotoSimilarity(query_fp, standard_fp) for query_fp in query_fps)
     if similarity > best_similarity:
       best_similarity = similarity
       best_match = aa
 
   if best_match is None:
-    raise ValueError("Could not compare CCD entry against standard amino acids because no canonical amino-acid CCD entries were available.")
+    raise ValueError("Could not compare CCD entry against amino acids because no matching canonical amino-acid CCD entries were available.")
 
   return best_match
 
@@ -252,7 +272,7 @@ __all__ = [
   "CCD",
   "CCD_ENTRIES_URL",
   "DEFAULT_CCD_CACHE",
-  "get_ccd_standard_aa",
+  "get_ccd_canonical_aa",
   "get_ccd_entries",
   "get_ccd",
 ]

@@ -16,6 +16,7 @@ from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union, Set
 
 import numpy as np
 
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 from neurosnap.log import logger
 from neurosnap.structure.structure import BondType, InteractionType, Structure, StructureEnsemble, StructureStack, _classify_polymer_residue
 
@@ -919,46 +920,13 @@ def _entity_poly_sequence_code(polymer_residues, polymer_type: str) -> str:
 
 def _protein_sequence_token(residue_name: str) -> str:
   """Return a one-letter or CCD token for a protein residue."""
-  if residue_name == "ALA":
-    return "A"
-  if residue_name == "ARG":
-    return "R"
-  if residue_name == "ASN":
-    return "N"
-  if residue_name == "ASP":
-    return "D"
-  if residue_name == "CYS":
-    return "C"
-  if residue_name == "GLN":
-    return "Q"
-  if residue_name == "GLU":
-    return "E"
-  if residue_name == "GLY":
-    return "G"
-  if residue_name == "HIS":
-    return "H"
-  if residue_name == "ILE":
-    return "I"
-  if residue_name == "LEU":
-    return "L"
-  if residue_name == "LYS":
-    return "K"
-  if residue_name == "MET":
-    return "M"
-  if residue_name == "PHE":
-    return "F"
-  if residue_name == "PRO":
-    return "P"
-  if residue_name == "SER":
-    return "S"
-  if residue_name == "THR":
-    return "T"
-  if residue_name == "TRP":
-    return "W"
-  if residue_name == "TYR":
-    return "Y"
-  if residue_name == "VAL":
-    return "V"
+  record = AA_RECORDS_CANONICAL.get_by_abr(residue_name) or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(
+    residue_name
+  )
+  if record is None:
+    return f"({residue_name})"
+  if record.code is not None:
+    return record.code
   return f"({residue_name})"
 
 

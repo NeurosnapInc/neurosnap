@@ -133,14 +133,15 @@ def remove_non_biopolymers(structure: Structure, *, chain: Optional[str] = None)
     ``None``. The input structure is modified in-place.
 
   Notes:
-    Hetero residues are always removed by this filter, even if their residue
-    names overlap with amino-acid or nucleotide dictionaries such as ``UNK``.
-    Amino-acid aliases that map to valid polymer residues, including common
-    protonation or tautomer states such as ``HID`` and ``HIE``, are preserved.
+    Residues are preserved when they classify as valid protein or nucleotide
+    polymer components, even if they were parsed as hetero atoms. Ambiguous
+    placeholders such as ``ASX``, ``GLX``, ``XLE``, and ``UNK`` are removed.
+    Common protonation or tautomer states such as ``HID`` and ``HIE`` are
+    preserved.
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"remove_non_biopolymers() expects a Structure, found {type(structure).__name__}.")
-  remove_residues(structure, lambda residue: residue.hetero or classify_polymer_residue(residue) is None, chain=chain)
+  remove_residues(structure, lambda residue: classify_polymer_residue(residue) is None, chain=chain)
 
 
 def fix_nucleic_termini(structure: Structure, *, strip_3prime: bool = False, chain: Optional[str] = None):

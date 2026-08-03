@@ -19,7 +19,7 @@ import pandas as pd
 
 from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
-from neurosnap.constants.sequence import AA_RECORDS
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NA_DNA_CODES, NA_RNA_CODES, STANDARD_NUCLEOTIDES
 from neurosnap.log import logger
 
@@ -692,13 +692,16 @@ class Structure:
     hetero = self._annotation_export("hetero")
     res_name = self._annotation_export("res_name")
     for atom_index in range(len(self)):
-      if bool(hetero[atom_index]):
-        continue
-      residue_name = str(res_name[atom_index])
+      residue_name = str(res_name[atom_index]).strip().upper()
       if residue_name in STANDARD_NUCLEOTIDES:
         residue_types[atom_index] = "NUCLEOTIDE"
-      elif residue_name in AA_RECORDS:
+      elif (
+        AA_RECORDS_CANONICAL.get_by_abr(residue_name) is not None
+        or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(residue_name) is not None
+      ):
         residue_types[atom_index] = "AMINO_ACID"
+      elif bool(hetero[atom_index]):
+        continue
     return residue_types
 
   def _atom_mask(self, chains: Optional[List[str]] = None) -> np.ndarray:
@@ -1353,7 +1356,11 @@ class Chain:
         # Standard amino acids map directly to one-letter codes. Modified amino
         # acids either get skipped, emitted inline as CCD tokens, or mapped to
         # their declared parent residue when available.
-        residue_record = AA_RECORDS[residue_name]
+        residue_record = AA_RECORDS_CANONICAL.get_by_abr(residue_name) or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(
+          residue_name
+        )
+        if residue_record is None:
+          raise ValueError(f'Unsupported protein residue "{residue_name}" encountered during sequence extraction.')
         if residue_record.code is not None:
           residue_token = residue_record.code
         elif not include_modifications:
@@ -1362,10 +1369,9 @@ class Chain:
           residue_token = f"({residue_record.abr})"
         else:
           residue_token = None
-          if residue_record.standard_equiv_abr is not None:
-            parent_record = AA_RECORDS.get(residue_record.standard_equiv_abr)
-            if parent_record is not None:
-              residue_token = parent_record.code
+          parent_record = AA_RECORDS_CANONICAL.get_canonical_record(residue_record)
+          if parent_record is not None:
+            residue_token = parent_record.code
           if residue_token is None:
             if on_unknown_modified == "unknown":
               residue_token = "X"
@@ -1759,7 +1765,10 @@ def _polymer_types_compatible(requested_polymer_type: str, residue_polymer_type:
 def _classify_polymer_residue(residue: Residue) -> Optional[str]:
   """Classify a residue as protein, DNA, RNA, or non-polymer."""
   residue_name = residue.res_name.strip().upper()
-  if residue_name in AA_RECORDS:
+  if (
+    AA_RECORDS_CANONICAL.get_by_abr(residue_name) is not None
+    or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(residue_name) is not None
+  ):
     return "protein"
   if residue_name in NA_DNA_CODES:
     return "dna"

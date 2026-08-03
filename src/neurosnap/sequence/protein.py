@@ -3,67 +3,12 @@ from collections import Counter
 from typing import Dict
 
 from neurosnap.constants.sequence import (
-  AA_ALIASES,
   AA_MASS_PROTEIN_AVG,
-  AA_RECORDS,
+  AA_RECORDS_AMBIGUOUS,
+  AA_RECORDS_CANONICAL,
   DEFAULT_PKA,
-  AARecord,
   STANDARD_AAs,
 )
-
-
-def getAA(query: str, *, non_standard: str = "reject") -> AARecord:
-  """Resolve an amino acid identifier to a canonical record.
-
-  This function accepts either a **1-letter code**, **3-letter abbreviation**,
-  or **full name** (case-insensitive) and returns the corresponding
-  :class:`AARecord`.
-
-  Parameters
-  ----------
-  query : str
-      Amino acid identifier (1-letter code, 3-letter CCD abbreviation,
-      or full name).
-  non_standard : {"reject", "convert", "allow"}, optional
-      Policy for handling non-standard amino acids (default: "reject"):
-
-      - "reject": Raise an error if the amino acid is non-standard.
-      - "convert": Map non-standard amino acids to their closest
-        standard equivalent (e.g., MSE → MET).
-      - "allow": Return the non-standard amino acid unchanged.
-
-  Returns
-  -------
-  AARecord
-      Canonical amino-acid record. Important fields include ``code``, ``abr``,
-      ``name``, ``is_standard``, and ``standard_equiv_abr``.
-
-  Raises
-  ------
-  ValueError
-      If `query` does not match any supported amino acid identifier.
-      If `non_standard="reject"` and the amino acid is non-standard.
-      If `non_standard="convert"` but no standard equivalent is defined.
-  """
-  query = query.upper()
-  try:
-    abr = AA_ALIASES[query]
-    rec = AA_RECORDS[abr]
-  except KeyError:
-    raise ValueError(f"Unknown amino acid identifier: '{query}'. Expected a 1-letter code, 3-letter code, or full name.")
-
-  if not rec.is_standard:
-    if non_standard == "reject":
-      raise ValueError(
-        f"Encountered non-standard amino acid '{rec.abr}' ({rec.name}). "
-        "To handle these, set `non_standard='allow'` to keep them "
-        "or `non_standard='convert'` to map them to a standard equivalent."
-      )
-    elif non_standard == "convert":
-      if not rec.standard_equiv_abr:
-        raise ValueError(f"Non-standard amino acid '{rec.abr}' ({rec.name}) does not have a standard equivalent and cannot be converted.")
-      rec = AA_RECORDS[rec.standard_equiv_abr]
-  return rec
 
 
 def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool = True, uppercase=True, clean_whitespace: bool = True) -> str:
@@ -106,7 +51,11 @@ def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool =
       if non_standard == "allow":
         pass
       elif non_standard == "convert":
-        x = getAA(x, non_standard="convert").code
+        record = AA_RECORDS_AMBIGUOUS.get_by_code(x)
+        canonical_record = None if record is None else AA_RECORDS_CANONICAL.get_canonical_record(record)
+        if canonical_record is None or canonical_record.code is None:
+          raise ValueError(f'Invalid amino acid "{x}" specified at position {i}.')
+        x = canonical_record.code
       else:
         raise ValueError(f'Invalid amino acid "{x}" specified at position {i}.')
     new_seq += x

@@ -318,7 +318,9 @@ def test_remove_non_biopolymers_keeps_protein_alias_residues():
       {"chain_id": "A", "res_id": 1, "res_name": "HID", "atom_name": "CA", "element": "C"},
       {"chain_id": "A", "res_id": 2, "res_name": "HIE", "atom_name": "N", "element": "N"},
       {"chain_id": "A", "res_id": 2, "res_name": "HIE", "atom_name": "CA", "element": "C"},
-      {"chain_id": "A", "res_id": 3, "res_name": "ZN", "atom_name": "ZN", "element": "ZN", "hetero": True},
+      {"chain_id": "A", "res_id": 3, "res_name": "ASH", "atom_name": "N", "element": "N"},
+      {"chain_id": "A", "res_id": 3, "res_name": "ASH", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 4, "res_name": "ZN", "atom_name": "ZN", "element": "ZN", "hetero": True},
     ]
   )
 
@@ -327,7 +329,25 @@ def test_remove_non_biopolymers_keeps_protein_alias_residues():
   residue_names = structure.to_dataframe()["res_name"].tolist()
   assert residue_names.count("HID") == 2
   assert residue_names.count("HIE") == 2
+  assert residue_names.count("ASH") == 2
   assert "ZN" not in residue_names
+
+
+def test_remove_non_biopolymers_removes_ambiguous_amino_acid_placeholders():
+  structure = _make_structure_from_records(
+    [
+      {"chain_id": "A", "res_id": 1, "res_name": "ASX", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 2, "res_name": "GLX", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 3, "res_name": "XLE", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 4, "res_name": "UNK", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 5, "res_name": "ALA", "atom_name": "CA", "element": "C"},
+    ]
+  )
+
+  remove_non_biopolymers(structure)
+
+  residue_names = structure.to_dataframe()["res_name"].tolist()
+  assert residue_names == ["ALA"]
 
 
 def test_filters_require_structure():

@@ -294,7 +294,7 @@ def parse_pdb(
   """Parse a PDB file into Neurosnap structure containers.
 
   Parsing follows the fixed-width PDB record layout used by BioPython's parser
-  but builds Neurosnap :class:`Structure` entities.Parsed models are first
+  but builds Neurosnap :class:`Structure` entities. Parsed models are first
   collected into a :class:`StructureEnsemble` and are optionally converted into a
   :class:`StructureStack` at the end.
 
@@ -313,25 +313,31 @@ def parse_pdb(
   to share generic names such as ``C`` or ``O``.
 
   Repeated ``CONECT`` records are interpreted as higher bond order using a
-  directed-count collapse:
-    bond_type = max(count(atom_i -> atom_j), count(atom_j -> atom_i))
+  directed-count collapse: ``bond_order = max(count(atom_i -> atom_j),
+  count(atom_j -> atom_i))``.
+
   This means repeated records in one direction can encode double or triple
   bonds, while mirrored ``CONECT`` entries from both atoms do not artificially
   inflate bond order.
 
-  Parameters:
-    pdb: PDB filepath or open file handle.
-    return_type: Output container type. ``"ensemble"`` always returns a
+  Parameters
+  ----------
+  pdb
+      PDB filepath or open file handle.
+  return_type
+      Output container type. ``"ensemble"`` always returns a
       :class:`StructureEnsemble`, ``"stack"`` requires stack-compatible models,
       and ``"auto"`` returns a :class:`StructureStack` when possible or falls
       back to a :class:`StructureEnsemble`.
-    malformed_conect: How malformed ``CONECT`` records should be handled.
-      ``"strict"`` raises immediately, ``"warn"`` logs a warning and skips the
-      bad record, and ``"ignore"`` silently skips it.
+  malformed_conect
+      How malformed ``CONECT`` records should be handled. ``"strict"`` raises
+      immediately, ``"warn"`` logs a warning and skips the bad record, and
+      ``"ignore"`` silently skips it.
 
-  Returns:
-    A :class:`StructureEnsemble` or :class:`StructureStack` depending on
-    ``return_type`` and model compatibility.
+  Returns
+  -------
+  StructureEnsemble or StructureStack
+      Parsed container selected from ``return_type`` and model compatibility.
   """
   if return_type not in {"ensemble", "stack", "auto"}:
     raise ValueError('return_type must be one of "ensemble", "stack", or "auto".')

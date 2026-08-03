@@ -16,7 +16,8 @@ def getAA(query: str, *, non_standard: str = "reject") -> AARecord:
   """Resolve an amino acid identifier to a canonical record.
 
   This function accepts either a **1-letter code**, **3-letter abbreviation**,
-  or **full name** (case-insensitive) and returns the corresponding `AARecord`.
+  or **full name** (case-insensitive) and returns the corresponding
+  :class:`AARecord`.
 
   Parameters
   ----------
@@ -34,13 +35,8 @@ def getAA(query: str, *, non_standard: str = "reject") -> AARecord:
   Returns
   -------
   AARecord
-      A record containing:
-      - `code`: 1-letter code (may be "?" if unavailable for non-standard AAs).
-      - `abr`: 3-letter abbreviation.
-      - `name`: Full amino acid name.
-      - `is_standard`: Whether the residue is one of the 20 canonical amino acids.
-      - `standard_equiv_abr`: 3-letter abbreviation of the standard equivalent
-        (if applicable).
+      Canonical amino-acid record. Important fields include ``code``, ``abr``,
+      ``name``, ``is_standard``, and ``standard_equiv_abr``.
 
   Raises
   ------

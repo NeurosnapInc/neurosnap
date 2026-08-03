@@ -220,30 +220,36 @@ class Structure:
     onto the new atom table automatically so the subset can be exported
     directly with :meth:`save_pdb` or :meth:`save_cif`.
 
-    Parameters:
-      chains: Optional chain IDs to keep. If ``None``, atoms from all chains
-        remain eligible for selection.
-      residues: Optional residue selectors to keep. Supported selector forms
-        are:
-          - integer residue IDs, matched across all selected chains
-          - :class:`Residue` objects
-          - ``(chain_id, res_id)`` tuples
-          - ``(chain_id, res_id, ins_code)`` tuples
-          - full residue-key tuples
-            ``(chain_id, res_id, ins_code, res_name, hetero)``
-      predicate: Optional atom-level predicate. When provided, each atom is
-        exposed as an immutable :class:`Atom` view and kept only if the
-        predicate returns a truthy value.
+    Parameters
+    ----------
+    chains
+        Optional chain IDs to keep. If ``None``, atoms from all chains remain
+        eligible for selection.
+    residues
+        Optional residue selectors to keep. Supported selector forms are
+        integer residue IDs matched across the selected chains,
+        :class:`Residue` objects, ``(chain_id, res_id)`` tuples,
+        ``(chain_id, res_id, ins_code)`` tuples, and full residue-key tuples
+        ``(chain_id, res_id, ins_code, res_name, hetero)``.
+    predicate
+        Optional atom-level predicate. When provided, each atom is exposed as
+        an immutable :class:`Atom` view and kept only if the predicate returns
+        a truthy value.
 
-    Returns:
-      A new :class:`Structure` containing only atoms that satisfy every
-      provided filter.
+    Returns
+    -------
+    Structure
+        A new :class:`Structure` containing only atoms that satisfy every
+        provided filter.
 
-    Raises:
-      ValueError: If a requested chain or residue selector is not present in
-        the structure.
-      TypeError: If ``predicate`` is not callable or a residue selector has an
-        unsupported type/shape.
+    Raises
+    ------
+    ValueError
+        If a requested chain or residue selector is not present in the
+        structure.
+    TypeError
+        If ``predicate`` is not callable or a residue selector has an
+        unsupported type or shape.
     """
     atom_mask = _structure_selection_mask(self, chains=chains, residues=residues, predicate=predicate)
     return _subset_structure(self, atom_mask)

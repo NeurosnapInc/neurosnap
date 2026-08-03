@@ -501,90 +501,97 @@ def calculate_ipSAE(
   and LIS. Symmetric summaries include both per-direction asymmetry and
   pairwise maxima **and** minima.
 
-  Alignment contract:
-    The function first derives a residue-level order from structure
-    (standard amino acids / nucleotides only; one representative atom per
-    residue). If payload shapes do not match, it falls back to a
-    token-expanded order where non-standard residues contribute one site per
-    heavy atom. ``plddt`` (N,) and ``pae_matrix`` (N, N) must match whichever
-  order is selected. ``input_format`` can be used to select a specific
-  alignment strategy for AF3-like payloads.
+  Alignment contract
+  ------------------
+  The function first derives a residue-level order from the structure
+  (standard amino acids or nucleotides only; one representative atom per
+  residue). If the payload shapes do not match, it falls back to token-expanded
+  orders where non-standard residues contribute one or more heavy-atom sites.
+  ``plddt`` with shape ``(N,)`` and ``pae_matrix`` with shape ``(N, N)`` must
+  match whichever order is selected. ``input_format`` can be used to select a
+  specific alignment strategy for AF3-like payloads.
 
-  Args:
-    structure: Single-model Neurosnap :class:`Structure` containing the complex.
-    plddt: Per-site pLDDT aligned to the selected analysis order (normalized to [0-100] NOT [0-1]).
-    pae_matrix: Site-site PAE (Å) aligned to the same order.
-    input_format: Payload layout selector. Supported values are ``"auto"``,
-      ``"boltz2"``, ``"chai1"``, and ``"protenix"``. ``"auto"`` preserves
-      the historical shape-based fallback behavior.
-    pae_cutoff: PAE threshold (Å) for ipSAE and counting “valid” pairs.
-    dist_cutoff: Distance cutoff (Å) for interface-restricted counts.
-    pDockQ_cutoff: Distance cutoff (Å) used by pDockQ/pDockQ2 neighbor tests.
-    return_pml: If True, returns a PyMOL coloring alias script under ``pml``.
+  Parameters
+  ----------
+  structure
+      Single-model Neurosnap :class:`Structure` containing the complex.
+  plddt
+      Per-site pLDDT aligned to the selected analysis order and normalized to
+      ``[0, 100]``.
+  pae_matrix
+      Site-site PAE matrix in angstroms aligned to the same order.
+  input_format
+      Payload layout selector. Supported values are ``"auto"``, ``"boltz2"``,
+      ``"chai1"``, and ``"protenix"``. ``"auto"`` preserves the historical
+      shape-based fallback behavior.
+  pae_cutoff
+      PAE threshold in angstroms for ipSAE and counting valid pairs.
+  dist_cutoff
+      Distance cutoff in angstroms for interface-restricted counts.
+  pDockQ_cutoff
+      Distance cutoff in angstroms used by pDockQ and pDockQ2 neighbor tests.
+  return_pml
+      If ``True``, include a PyMOL coloring alias script under ``pml``.
 
-  Returns:
-    A dictionary with the following top-level keys:
+  Returns
+  -------
+  dict
+      Dictionary containing:
 
-    - **by_residue**: Per-direction arrays (length N) for each chain pair.
-      The key name is historical; entries are per analysis site and may include
-      atom-level sites for non-standard residues in token-expanded mode:
-      - ``iptm_d0chn``: ipTM using d0 based on total residues in the pair.
-      - ``ipsae_d0chn``: ipSAE with PAE cutoff, same d0 as above.
-      - ``ipsae_d0dom``: ipSAE with PAE cutoff, d0 from count of residues
-        that have inter-chain PAE < cutoff (domain-level).
-      - ``ipsae_d0res``: ipSAE with PAE cutoff, d0 per row from the number
-        of valid partners in the other chain (residue-level).
-      - ``n0res_byres`` / ``d0res_byres``: Companion per-row counts and d0.
-    - **asym**: Best single-site values per direction (A→B, B→A) and
-      the site identifier strings that achieve them:
-      - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
-      - ``*_res`` entries contain the winning residue labels.
-    - **max**: Symmetric maxima for each metric across directions plus
-      the site label responsible for the maximum:
-      - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
-      - ``*_res`` contain the max-residue labels.
-    - **min**: Symmetric minima for each metric across directions plus
-      the site label responsible for the minimum:
-      - ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``
-      - ``*_res`` contain the min-residue labels.
-    - **counts**: Supporting counts and d0 companions:
-      - ``n0chn``, ``d0chn``: Total residues and d0 for each chain pair.
-      - ``n0dom``, ``d0dom`` and their ``*_max``/``*_min`` counterparts.
-      - ``n0res``, ``d0res`` and their ``*_max``/``*_min`` counterparts.
-      - Pair/unique-residue tallies with and without distance constraints.
-    - **scores**: Interface-level auxiliary scores:
-      - ``pDockQ``, ``pDockQ2``, ``LIS``.
-    - **params**: The parameters actually used (cutoffs only).
-    - **pml**: Optional PyMOL alias script string (if ``return_pml`` is True).
-    - **residue_order**: Metadata for the selected analysis order:
-      - ``names`` (3-letter codes), ``chains`` (chain IDs), ``numbers`` (seq IDs).
+      ``by_residue``
+          Per-direction arrays for each chain pair, including
+          ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``,
+          ``n0res_byres``, and ``d0res_byres``.
+      ``asym``
+          Best single-site values per direction and the residue labels that
+          achieve them.
+      ``max``
+          Symmetric maxima for each metric across both directions.
+      ``min``
+          Symmetric minima for each metric across both directions.
+      ``counts``
+          Supporting count and d0 summaries for chain, domain, and residue
+          granularities.
+      ``scores``
+          Auxiliary interface-level scores including ``pDockQ``, ``pDockQ2``,
+          and ``LIS``.
+      ``params``
+          Effective cutoff parameters used for the calculation.
+      ``pml``
+          Optional PyMOL alias script string when ``return_pml`` is ``True``.
+      ``residue_order``
+          Metadata describing the selected analysis order, with ``names``,
+          ``chains``, and ``numbers`` arrays.
 
-  Raises:
-    ValueError: If no usable analysis sites are found, or if ``plddt``/``pae_matrix``
-      shapes do not match either the residue-level or token-expanded order.
+  Raises
+  ------
+  ValueError
+      If no usable analysis sites are found, or if ``plddt`` and
+      ``pae_matrix`` do not match any supported alignment order.
 
-  Notes:
-    - Representative atom for standard residues:
-      * Proteins: Cβ (GLY→Cα; fallback to Cα if Cβ missing).
-      * Nucleic acids: prefer C3′/C3*, then C1′/C1*, then P.
-    - Non-standard residues are handled in multiple modes:
-      * Residue-level mode (default): non-standard residues are removed from
-        pLDDT/PAE when payload length matches the raw polymer residue count.
-      * Token-expanded mode (auto fallback): if payload length instead matches
-        one representative site per standard residue plus all heavy atoms for
-        non-standard residues, those non-standard atoms are retained as sites.
-      * ``boltz2``: one token per non-hetero residue, hetero residues expanded
-        to heavy atoms.
-      * ``chai1``: standard residues use representative sites, modified residues
-        in protein chains expand to heavy atoms, and standalone non-standard
-        chains contribute both a residue-level site and heavy-atom sites.
-      * ``protenix``: uses the hetero-token-expanded site order for PAE and
-        atom-level pLDDT aggregated to the selected sites.
-    - Chain-type classification (protein vs nucleic acid) sets a minimum d0
-      (2.0 for any pair containing NA; 1.0 otherwise) and influences d0
-      via the standard length-based formula.
-    - pDockQ neighbors use ``pDockQ_cutoff`` on the representative-atom distances.
-    - LIS averages ``(12 - PAE) / 12`` for PAE ≤ 12 Å over inter-chain pairs only.
+  Notes
+  -----
+  Standard residues use representative atoms. Proteins prefer C-beta
+  (glycine uses C-alpha, and C-alpha is also the fallback if C-beta is
+  missing). Nucleic acids prefer ``C3'`` or ``C3*``, then ``C1'`` or ``C1*``,
+  then ``P``.
+
+  Non-standard residues are handled in multiple modes. Residue-level mode
+  removes them when the payload length matches the raw polymer residue count.
+  Token-expanded fallback keeps one representative site per standard residue
+  plus heavy atoms for non-standard residues. ``boltz2`` uses one token per
+  non-hetero residue and expands hetero residues to heavy atoms. ``chai1``
+  uses representative sites for standard residues, expands modified residues
+  inside protein chains to heavy atoms, and gives standalone non-standard
+  chains both a residue-level site and heavy-atom sites. ``protenix`` uses the
+  hetero-token-expanded site order for PAE and aggregates atom-level pLDDT onto
+  the selected sites.
+
+  Chain-type classification sets the minimum d0 value to ``2.0`` for pairs
+  containing nucleic acids and ``1.0`` otherwise, and still applies the
+  standard length-based d0 formula. pDockQ neighbors use ``pDockQ_cutoff`` on
+  representative-atom distances. LIS averages ``(12 - PAE) / 12`` over
+  inter-chain pairs with ``PAE <= 12`` angstroms.
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"calculate_ipSAE() expects a Structure, found {type(structure).__name__}.")
@@ -1155,24 +1162,19 @@ def extract_interchain_metrics(res: dict) -> dict:
   primary ipSAE/ipTM scores and auxiliary interface predictors like pDockQ, pDockQ2,
   and LIS.
 
-  Args:
-      res (dict): Output dictionary from `calculate_ipSAE()`. Must contain "asym" and
-          "scores" keys as returned by the main ipSAE computation.
+  Parameters
+  ----------
+  res
+      Output dictionary from :func:`calculate_ipSAE`. It must contain ``asym``
+      and ``scores`` entries.
 
-  Returns:
-      dict: Nested dictionary of the form:
-          {
-            "iptm_d0chn": {chain1: {chain2: float}},
-            "ipsae_d0chn": {chain1: {chain2: float}},
-            "ipsae_d0dom": {chain1: {chain2: float}},
-            "ipsae_d0res": {chain1: {chain2: float}},
-            "pDockQ": {chain1: {chain2: float}},
-            "pDockQ2": {chain1: {chain2: float}},
-            "LIS": {chain1: {chain2: float}},
-          }
-
-          Each key corresponds to a metric describing the confidence or stability of
-          the interaction between two chains (e.g., "A"→"B" and "B"→"A").
+  Returns
+  -------
+  dict
+      Nested dictionary keyed by metric name. Returned metrics are
+      ``iptm_d0chn``, ``ipsae_d0chn``, ``ipsae_d0dom``, ``ipsae_d0res``,
+      ``pDockQ``, ``pDockQ2``, and ``LIS``. Each metric maps
+      ``chain1 -> chain2 -> float``.
   """
   return {
     # Inter-chain ipTM: global interface score using d₀ based on total chain length.
@@ -1205,17 +1207,18 @@ def extract_minimum_interchain_metrics(res: dict) -> dict:
   This helper returns the minimum values of the ipSAE and ipTM metric families
   representing the worst-case interface confidence between chain pairs.
 
-  Args:
-      res (dict): Output dictionary from `calculate_ipSAE()`. Must contain the "min" key.
+  Parameters
+  ----------
+  res
+      Output dictionary from :func:`calculate_ipSAE`. It must contain the
+      ``min`` entry.
 
-  Returns:
-      dict: Nested dictionary of the form:
-          {
-            "iptm_d0chn": {chain1: {chain2: float}},
-            "ipsae_d0chn": {chain1: {chain2: float}},
-            "ipsae_d0dom": {chain1: {chain2: float}},
-            "ipsae_d0res": {chain1: {chain2: float}},
-          }
+  Returns
+  -------
+  dict
+      Nested dictionary containing ``iptm_d0chn``, ``ipsae_d0chn``,
+      ``ipsae_d0dom``, and ``ipsae_d0res`` as ``chain1 -> chain2 -> float``
+      mappings.
   """
   if not isinstance(res, dict):
     raise TypeError("Input must be a dictionary.")
@@ -1233,4 +1236,3 @@ def extract_minimum_interchain_metrics(res: dict) -> dict:
     "ipsae_d0dom": res["min"]["ipsae_d0dom"],
     "ipsae_d0res": res["min"]["ipsae_d0res"],
   }
-

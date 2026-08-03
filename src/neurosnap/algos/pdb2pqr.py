@@ -56,25 +56,35 @@ def assign_pqr(
   """Assign PDB2PQR radii and partial charges to a local Structure.
 
   The returned structure is rebuilt from the PDB2PQR-updated atom table and
-  includes two float annotations:
-    - ``partial_charge``
-    - ``radius``
+  includes ``partial_charge`` and ``radius`` float annotations.
 
-  Parameters:
-    structure: Input single-model structure.
-    forcefield: PDB2PQR forcefield name.
-    ffout: Optional alternate output naming scheme.
-    neutraln: Make the N-terminus neutral. Only supported with PARSE.
-    neutralc: Make the C-terminus neutral. Only supported with PARSE.
-    assign_only: Assign parameters without repair, debumping, or hydrogen optimization.
-    debump: Run the PDB2PQR debumping routines.
-    optimize: Optimize hydrogens when ``assign_only`` is false.
+  Parameters
+  ----------
+  structure
+      Input single-model structure.
+  forcefield
+      PDB2PQR forcefield name.
+  ffout
+      Optional alternate output naming scheme.
+  neutraln
+      Make the N-terminus neutral. Only supported with PARSE.
+  neutralc
+      Make the C-terminus neutral. Only supported with PARSE.
+  assign_only
+      Assign parameters without repair, debumping, or hydrogen optimization.
+  debump
+      Run the PDB2PQR debumping routines.
+  optimize
+      Optimize hydrogens when ``assign_only`` is ``False``.
 
-  Returns:
-    A new :class:`Structure` carrying PDB2PQR geometry updates and annotations.
+  Returns
+  -------
+  Structure
+      A new :class:`Structure` carrying PDB2PQR geometry updates and annotations.
 
-  Example:
-    Basic structure-first PQR assignment and writing::
+  Examples
+  --------
+  Basic structure-first PQR assignment and writing::
 
       from neurosnap.io.pdb import parse_pdb
       from neurosnap.algos.pdb2pqr import assign_pqr
@@ -97,7 +107,7 @@ def assign_pqr(
 
       save_pqr(pqr_structure, "test_output.pqr", include_header=True)
 
-    Quick smoke test on a standard PDB file::
+  Quick smoke test on a standard PDB file::
 
       from neurosnap.io.pdb import parse_pdb
       from neurosnap.algos.pdb2pqr import assign_pqr
@@ -109,7 +119,7 @@ def assign_pqr(
         "radius" in out.atom_annotations.dtype.names,
       )
 
-    Inspect any automatic remediations or charge warnings::
+  Inspect any automatic remediations or charge warnings::
 
       from neurosnap.io.pdb import parse_pdb
       from neurosnap.algos.pdb2pqr import assign_pqr

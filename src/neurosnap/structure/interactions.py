@@ -7,7 +7,7 @@ import numpy as np
 from neurosnap.constants.structure import HYDROPHOBIC_RESIDUES
 
 from .interaction_report import InteractionEntity, InteractionReport
-from .structure import Atom, Residue, Structure
+from .structure import Residue, Structure
 
 
 def find_disulfide_bonds(structure: Structure, chain: Optional[str] = None, threshold: float = 2.05) -> List[Tuple[Residue, Residue]]:
@@ -249,15 +249,6 @@ def calculate_interface_hydrogen_bonding_residues(
         hydrogen_bonding_residues.add(res2)
 
   return len(hydrogen_bonding_residues)
-
-
-def _atom_by_name(residue: Residue, atom_name: str) -> Optional[Atom]:
-  """Return an atom from a residue by name."""
-  atom_name = atom_name.strip().upper()
-  for atom in residue.atoms():
-    if atom.atom_name.strip().upper() == atom_name:
-      return atom
-  return None
 
 
 def _validate_hydrogen_bond_inputs(structure: Structure, chain: Optional[str], chain_other: Optional[str]):

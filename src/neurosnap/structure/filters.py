@@ -123,7 +123,7 @@ def remove_nucleotides(structure: Structure, *, chain: Optional[str] = None):
 
 
 def remove_non_biopolymers(structure: Structure, *, chain: Optional[str] = None):
-  """Remove non-protein and non-nucleotide residues from a structure in-place.
+  """Remove non-biopolymer residues from a structure in-place.
 
   Parameters:
     structure: Input :class:`Structure`.
@@ -135,6 +135,8 @@ def remove_non_biopolymers(structure: Structure, *, chain: Optional[str] = None)
   Notes:
     Hetero residues are always removed by this filter, even if their residue
     names overlap with amino-acid or nucleotide dictionaries such as ``UNK``.
+    Amino-acid aliases that map to valid polymer residues, including common
+    protonation or tautomer states such as ``HID`` and ``HIE``, are preserved.
   """
   if not isinstance(structure, Structure):
     raise TypeError(f"remove_non_biopolymers() expects a Structure, found {type(structure).__name__}.")

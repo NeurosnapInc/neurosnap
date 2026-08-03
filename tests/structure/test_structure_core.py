@@ -311,6 +311,25 @@ def test_remove_non_biopolymers_removes_hetero_unk_ligand():
   assert structure.to_dataframe().query("chain == '' and res_id == 0 and res_name == 'UNK'").empty
 
 
+def test_remove_non_biopolymers_keeps_protein_alias_residues():
+  structure = _make_structure_from_records(
+    [
+      {"chain_id": "A", "res_id": 1, "res_name": "HID", "atom_name": "N", "element": "N"},
+      {"chain_id": "A", "res_id": 1, "res_name": "HID", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 2, "res_name": "HIE", "atom_name": "N", "element": "N"},
+      {"chain_id": "A", "res_id": 2, "res_name": "HIE", "atom_name": "CA", "element": "C"},
+      {"chain_id": "A", "res_id": 3, "res_name": "ZN", "atom_name": "ZN", "element": "ZN", "hetero": True},
+    ]
+  )
+
+  remove_non_biopolymers(structure)
+
+  residue_names = structure.to_dataframe()["res_name"].tolist()
+  assert residue_names.count("HID") == 2
+  assert residue_names.count("HIE") == 2
+  assert "ZN" not in residue_names
+
+
 def test_filters_require_structure():
   ensemble = parse_ensemble(PDB_MONO)
   with pytest.raises(TypeError):

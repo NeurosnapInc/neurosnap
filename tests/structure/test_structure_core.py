@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from neurosnap.structure.structure import Structure
+from neurosnap.structure.structure import BondType, InteractionType, Structure
 from neurosnap.structure import (
   ca_distance_matrix,
   calculate_distance_matrix,
@@ -90,6 +90,29 @@ def test_parse_local_pdb_and_dataframe():
   assert "x" in dataframe.columns
   assert "<Structure Ensemble:" in repr(ensemble)
   assert "<Structure:" in repr(structure)
+
+
+def test_structure_native_append_operations_fill_defaults_and_return_indices():
+  structure = Structure(remove_annotations=False)
+
+  atom_indices = structure.add_atoms(
+    [(0.0, 1.0, 2.0), (1.0, 2.0, 3.0)],
+    [
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "N", "element": "N"},
+      {"chain_id": "A", "res_id": 1, "res_name": "GLY", "atom_name": "H", "element": "H", "atom_id": 7},
+    ],
+  )
+  bond_indices = structure.add_bonds([(atom_indices[0], atom_indices[1], 1, BondType.COVALENT)])
+  interaction_index = structure.add_interaction(atom_indices[0], atom_indices[1], InteractionType.HYDROGEN_BOND)
+
+  assert atom_indices == [0, 1]
+  assert bond_indices == [0]
+  assert interaction_index == 0
+  assert len(structure) == 2
+  assert structure.atom_annotations["occupancy"].tolist() == [1.0, 1.0]
+  assert structure.atom_annotations["atom_id"].tolist() == [0, 7]
+  assert tuple(structure.bonds[0]) == (0, 1, 1, int(BondType.COVALENT))
+  assert tuple(structure.interactions[0]) == (0, 1, int(InteractionType.HYDROGEN_BOND))
 
 
 def test_models_chains_and_sequence():

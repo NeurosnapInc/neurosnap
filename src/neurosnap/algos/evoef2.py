@@ -2011,7 +2011,10 @@ def _optimize_site_sequentially(
 
 def _infer_element(atom_name: str) -> str:
   """Infer a simple element symbol from a PDB-style atom name."""
-  stripped = "".join(ch for ch in atom_name.strip() if ch.isalpha())
+  name = atom_name.strip()
+  if name[:1].upper() == "H" or (name[:1].isdigit() and name[1:2].upper() == "H"):
+    return "H"
+  stripped = "".join(ch for ch in name if ch.isalpha())
   if not stripped:
     return ""
   if stripped[:2].upper() in {"CL", "BR", "NA", "MG", "FE", "ZN", "CA", "MN", "CU"}:

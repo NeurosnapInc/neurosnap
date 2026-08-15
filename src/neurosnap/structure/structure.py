@@ -169,6 +169,24 @@ class Structure:
     if remove_annotations is True:
       self._remove_empty_annotations()
 
+  @classmethod
+  def empty_like(cls, template: "Structure", *, copy_metadata: bool = False) -> "Structure":
+    """Return an empty structure with the same array schemas as ``template``."""
+    if not isinstance(template, Structure):
+      raise TypeError(f"empty_like() expects a Structure, found {type(template).__name__}.")
+    structure = cls(remove_annotations=False)
+    structure._dtype_atoms = template._dtype_atoms
+    structure._dtype_atom_annotations = template._dtype_atom_annotations
+    structure._dtype_bond = template._dtype_bond
+    structure._dtype_interaction = template._dtype_interaction
+    structure.atoms = np.zeros(0, dtype=structure._dtype_atoms)
+    structure.atom_annotations = np.zeros(0, dtype=structure._dtype_atom_annotations)
+    structure.bonds = np.zeros(0, dtype=structure._dtype_bond)
+    structure.interactions = np.zeros(0, dtype=structure._dtype_interaction)
+    if copy_metadata:
+      structure.metadata = dict(template.metadata)
+    return structure
+
   def __len__(self) -> int:
     """Return the number of atoms in the structure."""
     return len(self.atoms)
@@ -406,6 +424,96 @@ class Structure:
       if residue_key in residue_map:
         self.atom_annotations["res_id"][atom_index] = residue_map[residue_key]
         self.atom_annotations["ins_code"][atom_index] = ""
+
+  def add_atom(
+    self,
+    x: float,
+    y: float,
+    z: float,
+    *,
+    annotations: Optional[Mapping[str, Any]] = None,
+    **annotation_values: Any,
+  ) -> int:
+    """Append one atom and return its new atom index.
+
+    Missing annotation fields are filled from the structure defaults. Unknown
+    annotation names are rejected so callers cannot silently lose metadata.
+    """
+    return self.add_atoms([(x, y, z)], [dict(annotations or {}, **annotation_values)])[0]
+
+  def add_atoms(self, coords: Sequence[Sequence[float]], annotations: Sequence[Mapping[str, Any]]) -> List[int]:
+    """Append multiple atoms and return their new atom indices."""
+    if len(coords) != len(annotations):
+      raise ValueError(f"coords and annotations must contain the same number of rows; found {len(coords)} and {len(annotations)}.")
+    if len(coords) == 0:
+      return []
+
+    coords_array = np.asarray(coords, dtype=np.float32)
+    if coords_array.ndim != 2 or coords_array.shape[1] != 3:
+      raise ValueError("Atom coordinates must have shape (n_atoms, 3).")
+
+    unknown = sorted(set().union(*(set(row) for row in annotations)) - set(self._dtype_atom_annotations.names))
+    if unknown:
+      raise KeyError(f"Unknown atom annotation(s): {', '.join(unknown)}.")
+
+    atom_rows = np.empty(len(coords_array), dtype=self._dtype_atoms)
+    atom_rows["x"] = coords_array[:, 0]
+    atom_rows["y"] = coords_array[:, 1]
+    atom_rows["z"] = coords_array[:, 2]
+
+    annotation_rows = np.empty(len(coords_array), dtype=self._dtype_atom_annotations)
+    for name in self._dtype_atom_annotations.names:
+      annotation_rows[name] = self._default_fill_value(name, self._dtype_atom_annotations.fields[name][0])
+    for row_index, values in enumerate(annotations):
+      for name, value in values.items():
+        annotation_rows[name][row_index] = value
+
+    start_index = len(self)
+    self.atoms = np.concatenate((self.atoms, atom_rows))
+    self.atom_annotations = np.concatenate((self.atom_annotations, annotation_rows))
+    return list(range(start_index, start_index + len(coords_array)))
+
+  def add_bond(self, atom_i: int, atom_j: int, bond_order: int = 1, bond_type: Union[int, BondType] = BondType.COVALENT) -> int:
+    """Append one bond row and return its new bond index."""
+    return self.add_bonds([(atom_i, atom_j, bond_order, int(bond_type))])[0]
+
+  def add_bonds(self, bonds: Sequence[Tuple[int, int, int, Union[int, BondType]]]) -> List[int]:
+    """Append multiple bond rows and return their new bond indices."""
+    if not bonds:
+      return []
+    rows = []
+    for atom_i, atom_j, bond_order, bond_type in bonds:
+      atom_i = int(atom_i)
+      atom_j = int(atom_j)
+      if atom_i == atom_j:
+        raise ValueError("Bond endpoints must refer to two different atoms.")
+      if atom_i < 0 or atom_j < 0 or atom_i >= len(self) or atom_j >= len(self):
+        raise IndexError("Bond atom index is outside the structure atom table.")
+      rows.append((atom_i, atom_j, int(bond_order), int(bond_type)))
+    start_index = len(self.bonds)
+    self.bonds = np.concatenate((self.bonds, np.array(rows, dtype=self._dtype_bond)))
+    return list(range(start_index, start_index + len(rows)))
+
+  def add_interaction(self, atom_i: int, atom_j: int, interaction_type: Union[int, InteractionType]) -> int:
+    """Append one noncovalent interaction row and return its new row index."""
+    return self.add_interactions([(atom_i, atom_j, int(interaction_type))])[0]
+
+  def add_interactions(self, interactions: Sequence[Tuple[int, int, Union[int, InteractionType]]]) -> List[int]:
+    """Append multiple noncovalent interaction rows and return their indices."""
+    if not interactions:
+      return []
+    rows = []
+    for atom_i, atom_j, interaction_type in interactions:
+      atom_i = int(atom_i)
+      atom_j = int(atom_j)
+      if atom_i == atom_j:
+        raise ValueError("Interaction endpoints must refer to two different atoms.")
+      if atom_i < 0 or atom_j < 0 or atom_i >= len(self) or atom_j >= len(self):
+        raise IndexError("Interaction atom index is outside the structure atom table.")
+      rows.append((atom_i, atom_j, int(interaction_type)))
+    start_index = len(self.interactions)
+    self.interactions = np.concatenate((self.interactions, np.array(rows, dtype=self._dtype_interaction)))
+    return list(range(start_index, start_index + len(rows)))
 
   def translate(
     self,
@@ -751,6 +859,11 @@ class Structure:
   def num_atoms(self) -> int:
     """Return the number of atoms in the structure."""
     return len(self.atoms)
+
+  @property
+  def annotation_names(self) -> Tuple[str, ...]:
+    """Return the per-atom annotation column names."""
+    return tuple(self._dtype_atom_annotations.names)
 
   def _get_effective_entities(self) -> List[Any]:
     from neurosnap.structure.interaction_report import InteractionEntity

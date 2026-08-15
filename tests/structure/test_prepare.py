@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from neurosnap.io.pdb import save_pdb
+from neurosnap.structure import _prepare_evoef2
 from neurosnap.structure import (
   Structure,
   add_hydrogens_with_pdb2pqr,
@@ -13,7 +15,7 @@ from neurosnap.structure import (
   rebuild_missing_atoms_with_evoef2,
   strip_hydrogens,
 )
-from tests._structure_test_utils import make_structure
+from tests._structure_test_utils import FILES, make_structure, parse_single_model
 
 
 def test_has_hydrogens_detects_present_and_absent_hydrogens():
@@ -139,3 +141,27 @@ def test_rebuild_missing_atoms_with_evoef2_delegates_to_local_backend(monkeypatc
 
   assert result_missing is sentinel
   assert captured == [((structure,), {"param_path": param_path, "topo_path": topo_path})]
+
+
+@pytest.mark.parametrize("atom_name", ["HG", "HG1", "HD1", "HE2", "HE21", "1HG", "2HD1"])
+def test_evoef2_element_inference_treats_pdb_hydrogen_names_as_hydrogen(atom_name):
+  assert _prepare_evoef2._infer_element_from_atom_name(atom_name) == "H"
+  assert _prepare_evoef2._infer_element_from_atom_name(atom_name, fallback="HG") == "H"
+
+
+def test_rebuild_missing_atoms_with_evoef2_exports_rebuilt_hydrogens_with_h_element(tmp_path):
+  rebuilt = rebuild_missing_atoms_with_evoef2(parse_single_model(FILES / "1MAL.pdb"))
+  hydrogen_like_indices = [
+    idx
+    for idx, atom_name in enumerate(rebuilt.atom_annotations["atom_name"])
+    if str(atom_name).strip().upper().startswith("H")
+  ]
+
+  assert hydrogen_like_indices
+  assert {str(rebuilt.atom_annotations["element"][idx]).strip().upper() for idx in hydrogen_like_indices} == {"H"}
+
+  output_path = tmp_path / "rebuilt.pdb"
+  save_pdb(rebuilt, output_path)
+  for line in output_path.read_text().splitlines():
+    if line.startswith(("ATOM", "HETATM")) and line[12:16].strip().upper().startswith("H"):
+      assert line[76:78].strip().upper() == "H"

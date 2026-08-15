@@ -347,40 +347,30 @@ def _rebuild_residue_atoms(residue: dict, topologies, prev_residue: Optional[dic
 
 def _infer_element_from_atom_name(atom_name: str, fallback: str = "") -> str:
   """Infer a normalized element symbol from an atom name."""
+  if atom_name:
+    stripped = atom_name.strip()
+    if stripped[:1].upper() == "H" or (stripped[:1].isdigit() and stripped[1:2].upper() == "H"):
+      return "H"
+  else:
+    stripped = ""
   if fallback:
     normalized = fallback.strip().title()
     if normalized in ATOMIC_MASSES:
       return normalized.upper()
-  if not atom_name:
+  if not stripped:
     return ""
-  candidate_two = atom_name[:2].strip().title()
+  candidate_two = stripped[:2].strip().title()
   if candidate_two in ATOMIC_MASSES:
     return candidate_two.upper()
-  candidate_one = atom_name[:1].strip().title()
+  candidate_one = stripped[:1].strip().title()
   if candidate_one in ATOMIC_MASSES:
     return candidate_one.upper()
   return ""
 
 
-def _new_annotation_row(dtype: np.dtype, *, atom_id: int, element: str) -> np.ndarray:
-  """Return a zero-initialized annotation row for a newly built atom."""
-  row = np.zeros((), dtype=dtype)
-  if "atom_id" in dtype.names:
-    row["atom_id"] = atom_id
-  if "occupancy" in dtype.names:
-    row["occupancy"] = 1.0
-  if "element" in dtype.names:
-    row["element"] = element
-  return row
-
-
 def _build_native_structure(chains: List[dict], source_structure: Structure, source_df) -> Structure:
-  """Convert rebuilt residue state directly into native Structure arrays."""
-  result = Structure(remove_annotations=False)
-  result._dtype_atoms = source_structure._dtype_atoms
-  result._dtype_atom_annotations = source_structure._dtype_atom_annotations
-  result._dtype_bond = source_structure._dtype_bond
-  result._dtype_interaction = source_structure._dtype_interaction
+  """Convert rebuilt residue state back into a native Structure."""
+  result = Structure.empty_like(source_structure)
 
   source_df = source_df.reset_index(drop=True)
   source_keys = [
@@ -394,13 +384,14 @@ def _build_native_structure(chains: List[dict], source_structure: Structure, sou
     for idx in range(len(source_df))
   ]
   next_atom_id = 1
-  if len(source_structure):
+  if len(source_structure) and "atom_id" in source_structure.atom_annotations.dtype.names:
     next_atom_id = int(np.max(source_structure.atom_annotations["atom_id"])) + 1
 
-  coord_rows = []
-  annotation_rows = []
   atom_index_by_key: Dict[Tuple[str, int, str, bool, str], int] = {}
   residue_atom_names: Dict[Tuple[str, int, str, bool, str], set] = {}
+  coord_rows = []
+  annotation_rows = []
+  atom_keys = []
 
   for chain in chains:
     for residue in chain["residues"]:
@@ -413,42 +404,38 @@ def _build_native_structure(chains: List[dict], source_structure: Structure, sou
         source_index = atom_state["source_index"]
         fallback_element = ""
         if source_index is None:
-          row = _new_annotation_row(result._dtype_atom_annotations, atom_id=next_atom_id, element="")
-          if "b_factor" in result._dtype_atom_annotations.names:
-            row["b_factor"] = 0.0
-          if "occupancy" in result._dtype_atom_annotations.names:
-            row["occupancy"] = 1.0
-          if "charge" in result._dtype_atom_annotations.names:
-            row["charge"] = 0
-          next_atom_id += 1
+          annotations = {"atom_id": next_atom_id} if "atom_id" in result.annotation_names else {}
+          if annotations:
+            next_atom_id += 1
         else:
           row = source_structure.atom_annotations[source_index].copy()
+          annotations = {name: row[name] for name in result.annotation_names}
           fallback_element = str(row["element"])
 
         element = _infer_element_from_atom_name(atom_name, fallback_element)
-        row["chain_id"] = residue["chain_id"]
-        row["res_id"] = residue["res_id"]
-        row["ins_code"] = residue["ins_code"]
-        row["res_name"] = residue["output_name"]
-        row["hetero"] = residue["hetero"]
-        row["atom_name"] = atom_name
-        row["element"] = element
+        annotations.update(
+          {
+            "chain_id": residue["chain_id"],
+            "res_id": residue["res_id"],
+            "ins_code": residue["ins_code"],
+            "res_name": residue["output_name"],
+            "hetero": residue["hetero"],
+            "atom_name": atom_name,
+            "element": element,
+          }
+        )
 
         coord_rows.append((float(atom_state["xyz"][0]), float(atom_state["xyz"][1]), float(atom_state["xyz"][2])))
-        annotation_rows.append(tuple(row[name] for name in result._dtype_atom_annotations.names))
+        annotation_rows.append(annotations)
         atom_key = (residue["chain_id"], residue["res_id"], residue["ins_code"], residue["hetero"], atom_name)
-        atom_index_by_key[atom_key] = len(coord_rows) - 1
+        atom_keys.append(atom_key)
         residue_atom_names[residue_key].add(atom_name)
 
-  result.atoms = np.array(coord_rows, dtype=result._dtype_atoms) if coord_rows else np.zeros(0, dtype=result._dtype_atoms)
-  result.atom_annotations = (
-    np.array(annotation_rows, dtype=result._dtype_atom_annotations)
-    if annotation_rows
-    else np.zeros(0, dtype=result._dtype_atom_annotations)
-  )
+  for atom_key, atom_index in zip(atom_keys, result.add_atoms(coord_rows, annotation_rows)):
+    atom_index_by_key[atom_key] = atom_index
 
-  bond_rows = []
   seen_bonds = set()
+  bond_rows = []
   for chain in chains:
     for residue in chain["residues"]:
       residue_key = (residue["chain_id"], residue["res_id"], residue["ins_code"], residue["hetero"], residue["output_name"])
@@ -467,7 +454,7 @@ def _build_native_structure(chains: List[dict], source_structure: Structure, sou
         atom_i, atom_j = sorted((atom_i, atom_j))
         if atom_i == atom_j or (atom_i, atom_j) in seen_bonds:
           continue
-        bond_rows.append((atom_i, atom_j, 1, int(BondType.COVALENT)))
+        bond_rows.append((atom_i, atom_j, 1, BondType.COVALENT))
         seen_bonds.add((atom_i, atom_j))
 
   for bond in source_structure.bonds:
@@ -484,10 +471,10 @@ def _build_native_structure(chains: List[dict], source_structure: Structure, sou
       continue
     bond_rows.append((remapped_i, remapped_j, int(bond["bond_order"]), int(bond["bond_type"])))
     seen_bonds.add((remapped_i, remapped_j))
-  result.bonds = np.array(bond_rows, dtype=result._dtype_bond) if bond_rows else np.zeros(0, dtype=result._dtype_bond)
+  result.add_bonds(bond_rows)
 
-  interaction_rows = []
   seen_interactions = set()
+  interaction_rows = []
   for interaction in source_structure.interactions:
     atom_i = int(interaction["atom_i"])
     atom_j = int(interaction["atom_j"])
@@ -504,11 +491,7 @@ def _build_native_structure(chains: List[dict], source_structure: Structure, sou
       continue
     interaction_rows.append((remapped_i, remapped_j, interaction_type))
     seen_interactions.add(row_key)
-  result.interactions = (
-    np.array(interaction_rows, dtype=result._dtype_interaction)
-    if interaction_rows
-    else np.zeros(0, dtype=result._dtype_interaction)
-  )
+  result.add_interactions(interaction_rows)
 
   result._remove_empty_annotations()
   return result

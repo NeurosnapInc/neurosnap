@@ -102,6 +102,7 @@ class AtomParam:
     eef1_free_dg: EEF1 free energy parameter.
     eef1_volume: EEF1 volume parameter.
     eef1_lambda: EEF1 lambda parameter.
+    element: Chemical element derived from the force-field atom type.
   """
 
   name: str
@@ -118,6 +119,19 @@ class AtomParam:
   eef1_free_dg: float
   eef1_volume: float
   eef1_lambda: float
+
+  @property
+  def element(self) -> str:
+    """Chemical element derived from the EvoEF2/CHARMM atom type."""
+    atom_type = self.type.strip().upper()
+    if not atom_type:
+      return ""
+    if atom_type.startswith(("CL", "BR")):
+      return atom_type[:2].title()
+    first = atom_type[0]
+    if first in {"C", "H", "N", "O", "P", "S"}:
+      return first
+    return ""
 
   @property
   def is_hbond_h(self) -> bool:
@@ -2010,7 +2024,7 @@ def _optimize_site_sequentially(
 
 
 def _infer_element(atom_name: str) -> str:
-  """Infer a simple element symbol from a PDB-style atom name."""
+  """Infer a simple fallback element symbol from a PDB-style atom name."""
   name = atom_name.strip()
   if name[:1].upper() == "H" or (name[:1].isdigit() and name[1:2].upper() == "H"):
     return "H"
@@ -2058,7 +2072,13 @@ def _evo_structure_to_ns(
         annotations["res_name"].append(residue.name)
         annotations["hetero"].append(bool(hetero))
         annotations["atom_name"].append(atom.name)
-        annotations["element"].append(_infer_element(atom.name) if template is None else str(template.element))
+        if atom.param is not None and atom.param.element:
+          element = atom.param.element
+        elif template is not None:
+          element = str(template.element)
+        else:
+          element = _infer_element(atom.name)
+        annotations["element"].append(element)
         annotations["atom_id"].append(atom_serial if template is None else int(template.atom))
         annotations["b_factor"].append(0.0 if template is None else float(template.bfactor))
         annotations["occupancy"].append(1.0 if template is None else float(template.occupancy))

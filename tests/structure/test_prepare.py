@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from neurosnap.algos import evoef2
 from neurosnap.io.pdb import save_pdb
-from neurosnap.structure import _prepare_evoef2
 from neurosnap.structure import (
   Structure,
   add_hydrogens_with_pdb2pqr,
@@ -143,10 +143,13 @@ def test_rebuild_missing_atoms_with_evoef2_delegates_to_local_backend(monkeypatc
   assert captured == [((structure,), {"param_path": param_path, "topo_path": topo_path})]
 
 
-@pytest.mark.parametrize("atom_name", ["HG", "HG1", "HD1", "HE2", "HE21", "1HG", "2HD1"])
-def test_evoef2_element_inference_treats_pdb_hydrogen_names_as_hydrogen(atom_name):
-  assert _prepare_evoef2._infer_element_from_atom_name(atom_name) == "H"
-  assert _prepare_evoef2._infer_element_from_atom_name(atom_name, fallback="HG") == "H"
+def test_evoef2_atom_params_provide_native_elements():
+  params = evoef2.load_atom_params()
+
+  assert params["THR"]["HG1"].element == "H"
+  assert params["HSD"]["HD1"].element == "H"
+  assert params["HSE"]["HE2"].element == "H"
+  assert params["ILE"]["CD"].element == "C"
 
 
 def test_rebuild_missing_atoms_with_evoef2_exports_rebuilt_hydrogens_with_h_element(tmp_path):
@@ -159,9 +162,18 @@ def test_rebuild_missing_atoms_with_evoef2_exports_rebuilt_hydrogens_with_h_elem
 
   assert hydrogen_like_indices
   assert {str(rebuilt.atom_annotations["element"][idx]).strip().upper() for idx in hydrogen_like_indices} == {"H"}
+  ile_cd_indices = [
+    idx
+    for idx, row in enumerate(rebuilt.atom_annotations)
+    if str(row["res_name"]).strip().upper() == "ILE" and str(row["atom_name"]).strip().upper() == "CD"
+  ]
+  assert ile_cd_indices
+  assert {str(rebuilt.atom_annotations["element"][idx]).strip().upper() for idx in ile_cd_indices} == {"C"}
 
   output_path = tmp_path / "rebuilt.pdb"
   save_pdb(rebuilt, output_path)
   for line in output_path.read_text().splitlines():
     if line.startswith(("ATOM", "HETATM")) and line[12:16].strip().upper().startswith("H"):
       assert line[76:78].strip().upper() == "H"
+    if line.startswith(("ATOM", "HETATM")) and line[12:16].strip().upper() == "CD" and line[17:20].strip().upper() == "ILE":
+      assert line[76:78].strip().upper() == "C"

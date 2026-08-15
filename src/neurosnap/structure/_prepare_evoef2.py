@@ -345,26 +345,15 @@ def _rebuild_residue_atoms(residue: dict, topologies, prev_residue: Optional[dic
       made_progress = True
 
 
-def _infer_element_from_atom_name(atom_name: str, fallback: str = "") -> str:
-  """Infer a normalized element symbol from an atom name."""
-  if atom_name:
-    stripped = atom_name.strip()
-    if stripped[:1].upper() == "H" or (stripped[:1].isdigit() and stripped[1:2].upper() == "H"):
-      return "H"
-  else:
-    stripped = ""
+def _element_from_atom_state(atom_state: dict, fallback: str = "") -> str:
+  """Return a normalized element symbol from EvoEF2 atom parameters."""
+  param = atom_state.get("param")
+  if param is not None and param.element:
+    return param.element
   if fallback:
     normalized = fallback.strip().title()
     if normalized in ATOMIC_MASSES:
       return normalized.upper()
-  if not stripped:
-    return ""
-  candidate_two = stripped[:2].strip().title()
-  if candidate_two in ATOMIC_MASSES:
-    return candidate_two.upper()
-  candidate_one = stripped[:1].strip().title()
-  if candidate_one in ATOMIC_MASSES:
-    return candidate_one.upper()
   return ""
 
 
@@ -412,7 +401,7 @@ def _build_native_structure(chains: List[dict], source_structure: Structure, sou
           annotations = {name: row[name] for name in result.annotation_names}
           fallback_element = str(row["element"])
 
-        element = _infer_element_from_atom_name(atom_name, fallback_element)
+        element = _element_from_atom_state(atom_state, fallback_element)
         annotations.update(
           {
             "chain_id": residue["chain_id"],

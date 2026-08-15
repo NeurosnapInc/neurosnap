@@ -20,6 +20,7 @@ from .interactions import (
   find_salt_bridges,
 )
 from .prepare import (
+  add_terminal_capping_groups,
   add_hydrogens_with_pdb2pqr,
   has_hydrogens,
   optimize_hydrogens_with_pdb2pqr,
@@ -67,6 +68,7 @@ __all__ = [
   "calculate_interface_hydrogen_bonding_residues",
   "has_hydrogens",
   "strip_hydrogens",
+  "add_terminal_capping_groups",
   "add_hydrogens_with_pdb2pqr",
   "optimize_hydrogens_with_pdb2pqr",
   "render_pseudo3D",

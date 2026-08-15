@@ -5,12 +5,13 @@ import pytest
 
 from neurosnap.structure import (
   Structure,
+  add_terminal_capping_groups,
   add_hydrogens_with_pdb2pqr,
   has_hydrogens,
   optimize_hydrogens_with_pdb2pqr,
   strip_hydrogens,
 )
-from tests._structure_test_utils import make_structure
+from tests._structure_test_utils import PROTEIN_BACKBONE_ATOMS, replace_chain, make_structure
 
 
 def test_has_hydrogens_detects_present_and_absent_hydrogens():
@@ -50,9 +51,73 @@ def test_prepare_helpers_require_structure():
   with pytest.raises(TypeError):
     strip_hydrogens(object())
   with pytest.raises(TypeError):
+    add_terminal_capping_groups(object())
+  with pytest.raises(TypeError):
     add_hydrogens_with_pdb2pqr(object())
   with pytest.raises(TypeError):
     optimize_hydrogens_with_pdb2pqr(object())
+
+
+def test_add_terminal_capping_groups_adds_ace_and_nme_caps():
+  structure = make_structure(PROTEIN_BACKBONE_ATOMS)
+
+  capped = add_terminal_capping_groups(structure)
+
+  assert len(structure) == 6
+  assert len(capped) == 11
+  assert capped.metadata == structure.metadata
+  res_names = capped.atom_annotations["res_name"].tolist()
+  assert res_names.count("ACE") == 3
+  assert res_names.count("NME") == 2
+  assert capped.atom_annotations["atom_name"][-5:].tolist() == ["CH3", "C", "O", "N", "CH3"]
+  assert capped.atom_annotations["element"][-5:].tolist() == ["C", "C", "O", "N", "C"]
+  assert capped.atom_annotations["res_id"][-5:].tolist() == [0, 0, 0, 3, 3]
+  assert capped.atom_annotations["chain_id"][-5:].tolist() == ["A", "A", "A", "A", "A"]
+
+  bond_rows = {tuple(row) for row in capped.bonds.tolist()}
+  assert (6, 7, 1, 0) in bond_rows
+  assert (7, 8, 2, 0) in bond_rows
+  assert (7, 0, 1, 0) in bond_rows
+  assert (5, 9, 1, 0) in bond_rows
+  assert (9, 10, 1, 0) in bond_rows
+
+
+def test_add_terminal_capping_groups_filters_chains_and_can_disable_one_end():
+  atom_defs = PROTEIN_BACKBONE_ATOMS + tuple(replace_chain(PROTEIN_BACKBONE_ATOMS, "B"))
+  structure = make_structure(atom_defs)
+
+  capped = add_terminal_capping_groups(structure, chains=["B"], c_terminal=False)
+
+  assert len(capped) == len(structure) + 3
+  cap_rows = capped.atom_annotations[-3:]
+  assert cap_rows["res_name"].tolist() == ["ACE", "ACE", "ACE"]
+  assert cap_rows["chain_id"].tolist() == ["B", "B", "B"]
+  assert "NME" not in capped.atom_annotations["res_name"].tolist()
+
+
+def test_add_terminal_capping_groups_skips_existing_caps():
+  atom_defs = (
+    ("CH3", "ACE", "A", 0, -2.8, 0.0, 0.0, "C"),
+    ("C", "ACE", "A", 0, -1.3, 0.0, 0.0, "C"),
+    ("O", "ACE", "A", 0, -1.3, 1.2, 0.0, "O"),
+    *PROTEIN_BACKBONE_ATOMS,
+    ("N", "NME", "A", 3, 6.5, 2.8, 0.0, "N"),
+    ("CH3", "NME", "A", 3, 7.9, 2.8, 0.0, "C"),
+  )
+  structure = make_structure(atom_defs)
+
+  capped = add_terminal_capping_groups(structure)
+
+  assert len(capped) == len(structure)
+  assert capped.atom_annotations["res_name"].tolist().count("ACE") == 3
+  assert capped.atom_annotations["res_name"].tolist().count("NME") == 2
+
+
+def test_add_terminal_capping_groups_rejects_missing_chain():
+  structure = make_structure(PROTEIN_BACKBONE_ATOMS)
+
+  with pytest.raises(ValueError, match="Chain\\(s\\) not found"):
+    add_terminal_capping_groups(structure, chains=["Z"])
 
 
 def test_add_hydrogens_with_pdb2pqr_delegates_to_assign_pqr(monkeypatch):
@@ -114,4 +179,3 @@ def test_optimize_hydrogens_with_pdb2pqr_delegates_to_assign_pqr(monkeypatch):
     "debump": True,
     "optimize": True,
   }
-

@@ -10,15 +10,19 @@ existing algorithm module.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Optional
 
 import numpy as np
 
-from .structure import Structure
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
+
+from .structure import BondType, Residue, Structure
 
 __all__ = [
   "has_hydrogens",
   "strip_hydrogens",
+  "add_terminal_capping_groups",
   "add_hydrogens_with_pdb2pqr",
   "optimize_hydrogens_with_pdb2pqr",
 ]
@@ -57,6 +61,187 @@ def strip_hydrogens(structure: Structure) -> Structure:
   if not isinstance(structure, Structure):
     raise TypeError(f"strip_hydrogens() expects a Structure, found {type(structure).__name__}.")
   return structure.select(predicate=lambda atom: atom.element.strip().upper() != "H")
+
+
+def add_terminal_capping_groups(
+  structure: Structure,
+  *,
+  chains: Optional[Sequence[str]] = None,
+  n_terminal: bool = True,
+  c_terminal: bool = True,
+) -> Structure:
+  """Return a copy with ACE/NME caps added to protein chain termini.
+
+  Adds an ``ACE`` heavy-atom cap to each selected chain N-terminus and an
+  ``NME`` heavy-atom cap to each selected chain C-terminus. Coordinates are
+  placed from terminal backbone geometry and should be relaxed by a molecular
+  mechanics tool before downstream workflows that require optimized cap
+  conformations.
+
+  Parameters:
+    structure: Input single-model structure.
+    chains: Optional chain IDs to cap. If ``None``, all protein-containing
+      chains are considered.
+    n_terminal: Whether to add N-terminal ``ACE`` caps.
+    c_terminal: Whether to add C-terminal ``NME`` caps.
+
+  Returns:
+    New :class:`Structure` containing the original atoms plus cap atoms and
+    covalent cap bonds.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"add_terminal_capping_groups() expects a Structure, found {type(structure).__name__}.")
+  if not isinstance(n_terminal, bool):
+    raise TypeError(f"n_terminal must be a bool, found {type(n_terminal).__name__}.")
+  if not isinstance(c_terminal, bool):
+    raise TypeError(f"c_terminal must be a bool, found {type(c_terminal).__name__}.")
+  if chains is not None:
+    if isinstance(chains, str):
+      chains = (chains,)
+    else:
+      chains = tuple(str(chain_id) for chain_id in chains)
+    missing = sorted(set(chains) - set(structure.chain_ids()))
+    if missing:
+      raise ValueError(f"Chain(s) not found in structure: {', '.join(missing)}.")
+
+  capped = _copy_structure(structure)
+  next_atom_id = _next_atom_id(capped)
+  selected_chains = set(chains) if chains is not None else None
+  for chain in structure.chains():
+    if selected_chains is not None and chain.chain_id not in selected_chains:
+      continue
+    chain_residues = chain.residues()
+    protein_residues = [residue for residue in chain_residues if _is_protein_residue(residue)]
+    if not protein_residues:
+      continue
+    residue_names = {residue.res_name.strip().upper() for residue in chain_residues}
+    if n_terminal and "ACE" not in residue_names:
+      next_atom_id = _add_ace_cap(capped, protein_residues[0], next_atom_id)
+    if c_terminal and "NME" not in residue_names:
+      next_atom_id = _add_nme_cap(capped, protein_residues[-1], next_atom_id)
+  return capped
+
+
+def _copy_structure(structure: Structure) -> Structure:
+  """Return a full copy preserving schemas, metadata, atoms, bonds, and interactions."""
+  copied = Structure.empty_like(structure, copy_metadata=True)
+  copied.atoms = structure.atoms.copy()
+  copied.atom_annotations = structure.atom_annotations.copy()
+  copied.bonds = structure.bonds.copy()
+  copied.interactions = structure.interactions.copy()
+  return copied
+
+
+def _next_atom_id(structure: Structure) -> int:
+  if len(structure) == 0 or "atom_id" not in structure.atom_annotations.dtype.names:
+    return 1
+  return int(np.max(structure.atom_annotations["atom_id"])) + 1
+
+
+def _is_protein_residue(residue: Residue) -> bool:
+  res_name = residue.res_name.strip().upper()
+  return AA_RECORDS_CANONICAL.get_by_abr(res_name) is not None or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(res_name) is not None
+
+
+def _residue_atom_map(residue: Residue) -> dict[str, tuple[int, np.ndarray]]:
+  atoms = residue.atoms()
+  indices = residue.atom_indices()
+  return {atom.atom_name.strip().upper(): (atom_index, atom.coord.astype(np.float32)) for atom_index, atom in zip(indices, atoms)}
+
+
+def _unit_vector(vector: np.ndarray) -> np.ndarray:
+  norm = float(np.linalg.norm(vector))
+  if norm < 1e-6:
+    raise ValueError("Cannot place terminal capping group from degenerate backbone coordinates.")
+  return (vector / norm).astype(np.float32)
+
+
+def _perpendicular_unit(axis: np.ndarray, reference: np.ndarray) -> np.ndarray:
+  perp = reference - axis * float(np.dot(reference, axis))
+  if float(np.linalg.norm(perp)) < 1e-6:
+    fallback = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    if abs(float(np.dot(axis, fallback))) > 0.9:
+      fallback = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+    perp = fallback - axis * float(np.dot(fallback, axis))
+  return _unit_vector(perp)
+
+
+def _base_cap_annotations(structure: Structure, residue: Residue, res_name: str, atom_name: str, element: str, atom_id: int, res_id: int) -> dict:
+  annotations = {
+    "chain_id": residue.chain_id,
+    "res_id": res_id,
+    "ins_code": "",
+    "res_name": res_name,
+    "hetero": False,
+    "atom_name": atom_name,
+    "element": element,
+    "atom_id": atom_id,
+    "b_factor": 0.0,
+    "occupancy": 1.0,
+    "charge": 0,
+  }
+  return {name: value for name, value in annotations.items() if name in structure.atom_annotations.dtype.names}
+
+
+def _add_ace_cap(structure: Structure, residue: Residue, next_atom_id: int) -> int:
+  atom_map = _residue_atom_map(residue)
+  if "N" not in atom_map or "CA" not in atom_map:
+    raise ValueError(f'Cannot add ACE cap to chain "{residue.chain_id}" residue {residue.res_id}: missing N or CA atom.')
+
+  n_index, n_coord = atom_map["N"]
+  _ca_index, ca_coord = atom_map["CA"]
+  c_ref = atom_map.get("C", (None, ca_coord))[1]
+  axis = _unit_vector(n_coord - ca_coord)
+  perp = _perpendicular_unit(axis, c_ref - ca_coord)
+  cap_c = n_coord + axis * 1.33
+  cap_o = cap_c + perp * 1.23
+  cap_ch3 = cap_c + axis * 1.50
+  res_id = int(residue.res_id) - 1
+
+  cap_indices = structure.add_atoms(
+    [cap_ch3, cap_c, cap_o],
+    [
+      _base_cap_annotations(structure, residue, "ACE", "CH3", "C", next_atom_id, res_id),
+      _base_cap_annotations(structure, residue, "ACE", "C", "C", next_atom_id + 1, res_id),
+      _base_cap_annotations(structure, residue, "ACE", "O", "O", next_atom_id + 2, res_id),
+    ],
+  )
+  structure.add_bonds(
+    [
+      (cap_indices[0], cap_indices[1], 1, BondType.COVALENT),
+      (cap_indices[1], cap_indices[2], 2, BondType.COVALENT),
+      (cap_indices[1], n_index, 1, BondType.COVALENT),
+    ]
+  )
+  return next_atom_id + 3
+
+
+def _add_nme_cap(structure: Structure, residue: Residue, next_atom_id: int) -> int:
+  atom_map = _residue_atom_map(residue)
+  if "C" not in atom_map or "CA" not in atom_map:
+    raise ValueError(f'Cannot add NME cap to chain "{residue.chain_id}" residue {residue.res_id}: missing C or CA atom.')
+
+  c_index, c_coord = atom_map["C"]
+  _ca_index, ca_coord = atom_map["CA"]
+  axis = _unit_vector(c_coord - ca_coord)
+  cap_n = c_coord + axis * 1.33
+  cap_ch3 = cap_n + axis * 1.45
+  res_id = int(residue.res_id) + 1
+
+  cap_indices = structure.add_atoms(
+    [cap_n, cap_ch3],
+    [
+      _base_cap_annotations(structure, residue, "NME", "N", "N", next_atom_id, res_id),
+      _base_cap_annotations(structure, residue, "NME", "CH3", "C", next_atom_id + 1, res_id),
+    ],
+  )
+  structure.add_bonds(
+    [
+      (c_index, cap_indices[0], 1, BondType.COVALENT),
+      (cap_indices[0], cap_indices[1], 1, BondType.COVALENT),
+    ]
+  )
+  return next_atom_id + 2
 
 
 def add_hydrogens_with_pdb2pqr(

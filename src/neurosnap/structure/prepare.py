@@ -104,32 +104,68 @@ def add_terminal_capping_groups(
     if missing:
       raise ValueError(f"Chain(s) not found in structure: {', '.join(missing)}.")
 
-  capped = _copy_structure(structure)
-  next_atom_id = _next_atom_id(capped)
+  capped = Structure.empty_like(structure, copy_metadata=True)
+  old_to_new: dict[int, int] = {}
+  extra_bonds: list[tuple[int, int, int, BondType]] = []
+  next_atom_id = _next_atom_id(structure)
   selected_chains = set(chains) if chains is not None else None
   for chain in structure.chains():
-    if selected_chains is not None and chain.chain_id not in selected_chains:
-      continue
     chain_residues = chain.residues()
     protein_residues = [residue for residue in chain_residues if _is_protein_residue(residue)]
-    if not protein_residues:
-      continue
+    should_cap_chain = selected_chains is None or chain.chain_id in selected_chains
     residue_names = {residue.res_name.strip().upper() for residue in chain_residues}
-    if n_terminal and "ACE" not in residue_names:
-      next_atom_id = _add_ace_cap(capped, protein_residues[0], next_atom_id)
-    if c_terminal and "NME" not in residue_names:
-      next_atom_id = _add_nme_cap(capped, protein_residues[-1], next_atom_id)
+    n_terminal_residue = protein_residues[0] if protein_residues and should_cap_chain and n_terminal and "ACE" not in residue_names else None
+    c_terminal_residue = protein_residues[-1] if protein_residues and should_cap_chain and c_terminal and "NME" not in residue_names else None
+
+    for residue in chain_residues:
+      if n_terminal_residue is not None and residue == n_terminal_residue:
+        next_atom_id, ace_carbon_index, terminal_n_index = _append_ace_cap(capped, residue, next_atom_id, extra_bonds)
+      _append_original_residue(capped, structure, residue, old_to_new)
+      if c_terminal_residue is not None and residue == c_terminal_residue:
+        next_atom_id = _append_nme_cap(capped, residue, next_atom_id, old_to_new, extra_bonds)
+      if n_terminal_residue is not None and residue == n_terminal_residue:
+        extra_bonds.append((ace_carbon_index, old_to_new[terminal_n_index], 1, BondType.COVALENT))
+
+  _append_remapped_topology(capped, structure, old_to_new, extra_bonds)
   return capped
 
 
-def _copy_structure(structure: Structure) -> Structure:
-  """Return a full copy preserving schemas, metadata, atoms, bonds, and interactions."""
-  copied = Structure.empty_like(structure, copy_metadata=True)
-  copied.atoms = structure.atoms.copy()
-  copied.atom_annotations = structure.atom_annotations.copy()
-  copied.bonds = structure.bonds.copy()
-  copied.interactions = structure.interactions.copy()
-  return copied
+def _append_original_residue(capped: Structure, source: Structure, residue: Residue, old_to_new: dict[int, int]) -> None:
+  atom_indices = residue.atom_indices()
+  coords = [(float(source.atoms["x"][idx]), float(source.atoms["y"][idx]), float(source.atoms["z"][idx])) for idx in atom_indices]
+  annotations = [_annotation_row_to_dict(source, idx) for idx in atom_indices]
+  for old_index, new_index in zip(atom_indices, capped.add_atoms(coords, annotations)):
+    old_to_new[old_index] = new_index
+
+
+def _annotation_row_to_dict(structure: Structure, atom_index: int) -> dict:
+  return {name: structure.atom_annotations[name][atom_index].item() for name in structure.atom_annotations.dtype.names}
+
+
+def _append_remapped_topology(
+  capped: Structure,
+  source: Structure,
+  old_to_new: dict[int, int],
+  extra_bonds: list[tuple[int, int, int, BondType]],
+) -> None:
+  bond_rows = []
+  for bond in source.bonds:
+    atom_i = old_to_new.get(int(bond["atom_i"]))
+    atom_j = old_to_new.get(int(bond["atom_j"]))
+    if atom_i is None or atom_j is None:
+      continue
+    bond_rows.append((atom_i, atom_j, int(bond["bond_order"]), int(bond["bond_type"])))
+  bond_rows.extend((atom_i, atom_j, bond_order, int(bond_type)) for atom_i, atom_j, bond_order, bond_type in extra_bonds)
+  capped.add_bonds(bond_rows)
+
+  interaction_rows = []
+  for interaction in source.interactions:
+    atom_i = old_to_new.get(int(interaction["atom_i"]))
+    atom_j = old_to_new.get(int(interaction["atom_j"]))
+    if atom_i is None or atom_j is None:
+      continue
+    interaction_rows.append((atom_i, atom_j, int(interaction["interaction_type"])))
+  capped.add_interactions(interaction_rows)
 
 
 def _next_atom_id(structure: Structure) -> int:
@@ -183,7 +219,12 @@ def _base_cap_annotations(structure: Structure, residue: Residue, res_name: str,
   return {name: value for name, value in annotations.items() if name in structure.atom_annotations.dtype.names}
 
 
-def _add_ace_cap(structure: Structure, residue: Residue, next_atom_id: int) -> int:
+def _append_ace_cap(
+  structure: Structure,
+  residue: Residue,
+  next_atom_id: int,
+  extra_bonds: list[tuple[int, int, int, BondType]],
+) -> tuple[int, int, int]:
   atom_map = _residue_atom_map(residue)
   if "N" not in atom_map or "CA" not in atom_map:
     raise ValueError(f'Cannot add ACE cap to chain "{residue.chain_id}" residue {residue.res_id}: missing N or CA atom.')
@@ -206,17 +247,22 @@ def _add_ace_cap(structure: Structure, residue: Residue, next_atom_id: int) -> i
       _base_cap_annotations(structure, residue, "ACE", "O", "O", next_atom_id + 2, res_id),
     ],
   )
-  structure.add_bonds(
-    [
+  extra_bonds.extend(
+    (
       (cap_indices[0], cap_indices[1], 1, BondType.COVALENT),
       (cap_indices[1], cap_indices[2], 2, BondType.COVALENT),
-      (cap_indices[1], n_index, 1, BondType.COVALENT),
-    ]
+    )
   )
-  return next_atom_id + 3
+  return next_atom_id + 3, cap_indices[1], n_index
 
 
-def _add_nme_cap(structure: Structure, residue: Residue, next_atom_id: int) -> int:
+def _append_nme_cap(
+  structure: Structure,
+  residue: Residue,
+  next_atom_id: int,
+  old_to_new: dict[int, int],
+  extra_bonds: list[tuple[int, int, int, BondType]],
+) -> int:
   atom_map = _residue_atom_map(residue)
   if "C" not in atom_map or "CA" not in atom_map:
     raise ValueError(f'Cannot add NME cap to chain "{residue.chain_id}" residue {residue.res_id}: missing C or CA atom.')
@@ -235,11 +281,11 @@ def _add_nme_cap(structure: Structure, residue: Residue, next_atom_id: int) -> i
       _base_cap_annotations(structure, residue, "NME", "CH3", "C", next_atom_id + 1, res_id),
     ],
   )
-  structure.add_bonds(
-    [
-      (c_index, cap_indices[0], 1, BondType.COVALENT),
+  extra_bonds.extend(
+    (
+      (old_to_new[c_index], cap_indices[0], 1, BondType.COVALENT),
       (cap_indices[0], cap_indices[1], 1, BondType.COVALENT),
-    ]
+    )
   )
   return next_atom_id + 2
 

@@ -59,7 +59,7 @@ def test_prepare_helpers_require_structure():
 
 
 def test_add_terminal_capping_groups_adds_ace_and_nme_caps():
-  structure = make_structure(PROTEIN_BACKBONE_ATOMS)
+  structure = make_structure(PROTEIN_BACKBONE_ATOMS, bonds=[(2, 3, 1, 0)], interactions=[(1, 4, 127)])
 
   capped = add_terminal_capping_groups(structure)
 
@@ -69,17 +69,20 @@ def test_add_terminal_capping_groups_adds_ace_and_nme_caps():
   res_names = capped.atom_annotations["res_name"].tolist()
   assert res_names.count("ACE") == 3
   assert res_names.count("NME") == 2
-  assert capped.atom_annotations["atom_name"][-5:].tolist() == ["CH3", "C", "O", "N", "CH3"]
-  assert capped.atom_annotations["element"][-5:].tolist() == ["C", "C", "O", "N", "C"]
-  assert capped.atom_annotations["res_id"][-5:].tolist() == [0, 0, 0, 3, 3]
-  assert capped.atom_annotations["chain_id"][-5:].tolist() == ["A", "A", "A", "A", "A"]
+  assert capped.atom_annotations["res_name"].tolist() == ["ACE", "ACE", "ACE", "ALA", "ALA", "ALA", "GLY", "GLY", "GLY", "NME", "NME"]
+  assert capped.atom_annotations["atom_name"].tolist() == ["CH3", "C", "O", "N", "CA", "C", "N", "CA", "C", "N", "CH3"]
+  assert capped.atom_annotations["element"].tolist() == ["C", "C", "O", "N", "C", "C", "N", "C", "C", "N", "C"]
+  assert capped.atom_annotations["res_id"].tolist() == [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3]
+  assert capped.atom_annotations["chain_id"].tolist() == ["A"] * 11
 
   bond_rows = {tuple(row) for row in capped.bonds.tolist()}
-  assert (6, 7, 1, 0) in bond_rows
-  assert (7, 8, 2, 0) in bond_rows
-  assert (7, 0, 1, 0) in bond_rows
-  assert (5, 9, 1, 0) in bond_rows
+  assert (0, 1, 1, 0) in bond_rows
+  assert (1, 2, 2, 0) in bond_rows
+  assert (1, 3, 1, 0) in bond_rows
+  assert (5, 6, 1, 0) in bond_rows
+  assert (8, 9, 1, 0) in bond_rows
   assert (9, 10, 1, 0) in bond_rows
+  assert capped.interactions.tolist() == [(4, 7, 127)]
 
 
 def test_add_terminal_capping_groups_filters_chains_and_can_disable_one_end():
@@ -89,9 +92,10 @@ def test_add_terminal_capping_groups_filters_chains_and_can_disable_one_end():
   capped = add_terminal_capping_groups(structure, chains=["B"], c_terminal=False)
 
   assert len(capped) == len(structure) + 3
-  cap_rows = capped.atom_annotations[-3:]
+  cap_rows = capped.atom_annotations[6:9]
   assert cap_rows["res_name"].tolist() == ["ACE", "ACE", "ACE"]
   assert cap_rows["chain_id"].tolist() == ["B", "B", "B"]
+  assert capped.atom_annotations["res_name"][9] == "ALA"
   assert "NME" not in capped.atom_annotations["res_name"].tolist()
 
 

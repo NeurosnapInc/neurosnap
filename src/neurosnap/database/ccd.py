@@ -113,7 +113,7 @@ def get_ccd(
 def get_ccd_canonical_aa(
   ccd: Union[str, CCD],
   *,
-  standard: bool = False,
+  standard: bool = True,
   cache_path: str = DEFAULT_CCD_CACHE,
   overwrite: bool = False,
   max_age_days: int = 7,
@@ -131,8 +131,8 @@ def get_ccd_canonical_aa(
 
   Parameters:
     ccd: CCD code string or a :class:`CCD` instance.
-    standard: If ``True``, collapse results to the 20 standard amino
-      acids. If ``False`` (default), allow all canonical residues, including ``SEC`` and
+    standard: If ``True`` (default), collapse results to the 20 standard amino
+      acids. If ``False``, allow all canonical residues, including ``SEC`` and
       ``PYL``.
     cache_path: Local cache file path for the CCD JSON payload.
     overwrite: If ``True``, force a fresh CCD payload download.

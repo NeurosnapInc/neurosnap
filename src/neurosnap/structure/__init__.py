@@ -23,7 +23,6 @@ from .prepare import (
   add_hydrogens_with_pdb2pqr,
   has_hydrogens,
   optimize_hydrogens_with_pdb2pqr,
-  rebuild_missing_atoms_with_evoef2,
   strip_hydrogens,
 )
 from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3D
@@ -70,7 +69,6 @@ __all__ = [
   "strip_hydrogens",
   "add_hydrogens_with_pdb2pqr",
   "optimize_hydrogens_with_pdb2pqr",
-  "rebuild_missing_atoms_with_evoef2",
   "render_pseudo3D",
   "render_structure_pseudo3D",
   "animate_frames",

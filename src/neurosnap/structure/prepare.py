@@ -17,11 +17,13 @@ import numpy as np
 
 from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 
+from ._common import filter_structure_atoms
 from .structure import BondType, Residue, Structure
 
 __all__ = [
   "has_hydrogens",
   "strip_hydrogens",
+  "remove_altlocs_and_duplicate_atoms",
   "add_terminal_capping_groups",
   "add_hydrogens_with_pdb2pqr",
   "optimize_hydrogens_with_pdb2pqr",
@@ -61,6 +63,98 @@ def strip_hydrogens(structure: Structure) -> Structure:
   if not isinstance(structure, Structure):
     raise TypeError(f"strip_hydrogens() expects a Structure, found {type(structure).__name__}.")
   return structure.select(predicate=lambda atom: atom.element.strip().upper() != "H")
+
+
+def remove_altlocs_and_duplicate_atoms(structure: Structure) -> Structure:
+  """Return a copy with one atom retained for each residue atom site.
+
+  Atom sites are identified by chain ID, residue ID, insertion code, residue
+  name, hetero flag, and atom name. When multiple atoms share a site, the atom
+  with the highest occupancy is retained. Ties prefer a blank alternate
+  location, then alternate location ``A``, then the first atom in input order.
+
+  Neurosnap's PDB/mmCIF parsers already collapse alternate locations while
+  loading. This helper is mainly useful for structures built manually or from
+  workflows that add an ``altloc``-style annotation column.
+
+  Parameters:
+    structure: Input single-model structure.
+
+  Returns:
+    New :class:`Structure` with duplicate atom sites removed. If an optional
+    alternate-location annotation column is present, it is removed from the
+    returned structure.
+  """
+  if not isinstance(structure, Structure):
+    raise TypeError(f"remove_altlocs_and_duplicate_atoms() expects a Structure, found {type(structure).__name__}.")
+
+  deduplicated = structure.select()
+  altloc_annotation_names = ("altloc", "alt_loc", "label_alt_id")
+
+  def remove_altloc_annotations() -> None:
+    for field_name in altloc_annotation_names:
+      if field_name in deduplicated.atom_annotations.dtype.names:
+        deduplicated.remove_annotation(field_name)
+
+  if len(deduplicated) == 0:
+    remove_altloc_annotations()
+    return deduplicated
+
+  annotation_names = deduplicated.atom_annotations.dtype.names
+
+  def atom_site_key(atom_index: int) -> tuple:
+    annotations = deduplicated.atom_annotations
+    return (
+      str(annotations["chain_id"][atom_index]).strip(),
+      int(annotations["res_id"][atom_index]),
+      str(annotations["ins_code"][atom_index]).strip(),
+      str(annotations["res_name"][atom_index]).strip().upper(),
+      bool(annotations["hetero"][atom_index]),
+      str(annotations["atom_name"][atom_index]).strip().upper(),
+    )
+
+  def atom_occupancy(atom_index: int) -> float:
+    if "occupancy" not in annotation_names:
+      return 1.0
+    return float(deduplicated.atom_annotations["occupancy"][atom_index])
+
+  def atom_altloc(atom_index: int) -> str:
+    for field_name in altloc_annotation_names:
+      if field_name in annotation_names:
+        return str(deduplicated.atom_annotations[field_name][atom_index]).strip()
+    return ""
+
+  def altloc_rank(atom_index: int) -> tuple[int, str]:
+    altloc = atom_altloc(atom_index)
+    if not altloc:
+      return (0, "")
+    if altloc.upper() == "A":
+      return (1, "")
+    return (2, "")
+
+  def prefer_atom_site(previous_index: int, candidate_index: int) -> bool:
+    previous_occupancy = atom_occupancy(previous_index)
+    candidate_occupancy = atom_occupancy(candidate_index)
+    if candidate_occupancy > previous_occupancy:
+      return True
+    if candidate_occupancy < previous_occupancy:
+      return False
+    return altloc_rank(candidate_index) < altloc_rank(previous_index)
+
+  selected_by_site: dict[tuple, int] = {}
+  for atom_index in range(len(deduplicated)):
+    atom_key = atom_site_key(atom_index)
+    selected_index = selected_by_site.get(atom_key)
+    if selected_index is None or prefer_atom_site(selected_index, atom_index):
+      selected_by_site[atom_key] = atom_index
+
+  keep_mask = np.zeros(len(deduplicated), dtype=bool)
+  keep_mask[list(selected_by_site.values())] = True
+  if not np.all(keep_mask):
+    filter_structure_atoms(deduplicated, keep_mask)
+
+  remove_altloc_annotations()
+  return deduplicated
 
 
 def add_terminal_capping_groups(

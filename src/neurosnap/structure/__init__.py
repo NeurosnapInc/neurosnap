@@ -24,6 +24,7 @@ from .prepare import (
   add_hydrogens_with_pdb2pqr,
   has_hydrogens,
   optimize_hydrogens_with_pdb2pqr,
+  remove_altlocs_and_duplicate_atoms,
   strip_hydrogens,
 )
 from .rendering import animate_frames, render_pseudo3D, render_structure_pseudo3D
@@ -68,6 +69,7 @@ __all__ = [
   "calculate_interface_hydrogen_bonding_residues",
   "has_hydrogens",
   "strip_hydrogens",
+  "remove_altlocs_and_duplicate_atoms",
   "add_terminal_capping_groups",
   "add_hydrogens_with_pdb2pqr",
   "optimize_hydrogens_with_pdb2pqr",

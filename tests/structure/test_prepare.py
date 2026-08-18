@@ -9,6 +9,7 @@ from neurosnap.structure import (
   add_hydrogens_with_pdb2pqr,
   has_hydrogens,
   optimize_hydrogens_with_pdb2pqr,
+  remove_altlocs_and_duplicate_atoms,
   strip_hydrogens,
 )
 from tests._structure_test_utils import PROTEIN_BACKBONE_ATOMS, replace_chain, make_structure
@@ -53,9 +54,75 @@ def test_prepare_helpers_require_structure():
   with pytest.raises(TypeError):
     add_terminal_capping_groups(object())
   with pytest.raises(TypeError):
+    remove_altlocs_and_duplicate_atoms(object())
+  with pytest.raises(TypeError):
     add_hydrogens_with_pdb2pqr(object())
   with pytest.raises(TypeError):
     optimize_hydrogens_with_pdb2pqr(object())
+
+
+def test_remove_altlocs_and_duplicate_atoms_keeps_highest_occupancy_and_remaps_topology():
+  structure = make_structure(
+    [
+      ("N", "GLY", "A", 1, 0.0, 0.0, 0.0, "N"),
+      ("CA", "GLY", "A", 1, 1.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "A", 1, 2.0, 0.0, 0.0, "C"),
+      ("C", "GLY", "A", 1, 3.0, 0.0, 0.0, "C"),
+    ],
+    bonds=[(0, 2, 1, 0), (1, 3, 1, 0), (2, 3, 1, 0)],
+    interactions=[(0, 2, 127), (1, 3, 127)],
+  )
+  structure.add_annotation("altloc", "U1", ["", "A", "B", ""])
+  structure.add_annotation("occupancy", "f4", [1.0, 0.4, 0.8, 1.0])
+
+  cleaned = remove_altlocs_and_duplicate_atoms(structure)
+
+  assert len(cleaned) == 3
+  assert cleaned.atom_annotations["atom_name"].tolist() == ["N", "CA", "C"]
+  assert cleaned.atom_annotations["atom_id"].tolist() == [1, 3, 4]
+  assert cleaned.atoms["x"].tolist() == [0.0, 2.0, 3.0]
+  assert "altloc" not in cleaned.atom_annotations.dtype.names
+  assert cleaned.bonds.tolist() == [(0, 1, 1, 0), (1, 2, 1, 0)]
+  assert cleaned.interactions.tolist() == [(0, 1, 127)]
+
+  assert len(structure) == 4
+  assert "altloc" in structure.atom_annotations.dtype.names
+
+
+def test_remove_altlocs_and_duplicate_atoms_prefers_blank_then_a_for_equal_occupancy():
+  structure = make_structure(
+    [
+      ("CA", "GLY", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "A", 1, 1.0, 0.0, 0.0, "C"),
+      ("CB", "GLY", "A", 1, 2.0, 0.0, 0.0, "C"),
+      ("CB", "GLY", "A", 1, 3.0, 0.0, 0.0, "C"),
+      ("N", "GLY", "A", 1, 4.0, 0.0, 0.0, "N"),
+      ("N", "GLY", "A", 1, 5.0, 0.0, 0.0, "N"),
+    ]
+  )
+  structure.add_annotation("altloc", "U1", ["B", "A", "B", "", "C", "D"])
+
+  cleaned = remove_altlocs_and_duplicate_atoms(structure)
+
+  assert cleaned.atom_annotations["atom_name"].tolist() == ["CA", "CB", "N"]
+  assert cleaned.atom_annotations["atom_id"].tolist() == [2, 4, 5]
+  assert "altloc" not in cleaned.atom_annotations.dtype.names
+
+
+def test_remove_altlocs_and_duplicate_atoms_removes_duplicate_sites_without_altloc_column():
+  structure = make_structure(
+    [
+      ("CA", "GLY", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "A", 1, 1.0, 0.0, 0.0, "C"),
+      ("CA", "GLY", "B", 1, 2.0, 0.0, 0.0, "C"),
+    ]
+  )
+
+  cleaned = remove_altlocs_and_duplicate_atoms(structure)
+
+  assert len(cleaned) == 2
+  assert cleaned.atom_annotations["chain_id"].tolist() == ["A", "B"]
+  assert cleaned.atom_annotations["atom_id"].tolist() == [1, 3]
 
 
 def test_add_terminal_capping_groups_adds_ace_and_nme_caps():

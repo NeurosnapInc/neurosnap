@@ -28,11 +28,13 @@ class CCD:
     code: CCD identifier, typically 1-5 characters.
     name: Human-readable component name.
     smiles: SMILES string for the component (technically canonicalized but the canonicalization algorithm used by wwPDB is inconsistent with that of RDkit).
+    type: CCD component type.
   """
 
   code: str
   name: str
   smiles: str
+  type: str
 
   def to_mol(self) -> Chem.Mol:
     """Return an RDKit molecule parsed from the canonical SMILES string.
@@ -91,6 +93,7 @@ def get_ccd_entries(
       code=str(code).upper(),
       name=str(entry.get("name", "")),
       smiles=str(entry.get("smiles", "")),
+      type=str(entry["type"]),
     )
     code_map[ccd.code] = ccd
 
@@ -240,6 +243,7 @@ def _load_ccd_payload(*, cache_path: str, overwrite: bool, max_age_days: int, ti
   if not overwrite and path.exists():
     try:
       payload = json.loads(path.read_text())
+      _validate_ccd_payload(payload)
       if _payload_is_fresh(payload, max_age_days=max_age_days):
         return payload
       logger.info("Cached CCD entries are stale; refreshing.")
@@ -250,12 +254,21 @@ def _load_ccd_payload(*, cache_path: str, overwrite: bool, max_age_days: int, ti
   response = requests.get(CCD_ENTRIES_URL, timeout=timeout)
   response.raise_for_status()
   payload = response.json()
-  if "entries" not in payload or "created_at" not in payload:
-    raise ValueError("CCD entries payload is missing required keys.")
+  _validate_ccd_payload(payload)
 
   path.parent.mkdir(parents=True, exist_ok=True)
   path.write_text(json.dumps(payload))
   return payload
+
+
+def _validate_ccd_payload(payload: dict) -> None:
+  """Validate the expected CCD entries payload schema."""
+  if "entries" not in payload or "created_at" not in payload:
+    raise ValueError("CCD entries payload is missing required keys.")
+
+  for code, entry in payload["entries"].items():
+    if not all(key in entry for key in ("name", "smiles", "type")):
+      raise ValueError(f'CCD entry "{code}" is missing required keys.')
 
 
 def _payload_is_fresh(payload: dict, *, max_age_days: int) -> bool:

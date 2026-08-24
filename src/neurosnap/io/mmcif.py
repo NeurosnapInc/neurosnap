@@ -192,6 +192,46 @@ def _parse_mmcif_float(value: object, field_name: str, row_number: int, *, requi
     raise ValueError(f'Invalid float value "{text}" for mmCIF field "{field_name}" at atom row {row_number}.') from exc
 
 
+def _mmcif_entity_polymer_types(mmcif_dict: Dict[str, Union[str, List[str]]]) -> Dict[str, str]:
+  """Return normalized polymer types keyed by mmCIF entity ID."""
+  entity_ids = list(mmcif_dict.get("_entity_poly.entity_id", []))
+  entity_types = list(mmcif_dict.get("_entity_poly.type", []))
+  polymer_types: Dict[str, str] = {}
+  for entity_id, entity_type in zip(entity_ids, entity_types):
+    normalized_entity_id = _normalize_mmcif_value(entity_id)
+    polymer_type = _normalize_mmcif_polymer_type(entity_type)
+    if normalized_entity_id and polymer_type is not None:
+      polymer_types[normalized_entity_id] = polymer_type
+  return polymer_types
+
+
+def _mmcif_chem_comp_polymer_types(mmcif_dict: Dict[str, Union[str, List[str]]]) -> Dict[str, str]:
+  """Return normalized polymer types keyed by CCD/component ID."""
+  comp_ids = list(mmcif_dict.get("_chem_comp.id", []))
+  comp_types = list(mmcif_dict.get("_chem_comp.type", []))
+  polymer_types: Dict[str, str] = {}
+  for comp_id, comp_type in zip(comp_ids, comp_types):
+    normalized_comp_id = _normalize_mmcif_value(comp_id).upper()
+    polymer_type = _normalize_mmcif_polymer_type(comp_type)
+    if normalized_comp_id and polymer_type is not None:
+      polymer_types[normalized_comp_id] = polymer_type
+  return polymer_types
+
+
+def _normalize_mmcif_polymer_type(value: object) -> Optional[str]:
+  """Map mmCIF entity/CCD polymer labels to Neurosnap polymer families."""
+  normalized = _normalize_mmcif_value(value).lower()
+  if not normalized:
+    return None
+  if "peptide" in normalized or "polypeptide" in normalized:
+    return "protein"
+  if "polydeoxyribonucleotide" in normalized or "dna linking" in normalized:
+    return "dna"
+  if "polyribonucleotide" in normalized or "rna linking" in normalized:
+    return "rna"
+  return None
+
+
 def parse_mmcif(
   mmcif: Union[str, pathlib.Path, io.IOBase],
   return_type: ReturnType = "auto",
@@ -265,6 +305,7 @@ def parse_mmcif(
   insertion_codes = column("_atom_site.pdbx_PDB_ins_code")
   label_chain_ids = column("_atom_site.label_asym_id")
   auth_chain_ids = column("_atom_site.auth_asym_id")
+  label_entity_ids = column("_atom_site.label_entity_id")
   xs = column("_atom_site.Cartn_x")
   ys = column("_atom_site.Cartn_y")
   zs = column("_atom_site.Cartn_z")
@@ -273,10 +314,13 @@ def parse_mmcif(
   model_ids = column("_atom_site.pdbx_PDB_model_num", default="1")
   charges = column("_atom_site.pdbx_formal_charge", default="0")
   struct_conn_ids = list(mmcif_dict.get("_struct_conn.id", []))
+  entity_polymer_types = _mmcif_entity_polymer_types(mmcif_dict)
+  chem_comp_polymer_types = _mmcif_chem_comp_polymer_types(mmcif_dict)
 
   altloc_sites: Set[Tuple[int, Tuple[str, int, str, str, bool, str]]] = set()
   model_order: List[int] = []
   model_builders: Dict[int, Dict[str, object]] = {}
+  model_polymer_residue_types: Dict[int, Dict[Tuple[str, int, str, str, bool], str]] = {}
   implicit_residue_state: Dict[int, Dict[str, object]] = {}
 
   def get_builder(model_id: int) -> Dict[str, object]:
@@ -371,8 +415,13 @@ def parse_mmcif(
     x = _parse_mmcif_float(xs[atom_row_index], "_atom_site.Cartn_x", row_number, required=True)
     y = _parse_mmcif_float(ys[atom_row_index], "_atom_site.Cartn_y", row_number, required=True)
     z = _parse_mmcif_float(zs[atom_row_index], "_atom_site.Cartn_z", row_number, required=True)
+    label_entity_id = _normalize_mmcif_value(label_entity_ids[atom_row_index])
 
     atom_key = (chain_id, res_id, insertion_code, res_name, hetero, atom_name)
+    residue_key = (chain_id, res_id, insertion_code, res_name, hetero)
+    residue_polymer_type = entity_polymer_types.get(label_entity_id) or chem_comp_polymer_types.get(res_name.upper())
+    if residue_polymer_type is not None:
+      model_polymer_residue_types.setdefault(model_id, {})[residue_key] = residue_polymer_type
     if altloc:
       altloc_sites.add((model_id, atom_key))
 
@@ -425,6 +474,8 @@ def parse_mmcif(
     builder = model_builders[model_id]
     structure = Structure(remove_annotations=False)
     structure.metadata = {"model_id": model_id}
+    if model_polymer_residue_types.get(model_id):
+      structure.metadata["mmcif_polymer_residue_types"] = dict(model_polymer_residue_types[model_id])
 
     if builder["atoms"]:
       structure.atoms = np.array(builder["atoms"], dtype=structure._dtype_atoms)
@@ -444,6 +495,9 @@ def parse_mmcif(
   if struct_conn_ids:
     _apply_struct_conn_tables(ensemble, mmcif_dict)
 
+  shared_polymer_residue_types = _shared_model_polymer_residue_types(model_polymer_residue_types, model_order)
+  if shared_polymer_residue_types:
+    ensemble.metadata["mmcif_polymer_residue_types"] = shared_polymer_residue_types
   ensemble.metadata["source_format"] = "mmcif"
 
   if altloc_sites:
@@ -461,6 +515,22 @@ def parse_mmcif(
     return StructureStack.from_ensemble(ensemble)
   except ValueError:
     return ensemble
+
+
+def _shared_model_polymer_residue_types(
+  model_polymer_residue_types: Dict[int, Dict[Tuple[str, int, str, str, bool], str]],
+  model_order: List[int],
+) -> Dict[Tuple[str, int, str, str, bool], str]:
+  """Return polymer residue typing shared by every parsed model."""
+  if not model_order:
+    return {}
+  first_model_types = model_polymer_residue_types.get(model_order[0], {})
+  if not first_model_types:
+    return {}
+  for model_id in model_order[1:]:
+    if model_polymer_residue_types.get(model_id, {}) != first_model_types:
+      return {}
+  return dict(first_model_types)
 
 
 def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif: Union[str, pathlib.Path, io.IOBase], minimal: bool = False):
@@ -789,13 +859,13 @@ def _build_cif_chain_metadata(models: List[Tuple[int, Structure]]) -> Dict[str, 
         auth_asym_id = label_asym_id
         generated_chain_index += 1
 
-      polymer_type = _chain_polymer_type(chain)
+      polymer_type = _chain_polymer_type(model, chain)
       chain_metadata[chain.chain_id] = {
         "entity_id": next_entity_id,
         "label_asym_id": label_asym_id,
         "auth_asym_id": auth_asym_id,
         "polymer_type": polymer_type,
-        "polymer_residues": _chain_polymer_residues(chain, polymer_type),
+        "polymer_residues": _chain_polymer_residues(model, chain, polymer_type),
       }
       next_entity_id += 1
 
@@ -880,13 +950,13 @@ def _append_cif_entity_metadata(lines: List[str], chain_metadata: Dict[str, Dict
   lines.append("#")
 
 
-def _chain_polymer_type(chain) -> Optional[str]:
+def _chain_polymer_type(model: Structure, chain) -> Optional[str]:
   """Return a normalized polymer type for a chain."""
   polymer_types = {
     polymer_type
     for residue in chain.residues()
     if not residue.hetero
-    for polymer_type in [_classify_polymer_residue(residue)]
+    for polymer_type in [_classify_cif_polymer_residue(model, residue)]
     if polymer_type is not None
   }
   if not polymer_types:
@@ -897,11 +967,15 @@ def _chain_polymer_type(chain) -> Optional[str]:
   return next(iter(polymer_types))
 
 
-def _chain_polymer_residues(chain, polymer_type: Optional[str]):
+def _chain_polymer_residues(model: Structure, chain, polymer_type: Optional[str]):
   """Return polymer residues in atom-table order for a chain."""
   if polymer_type is None:
     return []
-  return [residue for residue in chain.residues() if not residue.hetero and _classify_polymer_residue(residue) == polymer_type]
+  return [
+    residue
+    for residue in chain.residues()
+    if not residue.hetero and _classify_cif_polymer_residue(model, residue) == polymer_type
+  ]
 
 
 def _entity_poly_sequence_code(polymer_residues, polymer_type: str) -> str:
@@ -967,11 +1041,20 @@ def _residue_label_seq_ids_for_model(model: Structure) -> Dict[Tuple[str, int, s
   for chain in model.chains():
     seq_index = 1
     for residue in chain.residues():
-      if residue.hetero or _classify_polymer_residue(residue) is None:
+      if residue.hetero or _classify_cif_polymer_residue(model, residue) is None:
         continue
       label_seq_ids[residue.key()] = seq_index
       seq_index += 1
   return label_seq_ids
+
+
+def _classify_cif_polymer_residue(model: Structure, residue) -> Optional[str]:
+  """Classify a residue for mmCIF output, honoring source mmCIF metadata."""
+  metadata_types = model.metadata.get("mmcif_polymer_residue_types", {})
+  metadata_polymer_type = metadata_types.get(residue.key())
+  if metadata_polymer_type in {"protein", "dna", "rna"}:
+    return metadata_polymer_type
+  return _classify_polymer_residue(residue)
 
 
 def _atom_ids_for_model(model: Structure) -> np.ndarray:

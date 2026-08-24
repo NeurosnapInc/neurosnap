@@ -155,6 +155,31 @@ def test_save_cif_writes_full_entity_metadata_by_default():
   assert mmcif_dict["_entity_poly_seq.mon_id"] == ["ALA", "GLY", "DA"]
 
 
+def test_chai_adjacent_ptms_cif_roundtrip_preserves_inline_peptide_residue(tmp_path):
+  structure = parse_single_model(FILES / "chai_1_two_adjacent_ptms.cif")
+  output_cif = tmp_path / "chai_1_two_adjacent_ptms_roundtrip.cif"
+
+  save_cif(structure, output_cif)
+
+  mmcif_dict = mmcif_module._parse_mmcif_dict(output_cif.read_text())
+  assert mmcif_dict["_entity.type"] == ["polymer"]
+  assert mmcif_dict["_entity_poly.type"] == ["polypeptide(L)"]
+  assert mmcif_dict["_entity_poly_seq.num"][8:11] == ["9", "10", "11"]
+  assert mmcif_dict["_entity_poly_seq.mon_id"][8:11] == ["TPO", "7RX", "SER"]
+
+  reloaded = parse_single_model(output_cif)
+  reloaded_output = tmp_path / "chai_1_two_adjacent_ptms_second_roundtrip.cif"
+  save_cif(reloaded, reloaded_output)
+  reloaded_mmcif_dict = mmcif_module._parse_mmcif_dict(reloaded_output.read_text())
+  assert reloaded_mmcif_dict["_entity_poly_seq.mon_id"][8:11] == ["TPO", "7RX", "SER"]
+
+  auto_parsed = mmcif_module.parse_mmcif(FILES / "chai_1_two_adjacent_ptms.cif")
+  auto_output = tmp_path / "chai_1_two_adjacent_ptms_auto_roundtrip.cif"
+  save_cif(auto_parsed, auto_output)
+  auto_mmcif_dict = mmcif_module._parse_mmcif_dict(auto_output.read_text())
+  assert auto_mmcif_dict["_entity_poly_seq.mon_id"][8:11] == ["TPO", "7RX", "SER"]
+
+
 def test_save_cif_minimal_preserves_compact_output():
   structure = make_structure(MIXED_BACKBONE_ATOMS)
   cif_buffer = io.StringIO()

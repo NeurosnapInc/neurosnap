@@ -30,10 +30,11 @@ def classify_polymer_residue(residue: Residue) -> Optional[PolymerType]:
     return "rna"
 
   atom_names = {atom.atom_name.strip().upper() for atom in residue.atoms()}
-  if "O2'" in atom_names:
-    if len(atom_names.intersection({atom_name.upper() for atom_name in BACKBONE_ATOMS_RNA})) >= 3:
-      return "rna"
-  if len(atom_names.intersection({atom_name.upper() for atom_name in BACKBONE_ATOMS_DNA})) >= 3:
+  sugar_backbone_atoms = {atom_name.upper() for atom_name in BACKBONE_ATOMS_DNA if "'" in atom_name}
+  sugar_backbone_matches = len(atom_names.intersection(sugar_backbone_atoms))
+  if "O2'" in atom_names and sugar_backbone_matches >= 3:
+    return "rna"
+  if sugar_backbone_matches >= 3:
     return "dna"
   return None
 

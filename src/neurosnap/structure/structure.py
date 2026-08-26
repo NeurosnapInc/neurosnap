@@ -20,7 +20,7 @@ import pandas as pd
 from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
 from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
-from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, BACKBONE_ATOMS_RNA, NA_DNA_CODES, NA_RNA_CODES, STANDARD_NUCLEOTIDES
+from neurosnap.constants.structure import BACKBONE_ATOMS_DNA, NA_DNA_CODES, NA_RNA_CODES, STANDARD_NUCLEOTIDES
 from neurosnap.log import logger
 
 ### IMPORTANT NOTES
@@ -1889,12 +1889,11 @@ def _classify_polymer_residue(residue: Residue) -> Optional[str]:
     return "rna"
 
   atom_names = {atom.atom_name.strip().upper() for atom in residue._atoms}
-  if "O2'" in atom_names:
-    backbone_matches = len(atom_names.intersection({atom_name.upper() for atom_name in BACKBONE_ATOMS_RNA}))
-    if backbone_matches >= 3:
-      return "rna"
-  backbone_matches = len(atom_names.intersection({atom_name.upper() for atom_name in BACKBONE_ATOMS_DNA}))
-  if backbone_matches >= 3:
+  sugar_backbone_atoms = {atom_name.upper() for atom_name in BACKBONE_ATOMS_DNA if "'" in atom_name}
+  sugar_backbone_matches = len(atom_names.intersection(sugar_backbone_atoms))
+  if "O2'" in atom_names and sugar_backbone_matches >= 3:
+    return "rna"
+  if sugar_backbone_matches >= 3:
     return "dna"
   return None
 

@@ -156,8 +156,14 @@ def test_save_cif_writes_full_entity_metadata_by_default():
 
 
 def test_chai_adjacent_ptms_cif_roundtrip_preserves_inline_peptide_residue(tmp_path):
+  from neurosnap.structure._common import classify_polymer_residue
+
   structure = parse_single_model(FILES / "chai_1_two_adjacent_ptms.cif")
   output_cif = tmp_path / "chai_1_two_adjacent_ptms_roundtrip.cif"
+
+  chain = structure["A"]
+  assert chain.sequence(polymer_type="protein") == "LCLYTHIGSETWNTGI"
+  assert classify_polymer_residue(chain[9]) is None
 
   save_cif(structure, output_cif)
 

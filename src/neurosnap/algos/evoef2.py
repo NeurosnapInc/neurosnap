@@ -83,6 +83,29 @@ def _protein_one_letter_code(res_name: str) -> Optional[str]:
   return record.code
 
 
+_HISTIDINE_TO_EVOEF2 = {
+  "HIS": "HSD",
+  "HID": "HSD",
+  "HIE": "HSE",
+  "HIP": "HSP",
+}
+_EVOEF2_HISTIDINE_NAMES = {"HSD", "HSE", "HSP", "HID", "HIE", "HIP"}
+
+
+def _normalize_residue_name_for_evoef2(res_name: str) -> str:
+  """Return the internal EvoEF2 residue name for public residue aliases."""
+  res_name = str(res_name).strip().upper()
+  return _HISTIDINE_TO_EVOEF2.get(res_name, res_name)
+
+
+def _normalize_residue_name_for_public_output(res_name: str) -> str:
+  """Return the public PDB residue name for EvoEF2-internal residue variants."""
+  res_name = str(res_name).strip().upper()
+  if res_name in _EVOEF2_HISTIDINE_NAMES:
+    return "HIS"
+  return res_name
+
+
 @dataclass
 class AtomParam:
   """Per-atom parameter record loaded from the EvoEF2 parameter library.
@@ -1556,13 +1579,8 @@ def rebuild_missing_atoms(
         current_key = key
       if key != current_key:
         res_id, res_name = current_key
-        # Normalize histidine names to EvoEF2 protonation variants.
-        if res_name == "HIS":
-          res_name = "HSD"
-        elif res_name == "HIE":
-          res_name = "HSE"
-        elif res_name == "HIP":
-          res_name = "HSP"
+        # EvoEF2 scores histidine as explicit protonation variants internally.
+        res_name = _normalize_residue_name_for_evoef2(res_name)
         if res_name in NA_RESIDUE_MAP:
           res_name = NA_RESIDUE_MAP[res_name]
         is_protein = _protein_one_letter_code(res_name) is not None
@@ -1605,12 +1623,7 @@ def rebuild_missing_atoms(
       current_rows.append(row)
     if current_key is not None:
       res_id, res_name = current_key
-      if res_name == "HIS":
-        res_name = "HSD"
-      elif res_name == "HIE":
-        res_name = "HSE"
-      elif res_name == "HIP":
-        res_name = "HSP"
+      res_name = _normalize_residue_name_for_evoef2(res_name)
       if res_name in NA_RESIDUE_MAP:
         res_name = NA_RESIDUE_MAP[res_name]
       is_protein = _protein_one_letter_code(res_name) is not None
@@ -2058,7 +2071,8 @@ def _evo_structure_to_ns(
     public_chain_id = chain.name[:-2] if chain.name.endswith("_L") else chain.name
     for residue in chain.residues:
       hetero = not _is_polymer_residue(residue)
-      represented_original_residues.add((public_chain_id, int(residue.pos), "", hetero, residue.name))
+      public_residue_name = _normalize_residue_name_for_public_output(residue.name)
+      represented_original_residues.add((public_chain_id, int(residue.pos), "", hetero, public_residue_name))
       local_atom_indices: Dict[str, int] = {}
       for atom in residue.atoms.values():
         if not atom.is_xyz_valid:
@@ -2069,7 +2083,7 @@ def _evo_structure_to_ns(
         annotations["chain_id"].append(public_chain_id)
         annotations["res_id"].append(int(residue.pos))
         annotations["ins_code"].append("")
-        annotations["res_name"].append(residue.name)
+        annotations["res_name"].append(public_residue_name)
         annotations["hetero"].append(bool(hetero))
         annotations["atom_name"].append(atom.name)
         if atom.param is not None and atom.param.element:

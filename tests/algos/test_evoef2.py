@@ -2,6 +2,7 @@
 Tests for EvoEF2 scoring parity checks against reference outputs.
 """
 
+import io
 from pathlib import Path
 
 import pytest
@@ -319,6 +320,21 @@ def test_build_mutant_returns_new_structure_and_preserves_input():
   assert mutant.chain_ids() == structure.chain_ids()
   assert len(mutant) >= len(structure)
   assert np.isfinite(calculate_stability(mutant)["total"])
+
+
+def test_build_mutant_outputs_standard_histidine_names():
+  structure = parse_single_model(FILES / "1MAL.pdb")
+  mutant = build_mutant(structure, [Mutation(chain_id="A", position=1, target_residue="H")], num_runs=1)
+
+  residue_names = set(mutant.to_dataframe()["res_name"])
+  assert "HIS" in residue_names
+  assert residue_names.isdisjoint({"HID", "HIE", "HIP", "HSD", "HSE", "HSP"})
+
+  pdb = io.StringIO()
+  mutant.save_pdb(pdb)
+  assert " HIS " in pdb.getvalue()
+  for histidine_variant in (" HID ", " HIE ", " HIP ", " HSD ", " HSE ", " HSP "):
+    assert histidine_variant not in pdb.getvalue()
 
 
 def test_build_mutants_returns_one_structure_per_mutation_set():

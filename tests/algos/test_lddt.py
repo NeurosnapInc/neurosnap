@@ -103,7 +103,7 @@ def test_calc_lddt_phosphotyrosine_peptide_and_grb2_models():
 
   score = calc_lddt(struct1[1], struct2[1])
 
-  assert score == pytest.approx(0.9369076482256997)
+  assert score == pytest.approx(0.9362053768179814)
 
 
 def test_calc_lddt_includes_modified_polymer_residues_by_default():

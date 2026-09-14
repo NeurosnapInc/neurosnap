@@ -73,6 +73,20 @@ def test_split_interleaved_fastq_transcript_assembly(tmp_path):
   assert right_lines[0] == "@1/2"
 
 
+def test_split_interleaved_fastq_preserves_bare_separator_lines(tmp_path):
+  interleaved_path = tmp_path / "interleaved.fastq"
+  interleaved_path.write_text("@read.1\nACGT\n+\n!!!!\n@read.2\nTGCA\n+\n####\n")
+
+  left_path, right_path = split_interleaved_fastq(
+    interleaved_path,
+    tmp_path,
+    preserve_identifier_names=True,
+  )
+
+  assert left_path.read_text().splitlines() == ["@read/1", "ACGT", "+", "!!!!"]
+  assert right_path.read_text().splitlines() == ["@read/2", "TGCA", "+", "####"]
+
+
 def test_split_interleaved_fastq_uneven_reads_raises(tmp_path):
   interleaved_path = tmp_path / "uneven.fastq"
   interleaved_path.write_text(

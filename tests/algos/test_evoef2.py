@@ -4,6 +4,7 @@ Tests for EvoEF2 scoring parity checks against reference outputs.
 
 import io
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -23,6 +24,32 @@ from tests._structure_test_utils import parse_single_model
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 FILES = TESTS_DIR / "files"
+
+
+@pytest.mark.parametrize(
+  ("distance", "expected"),
+  [
+    (5.999, True),
+    (6.0, False),
+    (6.001, False),
+  ],
+)
+def test_residues_within_distance_uses_strict_cutoff(distance, expected):
+  atom1 = SimpleNamespace(is_xyz_valid=True, xyz=np.array([0.0, 0.0, 0.0]))
+  atom2 = SimpleNamespace(is_xyz_valid=True, xyz=np.array([distance, 0.0, 0.0]))
+  residue1 = SimpleNamespace(atoms={"A": atom1})
+  residue2 = SimpleNamespace(atoms={"B": atom2})
+
+  assert evoef2._residues_within_distance(residue1, residue2, 6.0) is expected
+
+
+def test_residues_within_distance_ignores_invalid_coordinates():
+  invalid_atom = SimpleNamespace(is_xyz_valid=False, xyz=np.array([0.0, 0.0, 0.0]))
+  valid_atom = SimpleNamespace(is_xyz_valid=True, xyz=np.array([0.0, 0.0, 0.0]))
+  residue1 = SimpleNamespace(atoms={"invalid": invalid_atom})
+  residue2 = SimpleNamespace(atoms={"valid": valid_atom})
+
+  assert not evoef2._residues_within_distance(residue1, residue2, 6.0)
 
 
 def _compare_terms(actual, expected, *, abs_tol=0.1, rel_tol=0.01):

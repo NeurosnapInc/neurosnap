@@ -1941,8 +1941,19 @@ def _iter_residue_neighbors(evo_struct: Structure, query_residue: Residue) -> It
         continue
       if not residue.is_protein:
         continue
-      if _residue_min_distance(query_residue, residue) < ENERGY_DISTANCE_CUTOFF:
+      if _residues_within_distance(query_residue, residue, ENERGY_DISTANCE_CUTOFF):
         yield chain, residue_index, residue
+
+
+def _residues_within_distance(res1: Residue, res2: Residue, cutoff: float) -> bool:
+  """Return whether any valid atom pair is closer than the cutoff."""
+  coordinates1 = [atom.xyz for atom in res1.atoms.values() if atom.is_xyz_valid]
+  coordinates2 = [atom.xyz for atom in res2.atoms.values() if atom.is_xyz_valid]
+  if not coordinates1 or not coordinates2:
+    return False
+  deltas = np.asarray(coordinates1)[:, None, :] - np.asarray(coordinates2)[None, :, :]
+  distances_squared = np.einsum("ijk,ijk->ij", deltas, deltas)
+  return bool(np.any(distances_squared < cutoff * cutoff))
 
 
 def _residue_min_distance(res1: Residue, res2: Residue) -> float:
@@ -1979,7 +1990,7 @@ def _local_candidate_energy(
         continue
       if not other.is_protein:
         continue
-      if _residue_min_distance(candidate, other) >= ENERGY_DISTANCE_CUTOFF:
+      if not _residues_within_distance(candidate, other, ENERGY_DISTANCE_CUTOFF):
         continue
       if other_chain_index == chain_index:
         if abs(candidate.pos - other.pos) == 1:

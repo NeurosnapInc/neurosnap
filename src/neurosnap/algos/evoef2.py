@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import copy
 import math
+import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -2185,6 +2186,8 @@ def build_mutant(
   if num_runs < 1:
     raise ValueError("num_runs must be at least 1.")
 
+  started = time.perf_counter()
+  logger.info("EvoEF2: preparing structure for %d mutation(s).", len(mutations))
   evo_struct = rebuild_missing_atoms(structure, param_path=param_path, topo_path=topo_path)
   params = load_atom_params(param_path)
   topologies = load_topology(topo_path)
@@ -2228,8 +2231,18 @@ def build_mutant(
         wildtype_sites[neighbor_key] = candidate_names
       optimization_order.append((neighbor_chain_index, neighbor_index, wildtype_sites[neighbor_key], True))
 
-  for _ in range(int(num_runs)):
-    for chain_index, residue_index, candidate_names, include_current in optimization_order:
+  logger.info("EvoEF2: prepared %d optimization sites in %.1fs.", len(optimization_order), time.perf_counter() - started)
+  for run_index in range(int(num_runs)):
+    pass_started = time.perf_counter()
+    logger.info("EvoEF2: optimization pass %d/%d starting (%d sites).", run_index + 1, int(num_runs), len(optimization_order))
+    for site_index, (chain_index, residue_index, candidate_names, include_current) in enumerate(optimization_order, start=1):
+      chain = evo_struct.chains[chain_index]
+      residue = chain.residues[residue_index]
+      site_started = time.perf_counter()
+      logger.debug(
+        "EvoEF2: pass %d/%d, site %d/%d starting: chain %s residue %s, candidates %s.",
+        run_index + 1, int(num_runs), site_index, len(optimization_order), chain.name, residue.pos, ",".join(candidate_names),
+      )
       _optimize_site_sequentially(
         evo_struct,
         chain_index,
@@ -2241,8 +2254,15 @@ def build_mutant(
         dun=dun,
         weight_dict=weight_dict,
       )
+      logger.debug(
+        "EvoEF2: pass %d/%d, site %d/%d completed in %.1fs.",
+        run_index + 1, int(num_runs), site_index, len(optimization_order), time.perf_counter() - site_started,
+      )
+    logger.info("EvoEF2: optimization pass %d/%d completed in %.1fs.", run_index + 1, int(num_runs), time.perf_counter() - pass_started)
 
-  return _evo_structure_to_ns(evo_struct, structure)
+  result = _evo_structure_to_ns(evo_struct, structure)
+  logger.info("EvoEF2: mutant model completed in %.1fs.", time.perf_counter() - started)
+  return result
 
 
 def build_mutants(
@@ -2258,18 +2278,31 @@ def build_mutants(
   """Build multiple EvoEF2-style mutant models from one input structure."""
   if not isinstance(structure, NSStructure):
     raise TypeError(f"build_mutants() expects a Structure, found {type(structure).__name__}.")
-  return [
-    build_mutant(
-      structure,
-      mutations,
-      num_runs=num_runs,
-      param_path=param_path,
-      topo_path=topo_path,
-      weight_dict=weight_dict,
-      dunbrack_path=dunbrack_path,
+  started = time.perf_counter()
+  results = []
+  for index, mutations in enumerate(mutation_sets, start=1):
+    mutant_started = time.perf_counter()
+    logger.info("EvoEF2: building mutant %d/%d.", index, len(mutation_sets))
+    try:
+      result = build_mutant(
+        structure,
+        mutations,
+        num_runs=num_runs,
+        param_path=param_path,
+        topo_path=topo_path,
+        weight_dict=weight_dict,
+        dunbrack_path=dunbrack_path,
+      )
+    except Exception:
+      logger.exception("EvoEF2: mutant %d/%d failed after %.1fs.", index, len(mutation_sets), time.perf_counter() - mutant_started)
+      raise
+    results.append(result)
+    logger.info(
+      "EvoEF2: mutant %d/%d completed in %.1fs (batch elapsed %.1fs).",
+      index, len(mutation_sets), time.perf_counter() - mutant_started, time.perf_counter() - started,
     )
-    for mutations in mutation_sets
-  ]
+  logger.info("EvoEF2: completed %d mutant models in %.1fs.", len(results), time.perf_counter() - started)
+  return results
 
 
 # -----------------------------

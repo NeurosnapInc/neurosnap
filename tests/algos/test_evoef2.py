@@ -309,7 +309,7 @@ def test_ptm_stability_smoke():
   assert data["total"] == pytest.approx(-5820.224155352682, abs=5.0)
 
 
-def test_build_mutant_returns_new_structure_and_preserves_input():
+def test_build_mutant_returns_new_structure_and_preserves_input(caplog):
   structure = parse_single_model(FILES / "1MAL.pdb")
   original_first_residue = structure["A"][1]
   mutant = build_mutant(structure, [Mutation(chain_id="A", position=1, target_residue="A")], num_runs=1)
@@ -320,6 +320,12 @@ def test_build_mutant_returns_new_structure_and_preserves_input():
   assert mutant.chain_ids() == structure.chain_ids()
   assert len(mutant) >= len(structure)
   assert np.isfinite(calculate_stability(mutant)["total"])
+  messages = [record.getMessage() for record in caplog.records]
+  assert any("preparing structure" in message for message in messages)
+  assert any("optimization pass 1/1 starting" in message for message in messages)
+  assert any("site 1/" in message and "starting: chain" in message for message in messages)
+  assert any("optimization pass 1/1 completed" in message for message in messages)
+  assert any("mutant model completed" in message for message in messages)
 
 
 def test_build_mutant_outputs_standard_histidine_names():
@@ -337,7 +343,7 @@ def test_build_mutant_outputs_standard_histidine_names():
     assert histidine_variant not in pdb.getvalue()
 
 
-def test_build_mutants_returns_one_structure_per_mutation_set():
+def test_build_mutants_returns_one_structure_per_mutation_set(caplog):
   structure = parse_single_model(FILES / "1MAL.pdb")
   mutants = build_mutants(
     structure,
@@ -351,6 +357,27 @@ def test_build_mutants_returns_one_structure_per_mutation_set():
   assert len(mutants) == 2
   assert mutants[0]["A"][1].res_name == "ALA"
   assert mutants[1]["B"][1].res_name == "GLY"
+  messages = [record.getMessage() for record in caplog.records]
+  for index in (1, 2):
+    assert f"EvoEF2: building mutant {index}/2." in messages
+    assert any(f"mutant {index}/2 completed" in message for message in messages)
+  assert any("completed 2 mutant models" in message for message in messages)
+
+
+def test_build_mutants_logs_failure_without_reporting_completion(monkeypatch, caplog):
+  structure = parse_single_model(FILES / "1MAL.pdb")
+  failure = RuntimeError("optimization failed")
+
+  def fail_build(*args, **kwargs):
+    raise failure
+
+  monkeypatch.setattr(evoef2, "build_mutant", fail_build)
+  with pytest.raises(RuntimeError) as caught:
+    build_mutants(structure, [[Mutation(chain_id="A", position=1, target_residue="A")]])
+  assert caught.value is failure
+  messages = [record.getMessage() for record in caplog.records]
+  assert any("mutant 1/1 failed" in message for message in messages)
+  assert not any("completed" in message for message in messages)
 
 
 def test_build_mutant_rejects_duplicate_sites():

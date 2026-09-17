@@ -47,22 +47,29 @@ class _MockResponse:
 
 
 def _install_routes(monkeypatch, routes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-  """Install a fake ``requests.get`` that matches URLs against ``routes``.
+  """Install fake request methods that match URLs against ``routes``.
 
   Each route is a dict with ``match`` (substring) and ``response`` (a
   ``_MockResponse`` or callable). Returns the recorded list of calls.
   """
   calls: List[Dict[str, Any]] = []
 
-  def fake_get(url: str, params: Optional[dict] = None, timeout: Optional[int] = None):
-    calls.append({"url": url, "params": params, "timeout": timeout})
+  def fake_request(method: str, url: str, params: Optional[dict], data: Optional[dict], timeout: Optional[int]):
+    calls.append({"method": method, "url": url, "params": params, "data": data, "timeout": timeout})
     for route in routes:
       if route["match"] in url:
         response = route["response"]
         return response(params) if callable(response) else response
     raise AssertionError(f"Unexpected request URL: {url}")
 
+  def fake_get(url: str, params: Optional[dict] = None, timeout: Optional[int] = None):
+    return fake_request("get", url, params, None, timeout)
+
+  def fake_post(url: str, params: Optional[dict] = None, data: Optional[dict] = None, timeout: Optional[int] = None):
+    return fake_request("post", url, params, data, timeout)
+
   monkeypatch.setattr("neurosnap.database.pubchem.requests.get", fake_get)
+  monkeypatch.setattr("neurosnap.database.pubchem.requests.post", fake_post)
   return calls
 
 
@@ -138,6 +145,26 @@ def test_search_pubchem_similar_empty_on_not_found(monkeypatch):
   _install_routes(monkeypatch, [{"match": "/fastsimilarity_2d/", "response": _MockResponse(status_code=404)}])
 
   assert search_pubchem_similar("CCO") == []
+
+
+def test_search_pubchem_similar_posts_stereochemical_smiles(monkeypatch):
+  query = "O=C1C2=C(C=CS2)/C(C3=CC=CC=C3C1)=C4CCN(C(OCCN(C)C)=O)CC/4"
+  calls = _install_routes(
+    monkeypatch,
+    [{"match": "/fastsimilarity_2d/smiles/cids/JSON", "response": _MockResponse(json_data={"IdentifierList": {"CID": []}})}],
+  )
+
+  assert search_pubchem_similar(query) == []
+
+  assert calls == [
+    {
+      "method": "post",
+      "url": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/fastsimilarity_2d/smiles/cids/JSON",
+      "params": {"Threshold": 90, "MaxRecords": 100},
+      "data": {"smiles": query},
+      "timeout": 30,
+    }
+  ]
 
 
 def test_search_pubchem_similar_rejects_invalid_smiles(monkeypatch):

@@ -134,10 +134,11 @@ def search_pubchem_similar(
 
   pubchem_threshold = _scale_threshold(threshold)
   pubchem_max_records = max(1, int(max_records))
-  url = f"{PUBCHEM_BASE_URL}/compound/fastsimilarity_2d/smiles/{quote(query_smiles, safe='')}/cids/JSON"
-  response = requests.get(
+  url = f"{PUBCHEM_BASE_URL}/compound/fastsimilarity_2d/smiles/cids/JSON"
+  response = requests.post(
     url,
     params={"Threshold": pubchem_threshold, "MaxRecords": pubchem_max_records},
+    data={"smiles": query_smiles},
     timeout=timeout,
   )
   if response.status_code == 404:

@@ -304,6 +304,27 @@ def test_calculate_ipsae_accepts_token_expanded_nonstandard_residues():
   assert res["by_residue"]["ipsae_d0chn"]["A"]["B"].shape == (5,)
 
 
+@pytest.mark.parametrize("input_format", ["auto", "chai1"])
+def test_calculate_ipsae_uses_element_for_hydrogen_named_ptm_atoms(input_format: str):
+  structure = make_structure(
+    [
+      ("CB", "ALA", "A", 1, 0.0, 0.0, 0.0, "C"),
+      ("N", "TPJ", "A", 2, 1.0, 0.0, 0.0, "N"),
+      ("HA", "TPJ", "A", 2, 1.0, 1.0, 0.0, "O"),
+      ("HB", "TPJ", "A", 2, 1.0, 2.0, 0.0, "H"),
+      ("CB", "ALA", "B", 1, 4.0, 0.0, 0.0, "C"),
+    ]
+  )
+  plddt = np.full(4, 90.0, dtype=float)
+  pae = np.full((4, 4), 5.0, dtype=float)
+  np.fill_diagonal(pae, 0.0)
+
+  result = calculate_ipSAE(structure, plddt=plddt, pae_matrix=pae, input_format=input_format)
+
+  assert result["residue_order"]["names"].tolist() == ["ALA", "TPJ", "TPJ", "ALA"]
+  assert result["residue_order"]["chains"].tolist() == ["A", "A", "A", "B"]
+
+
 def test_calculate_ipsae_accepts_token_expanded_hetero_residues():
   structure = make_structure(
     [

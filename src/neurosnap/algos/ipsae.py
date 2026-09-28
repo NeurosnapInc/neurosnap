@@ -140,10 +140,11 @@ def _iter_residue_atom_indices(structure: Structure):
 
 
 def _is_hydrogen_atom(atom: Atom) -> bool:
-  if str(atom.element).strip().upper() == "H":
-    return True
-  name = atom.atom_name.strip().upper()
-  return name.startswith("H")
+  """Use the element annotation, since heavy atoms can have H-prefixed names."""
+  element = str(atom.element).strip().upper()
+  if element not in {"", ".", "?"}:
+    return element in {"H", "D"}
+  return atom.atom_name.strip().upper().startswith("H")
 
 
 def _structure_to_residue_arrays(

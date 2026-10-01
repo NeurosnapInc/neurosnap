@@ -3,11 +3,81 @@ Provides functions and classes related to processing nucleotide data.
 """
 
 import gzip
+import random
 import re
 from pathlib import Path
 from typing import Tuple, Union
 
 from neurosnap.log import logger
+
+
+def generate_random_rna_sequence(
+  length: int = 100,
+  gc_content: int = 50,
+  *,
+  add_start_codon: bool = True,
+  add_stop_codon: bool = True,
+  add_5_utr: bool = False,
+  add_3_utr: bool = False,
+  poly_a_tail_length: int = 0,
+  stem_loops: int = 0,
+  include_pseudouridine: bool = False,
+  rng: random.Random | None = None,
+) -> str:
+  """Generate one RNA sequence with optional transcript-like features.
+
+  ``length`` includes all selected features. Randomized positions are adjusted
+  toward the requested GC percentage; fixed codons, motifs, and poly-A can
+  prevent the complete sequence from reaching that percentage.
+
+  Raises:
+      ValueError: If numeric settings are invalid or features exceed length.
+  """
+  if isinstance(length, bool) or not isinstance(length, int) or length < 1:
+    raise ValueError("Sequence length must be a positive whole number.")
+  if isinstance(gc_content, bool) or not isinstance(gc_content, int) or not 0 <= gc_content <= 100:
+    raise ValueError("GC content must be a whole percentage from 0 to 100.")
+  if isinstance(poly_a_tail_length, bool) or not isinstance(poly_a_tail_length, int) or poly_a_tail_length < 0:
+    raise ValueError("Poly-A tail length must be a non-negative whole number.")
+  if isinstance(stem_loops, bool) or not isinstance(stem_loops, int) or stem_loops < 0:
+    raise ValueError("Stem-loop count must be a non-negative whole number.")
+
+  source = rng if rng is not None else random.Random()
+  weights = [(100 - gc_content) / 2, (100 - gc_content) / 2, gc_content / 2, gc_content / 2]
+  alphabet = "AUGC"
+  prefix = ""
+  if add_5_utr:
+    prefix += "".join(source.choices(alphabet, weights=weights, k=24)) + "GCCACC"
+  if add_start_codon:
+    prefix += "AUG"
+  suffix = source.choice(("UAA", "UAG", "UGA")) if add_stop_codon else ""
+  if add_3_utr:
+    suffix += "".join(source.choices(alphabet, weights=weights, k=30))
+  suffix += "A" * poly_a_tail_length
+
+  hairpins = []
+  pairs = str.maketrans("AUGC", "UACG")
+  for _ in range(stem_loops):
+    stem = "".join(source.choices(alphabet, weights=weights, k=4))
+    loop = "".join(source.choices(alphabet, weights=weights, k=4))
+    hairpins.append(stem + loop + stem.translate(pairs)[::-1])
+  fixed_body = "".join(hairpins)
+  filler_length = length - len(prefix) - len(fixed_body) - len(suffix)
+  if filler_length < 0:
+    raise ValueError("Sequence length is too short for the selected RNA features.")
+
+  fixed_gc = (prefix + fixed_body + suffix).count("G") + (prefix + fixed_body + suffix).count("C")
+  gc_bases = max(0, min(filler_length, round(length * gc_content / 100) - fixed_gc))
+  filler = [source.choice("GC") for _ in range(gc_bases)]
+  filler.extend(source.choice("AU") for _ in range(filler_length - gc_bases))
+  source.shuffle(filler)
+  if include_pseudouridine:
+    uridines = [index for index, base in enumerate(filler) if base == "U"]
+    if uridines:
+      for index in source.sample(uridines, max(1, round(len(uridines) * 0.1))):
+        filler[index] = "Ψ"
+
+  return prefix + fixed_body + "".join(filler) + suffix
 
 
 def get_reverse_complement(seq: str) -> str:

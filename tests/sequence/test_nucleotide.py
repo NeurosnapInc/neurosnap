@@ -1,10 +1,41 @@
 # tests/sequence/test_nucleotide.py
 import gzip
+import random
 from pathlib import Path
 
 import pytest
 
-from neurosnap.sequence.nucleotide import get_reverse_complement, split_interleaved_fastq
+from neurosnap.sequence.nucleotide import generate_random_rna_sequence, get_reverse_complement, split_interleaved_fastq
+
+
+def test_random_rna_length_features_and_composition():
+  sequence = generate_random_rna_sequence(
+    length=300,
+    gc_content=50,
+    add_5_utr=True,
+    add_3_utr=True,
+    poly_a_tail_length=25,
+    stem_loops=2,
+    include_pseudouridine=True,
+    rng=random.Random(42),
+  )
+  assert len(sequence) == 300
+  assert sequence[24:33] == "GCCACCAUG"
+  assert sequence[-25:] == "A" * 25
+  assert sequence[-58:-55] in ("UAA", "UAG", "UGA")
+  assert "Ψ" in sequence
+  assert abs(100 * (sequence.count("G") + sequence.count("C")) / len(sequence) - 50) < 0.5
+
+
+def test_random_rna_short_preset_and_impossible_features():
+  sequence = generate_random_rna_sequence(
+    length=22, add_start_codon=False, add_stop_codon=False, stem_loops=1, rng=random.Random(1)
+  )
+  assert len(sequence) == 22
+  motif = sequence[:12]
+  assert motif[-4:] == motif[:4].translate(str.maketrans("AUGC", "UACG"))[::-1]
+  with pytest.raises(ValueError, match="too short"):
+    generate_random_rna_sequence(length=22, poly_a_tail_length=200)
 
 
 def test_reverse_complement_dna_basic():

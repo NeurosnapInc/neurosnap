@@ -62,6 +62,31 @@ def sanitize_aa_seq(seq: str, *, non_standard: str = "reject", trim_term: bool =
   return new_seq
 
 
+def aliphatic_index(sequence: str) -> float:
+  """Calculate the Ikai aliphatic index of a protein sequence.
+
+  The index is the mole percentage of alanine plus 2.9 times the
+  percentage of valine and 3.9 times the combined percentage of
+  isoleucine and leucine. All canonical residues contribute to the
+  sequence length.
+
+  Args:
+    sequence: Protein sequence with the 20 standard one-letter amino acids.
+      Letter case and whitespace are ignored.
+
+  Returns:
+    The dimensionless aliphatic index.
+
+  Raises:
+    ValueError: If the sequence is empty or contains a nonstandard residue.
+  """
+  sequence = sanitize_aa_seq(sequence, trim_term=False)
+  if not sequence:
+    raise ValueError("Protein sequence must contain at least one amino acid.")
+  counts = Counter(sequence)
+  return 100.0 * (counts["A"] + 2.9 * counts["V"] + 3.9 * (counts["I"] + counts["L"])) / len(sequence)
+
+
 def molecular_weight(sequence: str, aa_mws: Dict[str, float] = AA_MASS_PROTEIN_AVG) -> float:
   """
   Calculate the molecular weight of a protein or peptide sequence.

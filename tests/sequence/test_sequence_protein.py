@@ -3,7 +3,23 @@
 import pytest
 
 from neurosnap.constants.sequence import AA_RECORDS_AMBIGUOUS, AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
-from neurosnap.sequence.protein import isoelectric_point, molecular_weight, net_charge, sanitize_aa_seq
+from neurosnap.sequence.protein import aliphatic_index, isoelectric_point, molecular_weight, net_charge, sanitize_aa_seq
+
+
+def test_aliphatic_index_uses_full_canonical_sequence_length():
+  """Check reference compositions and non-aliphatic denominator residues."""
+  assert aliphatic_index("FVNQHLCGSHLVEALYLVCGERGFFYTPKT") == pytest.approx(84.3333333333)
+  assert aliphatic_index("GIVEQCCTSICSLYQLENYCN") == pytest.approx(88.0952380952)
+  assert aliphatic_index("vvvv") == pytest.approx(290.0)
+  assert aliphatic_index("IL") == pytest.approx(390.0)
+  assert aliphatic_index("a v\nG") == pytest.approx(130.0)
+
+
+@pytest.mark.parametrize("sequence", ["", " \n ", "AX", "AA*", "A-U"])
+def test_aliphatic_index_rejects_empty_or_noncanonical_sequence(sequence: str):
+  """Nonstandard residue codes cannot silently affect the denominator."""
+  with pytest.raises(ValueError):
+    aliphatic_index(sequence)
 
 
 def test_aa_records_and_sanitize_and_mw_and_charge_and_pi():

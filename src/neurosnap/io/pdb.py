@@ -228,7 +228,7 @@ class _ModelAccumulator:
     return True
 
   def to_structure(self) -> Structure:
-    """Finalize the current model into a :class:`Structure`."""
+    """Finalize the current model into a :class:`~neurosnap.structure.structure.Structure`."""
     structure = Structure(remove_annotations=False)
     structure.metadata = {"model_id": self.model_id}
 
@@ -294,9 +294,9 @@ def parse_pdb(
   """Parse a PDB file into Neurosnap structure containers.
 
   Parsing follows the fixed-width PDB record layout used by BioPython's parser
-  but builds Neurosnap :class:`Structure` entities. Parsed models are first
-  collected into a :class:`StructureEnsemble` and are optionally converted into a
-  :class:`StructureStack` at the end.
+  but builds Neurosnap :class:`~neurosnap.structure.structure.Structure` entities. Parsed models are first
+  collected into a :class:`~neurosnap.structure.structure.StructureEnsemble` and are optionally converted into a
+  :class:`~neurosnap.structure.structure.StructureStack` at the end.
 
   HETATM records and ``CONECT`` records are parsed directly so ligands and
   custom covalent bonds are preserved more faithfully than in the old
@@ -326,9 +326,9 @@ def parse_pdb(
       PDB filepath or open file handle.
   return_type
       Output container type. ``"ensemble"`` always returns a
-      :class:`StructureEnsemble`, ``"stack"`` requires stack-compatible models,
-      and ``"auto"`` returns a :class:`StructureStack` when possible or falls
-      back to a :class:`StructureEnsemble`.
+      :class:`~neurosnap.structure.structure.StructureEnsemble`, ``"stack"`` requires stack-compatible models,
+      and ``"auto"`` returns a :class:`~neurosnap.structure.structure.StructureStack` when possible or falls
+      back to a :class:`~neurosnap.structure.structure.StructureEnsemble`.
   malformed_conect
       How malformed ``CONECT`` records should be handled. ``"strict"`` raises
       immediately, ``"warn"`` logs a warning and skips the bad record, and
@@ -336,7 +336,7 @@ def parse_pdb(
 
   Returns
   -------
-  StructureEnsemble or StructureStack
+  neurosnap.structure.structure.StructureEnsemble or neurosnap.structure.structure.StructureStack
       Parsed container selected from ``return_type`` and model compatibility.
   """
   if return_type not in {"ensemble", "stack", "auto"}:
@@ -428,7 +428,7 @@ def _parse_pdb_models(
   altloc_sites: set[AltlocSite],
   malformed_conect: ConectErrorMode,
 ) -> StructureEnsemble:
-  """Parse PDB coordinate records into a :class:`StructureEnsemble`.
+  """Parse PDB coordinate records into a :class:`~neurosnap.structure.structure.StructureEnsemble`.
 
   The parser accumulates each model independently and applies ``CONECT``
   records only after all atoms are known so serial-number lookups are complete.

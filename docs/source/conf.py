@@ -54,6 +54,8 @@ intersphinx_mapping = {
   "rdkit": ("https://rdkit.org/docs/", None),
 }
 
+# Keep attribute descriptions as fields; autodoc indexes the members themselves.
+napoleon_use_ivar = True
 napoleon_include_init_with_doc = True
 napoleon_include_special_with_doc = True
 

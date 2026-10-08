@@ -79,8 +79,8 @@ def assign_pqr(
 
   Returns
   -------
-  Structure
-      A new :class:`Structure` carrying PDB2PQR geometry updates and annotations.
+  neurosnap.structure.structure.Structure
+      A new :class:`~neurosnap.structure.structure.Structure` carrying PDB2PQR geometry updates and annotations.
 
   Examples
   --------

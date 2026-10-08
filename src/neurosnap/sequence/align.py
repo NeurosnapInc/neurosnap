@@ -12,6 +12,7 @@ import tempfile
 import time
 from collections import Counter
 from datetime import datetime
+from itertools import chain
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import requests
@@ -32,6 +33,7 @@ def read_msa(
   drop_chars: str = "",
   remove_chars: str = "*",
   uppercase: bool = True,
+  a3m_insertions: Optional[str] = None,
   name_allow_all_chars: bool = False,
   query: Optional[str] = None,
   cov: int = 0,
@@ -50,7 +52,12 @@ def read_msa(
       Character matching is case-insensitive.
     remove_chars: Removes these characters from sequences. For example, ``"*-X"``.
       Character matching is case-insensitive.
-    uppercase: Converts all amino acid chars to uppercase when True
+    uppercase: Converts all amino acid chars to uppercase when True.
+    a3m_insertions: ``None`` keeps the existing uppercase behavior; ``"preserve"``
+      retains lowercase A3M insertion residues even when uppercase=True;
+      ``"strip"`` removes lowercase residues and dots before uppercasing.
+      Use only for A3M input: lowercase FASTA residues are ordinary residues.
+      Coverage/identity filters ignore insertions in either A3M mode.
     name_allow_all_chars: Uses the entire header string for names instead of the standard regex pattern
     query: Query amino acid sequence. If not provided, the first sequence in the MSA is used.
     cov: Minimum percentage of query sequence coverage required to keep a sequence. It measures the
@@ -68,231 +75,102 @@ def read_msa(
     - ``seq``: protein sequence from the a3m file, including gaps
 
   """
-  # compile regular expressions
-  if name_allow_all_chars:
-    reg_name = re.compile(r"^>(.*)$")
-  else:
-    reg_name = re.compile(r"^>([\w_-\|]*)")
+  if a3m_insertions not in (None, "preserve", "strip"):
+    raise ValueError('a3m_insertions must be None, "preserve", or "strip".')
+  reg_name = re.compile(r"^>(.*)$" if name_allow_all_chars else r"^>([\w_-\|]*)")
+  reg_rc = re.compile(f"[{re.escape(remove_chars)}\\s]", re.IGNORECASE) if remove_chars else re.compile(r"\s")
+  reg_dc = re.compile(f"[{re.escape(drop_chars)}]", re.IGNORECASE) if drop_chars else None
+  extra = "." if a3m_insertions == "preserve" else ""
+  reg_ac = re.compile(f"^[{re.escape(''.join(STANDARD_AAs) + allow_chars + extra)}]*$", re.IGNORECASE)
 
-  if remove_chars:
-    reg_rc = re.compile(f"[{re.escape(remove_chars)}\\s]", re.IGNORECASE)
-  if drop_chars:
-    reg_dc = re.compile(f"[{re.escape(drop_chars)}]", re.IGNORECASE)
-  reg_ac = re.compile(f"^[{re.escape(''.join(STANDARD_AAs) + allow_chars)}]*$", re.IGNORECASE)
+  def match_columns(seq):
+    if a3m_insertions is not None:
+      return re.sub(r"[a-z.]", "", seq).upper()
+    return seq
 
-  if isinstance(input_fasta, str):
-    if os.path.exists(input_fasta):
-      f = open(input_fasta)
-    else:
-      f = io.StringIO(input_fasta)
+  owned = isinstance(input_fasta, str)
+  if owned:
+    f = open(input_fasta) if os.path.exists(input_fasta) else io.StringIO(input_fasta)
   elif isinstance(input_fasta, io.TextIOBase):
     f = input_fasta
   else:
-    raise ValueError(f"Invalid input for input_fasta, {type(input_fasta)} is not a valid type.")
+    raise ValueError(f"Invalid input for input_fasta: {type(input_fasta)}")
 
-  current_name = None
-  current_seq = ""
-  dropped = False
-  yielded = 0
-  query_aligned = None
-  q_positions = None
-  q_non_gap_count = None
-  buffer = []
-
-  try:
+  def records():
+    current_name, parts, dropped = None, [], False
     for i, line in enumerate(f, start=1):
       line = line.strip()
       if not line:
         continue
       if line.startswith(">"):
-        if current_name is not None:
-          if not dropped and current_seq == "":
-            raise ValueError(f"Invalid MSA/fasta. Header {current_name} is missing a sequence.")
-          if not dropped:
-            if query_aligned is None:
-              if query is None:
-                query_aligned = current_seq
-              elif len(query) == len(current_seq):
-                query_aligned = query
-            if query_aligned is None:
-              buffer.append((current_name, current_seq))
-            else:
-              if q_positions is None:
-                q_positions = [idx for idx, c in enumerate(query_aligned) if c != "-"]
-                q_non_gap_count = len(q_positions)
-                assert q_non_gap_count > 0, "Query sequence cannot be all gaps."
-              if buffer:
-                for name, seq in buffer:
-                  keep = True
-                  if cov > 0 or id > 0:
-                    aligned = 0
-                    matches = 0
-                    for idx in q_positions:
-                      qc = query_aligned[idx]
-                      sc = seq[idx]
-                      if sc != "-":
-                        aligned += 1
-                        if sc == qc:
-                          matches += 1
-                    coverage = 100 * aligned / q_non_gap_count
-                    identity = 100 * matches / aligned if aligned else 0.0
-                    keep = coverage >= cov and identity >= id
-                  if keep:
-                    yield name, seq
-                    yielded += 1
-                    if yielded >= size:
-                      return
-                buffer = []
-              keep = True
-              if cov > 0 or id > 0:
-                aligned = 0
-                matches = 0
-                for idx in q_positions:
-                  qc = query_aligned[idx]
-                  sc = current_seq[idx]
-                  if sc != "-":
-                    aligned += 1
-                    if sc == qc:
-                      matches += 1
-                coverage = 100 * aligned / q_non_gap_count
-                identity = 100 * matches / aligned if aligned else 0.0
-                keep = coverage >= cov and identity >= id
-              if keep:
-                yield current_name, current_seq
-                yielded += 1
-                if yielded >= size:
-                  return
+        if current_name is not None and not dropped:
+          if not parts:
+            raise ValueError(f"Header {current_name} is missing a sequence.")
+          yield current_name, "".join(parts)
         match = reg_name.search(line)
-        assert match is not None, f"Invalid MSA/fasta. {line} is not a valid header."
-        name = match.group(1)
-        name = name.replace("|", "_")
-        assert len(name), f"Invalid MSA/fasta. line {i} has an empty header."
-        current_name = name
-        current_seq = ""
-        dropped = False
-      else:
-        assert current_name is not None, f"Invalid MSA/fasta. line {i} has sequence data before a header."
-        if uppercase:
-          line = line.upper()
-        # remove whitespace and remove_chars
-        if remove_chars:
-          line = reg_rc.sub("", line)
-        # drop chars
-        if drop_chars:
-          match = reg_dc.search(line)
-          if match is not None:
-            dropped = True
-            continue
+        assert match is not None, f"Invalid MSA/fasta header on line {i}."
+        current_name = match.group(1).replace("|", "_")
+        assert current_name, f"Empty header on line {i}."
+        parts, dropped = [], False
+        continue
+      assert current_name is not None, f"Sequence data before a header on line {i}."
+      if a3m_insertions == "strip":
+        line = re.sub(r"[a-z.]", "", line)
+      if uppercase and a3m_insertions != "preserve":
+        line = line.upper()
+      line = reg_rc.sub("", line)
+      if reg_dc is not None and reg_dc.search(line):
+        dropped = True
+      if not dropped:
+        if reg_ac.fullmatch(line) is None:
+          raise ValueError(f"Sequence on line {i} contains an invalid character: {line!r}")
+        if line:
+          parts.append(line)
+    if current_name is not None and not dropped:
+      assert parts, f"Sequence for {current_name} is empty."
+      yield current_name, "".join(parts)
 
-        if not dropped:
-          match = reg_ac.search(line)
-          if match is None:
-            raise ValueError(
-              f"Sequence on line {i} contains an invalid character. Please specify whether you would like drop or replace characters in sequences like these. Sequence='{line}'"
-            )
-          current_seq += line
-  finally:
-    f.close()
-
-  if current_name is not None:
-    if not dropped and current_seq == "":
-      assert len(current_seq), f"Invalid sequence for entry with name {current_name}. Sequence is empty."
-    if not dropped:
-      if query_aligned is None:
-        if query is None:
-          query_aligned = current_seq
-        elif len(query) == len(current_seq):
-          query_aligned = query
-      if query_aligned is None:
-        buffer.append((current_name, current_seq))
-      else:
-        if q_positions is None:
-          q_positions = [idx for idx, c in enumerate(query_aligned) if c != "-"]
-          q_non_gap_count = len(q_positions)
-          assert q_non_gap_count > 0, "Query sequence cannot be all gaps."
-        if buffer:
-          for name, seq in buffer:
-            keep = True
-            if cov > 0 or id > 0:
-              aligned = 0
-              matches = 0
-              for idx in q_positions:
-                qc = query_aligned[idx]
-                sc = seq[idx]
-                if sc != "-":
-                  aligned += 1
-                  if sc == qc:
-                    matches += 1
-              coverage = 100 * aligned / q_non_gap_count
-              identity = 100 * matches / aligned if aligned else 0.0
-              keep = coverage >= cov and identity >= id
-            if keep:
-              yield name, seq
-              yielded += 1
-              if yielded >= size:
-                return
-          buffer = []
-        keep = True
-        if cov > 0 or id > 0:
-          aligned = 0
-          matches = 0
-          for idx in q_positions:
-            qc = query_aligned[idx]
-            sc = current_seq[idx]
-            if sc != "-":
-              aligned += 1
-              if sc == qc:
-                matches += 1
-          coverage = 100 * aligned / q_non_gap_count
-          identity = 100 * matches / aligned if aligned else 0.0
-          keep = coverage >= cov and identity >= id
-        if keep:
-          yield current_name, current_seq
-          yielded += 1
-          if yielded >= size:
-            return
-
-  if query is not None and query_aligned is None:
-    if len(buffer) == 0:
-      raise ValueError("Query sequence length does not match MSA and was not found in the MSA.")
-    if len(query) == len(buffer[0][1]):
-      query_aligned = query
-    else:
-      q_ungapped = query.replace("-", "")
-      for _, seq in buffer:
-        if seq.replace("-", "") == q_ungapped:
-          query_aligned = seq
+  try:
+    if size <= 0:
+      return
+    entries = records()
+    first = next(entries, None)
+    if first is None:
+      if query is not None:
+        raise ValueError("Query sequence was not found in the MSA.")
+      return
+    query_aligned = match_columns(first[1]) if query is None else match_columns(query)
+    buffered = [first]
+    if query is not None and len(query_aligned) != len(match_columns(first[1])):
+      # Only an explicit unaligned query requires buffering to locate its row.
+      buffered.extend(entries)
+      for _, seq in buffered:
+        candidate = match_columns(seq)
+        if candidate.replace("-", "") == query_aligned.replace("-", ""):
+          query_aligned = candidate
           break
-      if query_aligned is None:
+      else:
         raise ValueError("Query sequence length does not match MSA and was not found in the MSA.")
-
-  if buffer:
-    if query_aligned is None:
-      raise ValueError("Query sequence could not be determined.")
-    if q_positions is None:
-      q_positions = [idx for idx, c in enumerate(query_aligned) if c != "-"]
-      q_non_gap_count = len(q_positions)
-      assert q_non_gap_count > 0, "Query sequence cannot be all gaps."
-    for name, seq in buffer:
-      keep = True
+    positions = [i for i, c in enumerate(query_aligned) if c != "-"]
+    if cov > 0 or id > 0:
+      assert positions, "Query sequence cannot be all gaps when filtering."
+    yielded = 0
+    for name, seq in chain(buffered, entries):
       if cov > 0 or id > 0:
-        aligned = 0
-        matches = 0
-        for idx in q_positions:
-          qc = query_aligned[idx]
-          sc = seq[idx]
-          if sc != "-":
-            aligned += 1
-            if sc == qc:
-              matches += 1
-        coverage = 100 * aligned / q_non_gap_count
-        identity = 100 * matches / aligned if aligned else 0.0
-        keep = coverage >= cov and identity >= id
-      if keep:
-        yield name, seq
-        yielded += 1
-        if yielded >= size:
-          return
+        candidate = match_columns(seq)
+        if len(candidate) != len(query_aligned):
+          raise ValueError("Coverage and identity filters require equal-length match columns.")
+        aligned = sum(candidate[i] != "-" for i in positions)
+        matches = sum(candidate[i] != "-" and candidate[i] == query_aligned[i] for i in positions)
+        if 100 * aligned / len(positions) < cov or (100 * matches / aligned if aligned else 0.0) < id:
+          continue
+      yield name, seq
+      yielded += 1
+      if yielded >= size:
+        return
+  finally:
+    if owned:
+      f.close()
 
 
 def write_msa(output_path: Union[str, os.PathLike], sequences: Iterable[Tuple[str, str]]):

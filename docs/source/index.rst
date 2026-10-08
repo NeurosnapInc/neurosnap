@@ -48,6 +48,7 @@ Documentation Map
 
 * :doc:`getting_started`
 * :doc:`structure_interactions`
+* :doc:`pssm`
 
 **Core SDK modules:**
 
@@ -79,6 +80,7 @@ Documentation Map
 
    getting_started
    structure_interactions
+   pssm
    modules
 
 Learning Resources

@@ -32,8 +32,7 @@ def read_msa(
   allow_chars: str = "",
   drop_chars: str = "",
   remove_chars: str = "*",
-  uppercase: bool = True,
-  a3m_insertions: Optional[str] = None,
+  sequence_mode: str = "uppercase",
   name_allow_all_chars: bool = False,
   query: Optional[str] = None,
   cov: int = 0,
@@ -52,12 +51,12 @@ def read_msa(
       Character matching is case-insensitive.
     remove_chars: Removes these characters from sequences. For example, ``"*-X"``.
       Character matching is case-insensitive.
-    uppercase: Converts all amino acid chars to uppercase when True.
-    a3m_insertions: ``None`` keeps the existing uppercase behavior; ``"preserve"``
-      retains lowercase A3M insertion residues even when uppercase=True;
-      ``"strip"`` removes lowercase residues and dots before uppercasing.
-      Use only for A3M input: lowercase FASTA residues are ordinary residues.
-      Coverage/identity filters ignore insertions in either A3M mode.
+    sequence_mode: ``"uppercase"`` (default) uppercases all residues;
+      ``"preserve_case"`` keeps ordinary sequence casing;
+      ``"a3m_preserve"`` retains lowercase A3M insertion residues and dots;
+      ``"a3m_strip"`` removes lowercase insertions and dots before uppercasing.
+      Coverage/identity filters ignore insertions in both A3M modes. Use A3M
+      modes only for A3M input: lowercase FASTA letters are ordinary residues.
     name_allow_all_chars: Uses the entire header string for names instead of the standard regex pattern
     query: Query amino acid sequence. If not provided, the first sequence in the MSA is used.
     cov: Minimum percentage of query sequence coverage required to keep a sequence. It measures the
@@ -75,16 +74,16 @@ def read_msa(
     - ``seq``: protein sequence from the a3m file, including gaps
 
   """
-  if a3m_insertions not in (None, "preserve", "strip"):
-    raise ValueError('a3m_insertions must be None, "preserve", or "strip".')
+  if sequence_mode not in ("uppercase", "preserve_case", "a3m_preserve", "a3m_strip"):
+    raise ValueError("sequence_mode must be uppercase, preserve_case, a3m_preserve, or a3m_strip.")
   reg_name = re.compile(r"^>(.*)$" if name_allow_all_chars else r"^>([\w_-\|]*)")
   reg_rc = re.compile(f"[{re.escape(remove_chars)}\\s]", re.IGNORECASE) if remove_chars else re.compile(r"\s")
   reg_dc = re.compile(f"[{re.escape(drop_chars)}]", re.IGNORECASE) if drop_chars else None
-  extra = "." if a3m_insertions == "preserve" else ""
+  extra = "." if sequence_mode == "a3m_preserve" else ""
   reg_ac = re.compile(f"^[{re.escape(''.join(STANDARD_AAs) + allow_chars + extra)}]*$", re.IGNORECASE)
 
   def match_columns(seq):
-    if a3m_insertions is not None:
+    if sequence_mode in ("a3m_preserve", "a3m_strip"):
       return re.sub(r"[a-z.]", "", seq).upper()
     return seq
 
@@ -114,9 +113,9 @@ def read_msa(
         parts, dropped = [], False
         continue
       assert current_name is not None, f"Sequence data before a header on line {i}."
-      if a3m_insertions == "strip":
+      if sequence_mode == "a3m_strip":
         line = re.sub(r"[a-z.]", "", line)
-      if uppercase and a3m_insertions != "preserve":
+      if sequence_mode in ("uppercase", "a3m_strip"):
         line = line.upper()
       line = reg_rc.sub("", line)
       if reg_dc is not None and reg_dc.search(line):

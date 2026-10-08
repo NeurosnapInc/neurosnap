@@ -71,7 +71,7 @@ def test_read_msa_from_string_basic():
       allow_chars="-X",  # X allowed
       drop_chars="",  # nothing dropped
       remove_chars="*",  # nothing to remove in this string
-      uppercase=True,
+      sequence_mode="uppercase",
     )
   )
   # '|' becomes '_' and header stops at first space (default behavior)
@@ -90,21 +90,21 @@ def test_read_msa_from_file_and_truncation(tmp_path):
 def test_read_msa_drop_and_remove_and_uppercase():
   # drop 'X' rows, remove '-' and '*', uppercase on
   s = ">ok\nac-de*\n>bad\nAXC\n>ok2\nacde\n"
-  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="X", remove_chars="-*", uppercase=True))
+  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="X", remove_chars="-*", sequence_mode="uppercase"))
   assert names == ["ok", "ok2"]
   assert seqs == ["ACDE", "ACDE"]
 
 
-def test_read_msa_filters_are_case_insensitive_with_uppercase_true():
+def test_read_msa_filters_are_case_insensitive_with_uppercase_mode():
   s = ">ok\nac-de*\n>bad\nAxc\n>ok2\nacdE\n"
-  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="x", remove_chars="-*", uppercase=True))
+  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="x", remove_chars="-*", sequence_mode="uppercase"))
   assert names == ["ok", "ok2"]
   assert seqs == ["ACDE", "ACDE"]
 
 
-def test_read_msa_filters_are_case_insensitive_with_uppercase_false():
+def test_read_msa_filters_are_case_insensitive_with_preserve_case_mode():
   s = ">ok\nAc-dE*\n>bad\naXc\n>ok2\nacde\n"
-  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="x", remove_chars="-*", uppercase=False))
+  names, seqs = collect_msa(read_msa(s, allow_chars="", drop_chars="x", remove_chars="-*", sequence_mode="preserve_case"))
   assert names == ["ok", "ok2"]
   assert seqs == ["AcdE", "acde"]
 

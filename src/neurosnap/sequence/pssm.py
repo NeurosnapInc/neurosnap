@@ -171,7 +171,7 @@ def pssm_from_msa(
   if weighting not in ("henikoff", "uniform"):
     raise ValueError("weighting must be henikoff or uniform.")
   if isinstance(msa, (str, io.TextIOBase)):
-    rows = [seq for _, seq in read_msa(msa, allow_chars="-XBZJUO.", a3m_insertions="preserve" if a3m else None)]
+    rows = [seq for _, seq in read_msa(msa, allow_chars="-XBZJUO.", sequence_mode="a3m_preserve" if a3m else "uppercase")]
   elif isinstance(msa, Mapping):
     rows = list(msa.values())
   else:

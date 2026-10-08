@@ -41,15 +41,33 @@ The reader can preserve these insertions for other consumers or strip them::
 
    from neurosnap.sequence.align import read_msa
 
-   raw_rows = list(read_msa("alignment.a3m", allow_chars="-X", a3m_insertions="preserve"))
-   match_rows = list(read_msa("alignment.a3m", allow_chars="-X", a3m_insertions="strip"))
+   raw_rows = list(read_msa("alignment.a3m", allow_chars="-X", sequence_mode="a3m_preserve"))
+   match_rows = list(read_msa("alignment.a3m", allow_chars="-X", sequence_mode="a3m_strip"))
 
-``preserve`` retains lowercase residues and dots even with ``uppercase=True``.
-``strip`` removes them before uppercase conversion. Both modes calculate
-coverage and identity over match columns only. With ``a3m_insertions=None``,
-the reader retains its existing behavior. Do not strip lowercase FASTA input:
-those letters can be ordinary sequence residues. Preserved A3M rows may have
-different lengths; pass ``a3m=True`` when building their profile.
+``a3m_preserve`` retains lowercase residues and dots. ``a3m_strip`` removes
+these insertions before uppercase conversion. Both A3M modes calculate coverage
+and identity over match columns only. The default ``sequence_mode="uppercase"``
+uppercases all residues as before. ``sequence_mode="preserve_case"`` retains
+ordinary sequence casing without interpreting lowercase letters as insertions.
+Do not use A3M modes for lowercase FASTA input: those letters can be ordinary
+sequence residues. Preserved A3M rows may have different lengths; pass
+``a3m=True`` when building their profile.
+
+Migrating existing reader calls
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``read_msa`` now uses a single ``sequence_mode`` parameter. The previous
+``uppercase`` and ``a3m_insertions`` parameters have been removed:
+
+* ``uppercase=True`` (or no options): omit the option or use
+  ``sequence_mode="uppercase"``.
+* ``uppercase=False``: use ``sequence_mode="preserve_case"``.
+* ``a3m_insertions="preserve"``: use ``sequence_mode="a3m_preserve"``.
+* ``a3m_insertions="strip"``: use ``sequence_mode="a3m_strip"``.
+
+If both previous options were set, choose the A3M mode. Calls without either
+option are unchanged. The ``pssm_from_msa(..., a3m=True)`` interface is also
+unchanged. Passing the removed keywords now raises ``TypeError``.
 
 ``msa_columns`` indexes original match columns, excluding A3M insertion
 residues and dots. ``query_positions`` indexes the original ungapped query, including lowercase

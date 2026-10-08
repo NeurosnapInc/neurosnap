@@ -133,7 +133,7 @@ common MSA operations.
 
    from neurosnap.sequence.align import consensus_sequence, read_msa
 
-   records = list(read_msa("example.a3m", size=500))
+   records = list(read_msa("example.a3m", size=500, allow_chars="-X", sequence_mode="a3m_strip"))
    names, seqs = zip(*records)
 
    print("Loaded sequences:", len(records))

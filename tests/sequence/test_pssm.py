@@ -234,15 +234,15 @@ def test_generation_workflows(monkeypatch):
 def test_a3m_reader_preserves_or_strips_insertions_and_filters_match_columns():
   text = ">q\nACdE\n>h\nACggE\n>different\nACtD\n"
   assert list(read_msa(text))[0][1] == "ACDE"
-  preserved = list(read_msa(text, a3m_insertions="preserve", id=100))
+  preserved = list(read_msa(text, sequence_mode="a3m_preserve", id=100))
   assert preserved == [("q", "ACdE"), ("h", "ACggE")]
-  assert list(read_msa(text, a3m_insertions="strip", id=100)) == [("q", "ACE"), ("h", "ACE")]
-  assert list(read_msa(text, a3m_insertions="preserve", query="ACE", id=100)) == preserved
-  assert list(read_msa(">q\nAC.dE\n", a3m_insertions="preserve"))[0][1] == "AC.dE"
-  assert list(read_msa(">q\nAC.dE\n", a3m_insertions="strip"))[0][1] == "ACE"
-  assert list(read_msa(">q\nACdE\n", uppercase=False))[0][1] == "ACdE"
+  assert list(read_msa(text, sequence_mode="a3m_strip", id=100)) == [("q", "ACE"), ("h", "ACE")]
+  assert list(read_msa(text, sequence_mode="a3m_preserve", query="ACE", id=100)) == preserved
+  assert list(read_msa(">q\nAC.dE\n", sequence_mode="a3m_preserve"))[0][1] == "AC.dE"
+  assert list(read_msa(">q\nAC.dE\n", sequence_mode="a3m_strip"))[0][1] == "ACE"
+  assert list(read_msa(">q\nACdE\n", sequence_mode="preserve_case"))[0][1] == "ACdE"
   with pytest.raises(ValueError):
-    list(read_msa(text, a3m_insertions="bad"))
+    list(read_msa(text, sequence_mode="bad"))
 
 
 def test_reader_handles_borrowed_stream_and_explicit_unaligned_query():

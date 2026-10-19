@@ -1413,7 +1413,10 @@ class Chain:
     Protein, DNA, and RNA sequences are supported. Small molecules and other
     non-polymer residues in the chain are ignored. Modified residues can either
     be skipped, emitted inline as ``(CCD)``, or mapped to their parent
-    sequence code when available.
+    sequence code when available. Modified protein residues are recognized
+    by their CCD peptide-linking or peptide-terminus type. Parent mode uses
+    the closest canonical amino acid from CCD chemical similarity. CCD lookups
+    use the local cache and may download or refresh it when needed.
 
     Parameters:
       polymer_type: Polymer family to extract. ``"auto"`` infers the family
@@ -1422,8 +1425,8 @@ class Chain:
       include_modifications: Whether modified residues should contribute to the
         sequence. If ``False``, modified residues are skipped entirely.
       modification_mode: How included modifications are emitted. ``"inline"``
-        inserts ``(CCD)`` tokens, while ``"parent"`` uses the inferred parent
-        residue code.
+        inserts ``(CCD)`` tokens, while ``"parent"`` uses the closest canonical
+        amino-acid code for proteins or an inferred parent code for nucleotides.
       on_unknown_modified: Behavior when ``modification_mode="parent"`` is
         requested but no parent code can be inferred. ``"raise"`` raises a
         :class:`ValueError`; ``"unknown"`` inserts ``"X"``.
@@ -1437,6 +1440,9 @@ class Chain:
         with ``polymer_type`` or if an unknown modified residue cannot be
         mapped in ``"parent"`` mode.
     """
+    # Import lazily: database helpers also depend on structure IO.
+    from neurosnap.database.ccd import CCD, get_ccd, get_ccd_canonical_aa
+
     if polymer_type not in {"auto", "protein", "dna", "rna", "nucleotide"}:
       raise ValueError('polymer_type must be one of "auto", "protein", "dna", "rna", or "nucleotide".')
     if modification_mode not in {"inline", "parent"}:
@@ -1446,9 +1452,22 @@ class Chain:
 
     detected_polymer_type = None if polymer_type == "auto" else polymer_type
     sequence_parts = []
+    ccd_entries: Dict[str, Optional[CCD]] = {}
+    parent_codes: Dict[str, str] = {}
 
     for residue in self._residues:
+      residue_name = residue.res_name.strip().upper()
       residue_polymer_type = _classify_polymer_residue(residue)
+      if residue_polymer_type is None and include_modifications:
+        # Chemical similarity alone also maps ligands to amino acids. Check
+        # the CCD polymer type first, including for incomplete HETATM residues.
+        if residue_name not in ccd_entries:
+          ccd_entries[residue_name] = get_ccd(residue_name)
+        ccd_entry = ccd_entries[residue_name]
+        if ccd_entry is not None:
+          ccd_type = ccd_entry.type.upper()
+          if "PEPTIDE" in ccd_type and ("LINKING" in ccd_type or "TERMINUS" in ccd_type):
+            residue_polymer_type = "protein"
       if residue_polymer_type is None:
         continue
 
@@ -1464,32 +1483,27 @@ class Chain:
           f'Chain "{self.chain_id}" contains "{residue_polymer_type}" residues, which are incompatible with polymer_type="{polymer_type}".'
         )
 
-      residue_name = residue.res_name.strip().upper()
       if residue_polymer_type == "protein":
-        # Standard amino acids map directly to one-letter codes. Modified amino
-        # acids either get skipped, emitted inline as CCD tokens, or mapped to
-        # their declared parent residue when available.
         residue_record = AA_RECORDS_CANONICAL.get_by_abr(residue_name) or AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(
           residue_name
         )
-        if residue_record is None:
-          raise ValueError(f'Unsupported protein residue "{residue_name}" encountered during sequence extraction.')
-        if residue_record.code is not None:
+        if residue_record is not None and residue_record.code is not None:
           residue_token = residue_record.code
         elif not include_modifications:
           residue_token = None
         elif modification_mode == "inline":
-          residue_token = f"({residue_record.abr})"
+          residue_token = f"({residue_name})"
         else:
-          residue_token = None
-          parent_record = AA_RECORDS_CANONICAL.get_canonical_record(residue_record)
-          if parent_record is not None:
-            residue_token = parent_record.code
-          if residue_token is None:
-            if on_unknown_modified == "unknown":
-              residue_token = "X"
-            else:
-              raise ValueError(f'Could not infer a parent sequence code for modified residue "{residue_name}".')
+          # Resolve repeated modifications only once per extraction; inline
+          # sequences retain CCD identities without chemical normalization.
+          if residue_name not in parent_codes:
+            try:
+              parent_codes[residue_name] = get_ccd_canonical_aa(ccd_entries.get(residue_name) or residue_name, standard=False).code
+            except ValueError as exc:
+              if on_unknown_modified == "raise":
+                raise ValueError(f'Could not infer a parent sequence code for modified residue "{residue_name}".') from exc
+              parent_codes[residue_name] = "X"
+          residue_token = parent_codes[residue_name]
       else:
         # Nucleotide handling mirrors the protein path but uses canonical
         # one-letter base codes and a simple parent-code inference fallback for

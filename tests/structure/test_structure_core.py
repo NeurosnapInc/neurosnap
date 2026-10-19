@@ -126,6 +126,136 @@ def test_models_chains_and_sequence():
   assert len(sequence) >= 1
 
 
+@pytest.fixture
+def sequence_ccd_entries(monkeypatch):
+  from neurosnap.database.ccd import CCD
+
+  smiles = {
+    "GLY": "NCC(=O)O",
+    "ALA": "C[C@H](N)C(=O)O",
+    "PRO": "O=C(O)[C@@H]1CCCN1",
+    "MET": "CSCC[C@H](N)C(=O)O",
+    "SER": "N[C@@H](CO)C(=O)O",
+    "THR": "C[C@@H](O)[C@H](N)C(=O)O",
+    "TYR": "N[C@@H](Cc1ccc(O)cc1)C(=O)O",
+    "HYP": "O=C(O)[C@@H]1C[C@@H](O)CN1",
+    "MSE": "C[Se]CC[C@H](N)C(=O)O",
+    "SEP": "N[C@@H](COP(=O)(O)O)C(=O)O",
+    "TPO": "C[C@@H](OP(=O)(O)O)[C@H](N)C(=O)O",
+    "PTR": "N[C@@H](Cc1ccc(OP(=O)(O)O)cc1)C(=O)O",
+    # A synthetic CCD identity proves extraction does not depend on a whitelist.
+    "Z9Q": "C[C@H](N)C(=O)O",
+  }
+  entries = {code: CCD(code=code, name=code, smiles=value, type="L-PEPTIDE LINKING") for code, value in smiles.items()}
+  entries["LIG"] = CCD(code="LIG", name="ligand", smiles="C[C@H](N)C(=O)O", type="NON-POLYMER")
+  entries["HOH"] = CCD(code="HOH", name="water", smiles="O", type="NON-POLYMER")
+  monkeypatch.setattr("neurosnap.database.ccd.get_ccd_entries", lambda **kwargs: entries)
+  return entries
+
+
+@pytest.mark.parametrize("polymer_type", ["auto", "protein"])
+@pytest.mark.parametrize("hetero", [False, True])
+@pytest.mark.parametrize("modified, parent", [("HYP", "P"), ("MSE", "M"), ("SEP", "S"), ("TPO", "T"), ("PTR", "Y"), ("Z9Q", "A")])
+def test_sequence_preserves_modified_residue_identity_and_parent(sequence_ccd_entries, modified: str, parent: str, hetero: bool, polymer_type: str):
+  structure = _make_structure_from_records([
+    {"res_id": 1, "res_name": "GLY", "atom_name": "CA"},
+    {"res_id": 2, "res_name": modified, "atom_name": "CA", "hetero": hetero},
+    {"res_id": 3, "res_name": "GLY", "atom_name": "CA"},
+    {"res_id": 4, "res_name": "HOH", "atom_name": "O", "hetero": True},
+    {"res_id": 5, "res_name": "LIG", "atom_name": "C1", "hetero": True},
+  ])
+  atoms_before = structure.atoms.copy()
+  annotations_before = structure.atom_annotations.copy()
+  chain = structure.chains()[0]
+
+  assert chain.sequence(polymer_type=polymer_type) == "GG"
+  assert chain.sequence(polymer_type=polymer_type, include_modifications=True) == f"G({modified})G"
+  assert chain.sequence(polymer_type=polymer_type, include_modifications=True, modification_mode="parent") == f"G{parent}G"
+  np.testing.assert_array_equal(structure.atoms, atoms_before)
+  np.testing.assert_array_equal(structure.atom_annotations, annotations_before)
+
+
+def test_sequence_recognizes_chain_containing_only_hyp(sequence_ccd_entries):
+  structure = _make_structure_from_records([{"res_id": 1, "res_name": "HYP", "atom_name": "CA", "hetero": True}])
+  chain = structure.chains()[0]
+
+  assert chain.sequence() == ""
+  assert chain.sequence(include_modifications=True) == "(HYP)"
+  assert chain.sequence(include_modifications=True, modification_mode="parent") == "P"
+
+
+def test_sequence_keeps_canonical_and_forcefield_residues_with_modifications(sequence_ccd_entries):
+  structure = _make_structure_from_records([
+    {"res_id": 1, "res_name": "PRO", "atom_name": "CA"},
+    {"res_id": 2, "res_name": "HYP", "atom_name": "CA"},
+    {"res_id": 3, "res_name": "HID", "atom_name": "CA"},
+    {"res_id": 4, "res_name": "SEC", "atom_name": "CA"},
+  ])
+  chain = structure.chains()[0]
+
+  assert chain.sequence() == "PHU"
+  assert chain.sequence(include_modifications=True) == "P(HYP)HU"
+  assert chain.sequence(include_modifications=True, modification_mode="parent") == "PPHU"
+
+
+@pytest.mark.parametrize("hetero", [False, True])
+def test_hyp_sequence_survives_pdb_and_cif_round_trip(sequence_ccd_entries, tmp_path, hetero: bool):
+  from neurosnap.io.mmcif import parse_mmcif, save_cif
+  from neurosnap.io.pdb import parse_pdb, save_pdb
+
+  structure = _make_structure_from_records([
+    {"res_id": 1, "res_name": "GLY", "atom_name": "CA"},
+    *[{"res_id": 2, "res_name": "HYP", "atom_name": name, "hetero": hetero} for name in ["N", "CA", "C", "O", "CB", "CG", "CD", "OD1"]],
+    {"res_id": 3, "res_name": "GLY", "atom_name": "CA"},
+  ])
+  for suffix, save, parse in [("pdb", save_pdb, parse_pdb), ("cif", save_cif, parse_mmcif)]:
+    path = tmp_path / f"template.{suffix}"
+    save(structure, path)
+    structure = parse(path, return_type="ensemble").first()
+    chain = structure.chains()[0]
+
+    assert chain.sequence(include_modifications=True) == "G(HYP)G"
+    assert chain.sequence(include_modifications=True, modification_mode="parent") == "GPG"
+    assert [atom.atom_name for atom in chain.residues()[1].atoms()] == ["N", "CA", "C", "O", "CB", "CG", "CD", "OD1"]
+
+
+def test_sequence_unknown_parent_policy_preserves_inline_identity(sequence_ccd_entries):
+  from neurosnap.database.ccd import CCD
+
+  sequence_ccd_entries["BAD"] = CCD(code="BAD", name="invalid chemistry", smiles="invalid", type="L-PEPTIDE LINKING")
+  structure = _make_structure_from_records([{"res_id": 1, "res_name": "BAD", "atom_name": "CA", "hetero": True}])
+  chain = structure.chains()[0]
+
+  assert chain.sequence(include_modifications=True) == "(BAD)"
+  with pytest.raises(ValueError, match='parent sequence code.*BAD'):
+    chain.sequence(include_modifications=True, modification_mode="parent")
+  assert chain.sequence(include_modifications=True, modification_mode="parent", on_unknown_modified="unknown") == "X"
+
+
+def test_sequence_resolves_repeated_modifications_once(sequence_ccd_entries, monkeypatch):
+  from unittest.mock import Mock
+  from neurosnap.database.ccd import get_ccd, get_ccd_canonical_aa
+
+  lookup = Mock(wraps=get_ccd)
+  canonical = Mock(wraps=get_ccd_canonical_aa)
+  monkeypatch.setattr("neurosnap.database.ccd.get_ccd", lookup)
+  monkeypatch.setattr("neurosnap.database.ccd.get_ccd_canonical_aa", canonical)
+  structure = _make_structure_from_records([
+    {"res_id": index, "res_name": "Z9Q", "atom_name": "CA", "hetero": True} for index in range(1, 4)
+  ])
+  chain = structure.chains()[0]
+
+  assert chain.sequence() == ""
+  lookup.assert_not_called()
+  assert chain.sequence(include_modifications=True) == "(Z9Q)(Z9Q)(Z9Q)"
+  lookup.assert_called_once_with("Z9Q")
+  canonical.assert_not_called()
+  lookup.reset_mock()
+  assert chain.sequence(include_modifications=True, modification_mode="parent") == "AAA"
+  lookup.assert_called_once_with("Z9Q")
+  canonical.assert_called_once_with(sequence_ccd_entries["Z9Q"], standard=False)
+
+
 def test_structure_is_subscriptable_by_chain_id():
   structure = parse_single_model(PDB_MONO)
   chain = structure.chains()[0]

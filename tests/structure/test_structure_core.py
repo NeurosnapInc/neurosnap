@@ -562,6 +562,65 @@ def test_calculate_center_of_mass_includes_small_molecules():
   assert np.allclose(center_of_mass, np.array([expected_x, 0.0, 0.0], dtype=np.float32))
 
 
+@pytest.mark.parametrize(
+  "element,mass",
+  [
+    ("CL", 35.45), ("Cl", 35.45), ("cl", 35.45),
+    ("BR", 79.904), ("Br", 79.904), ("br", 79.904),
+    ("FE", 55.845), ("Fe", 55.845), ("fe", 55.845),
+    ("C", 12.011), ("c", 12.011),
+  ],
+)
+def test_mass_lookup_accepts_element_case_without_changing_annotations(element, mass):
+  structure = _make_two_atom_structure(
+    elements=["C", element],
+    coords=[(0.0, 0.0, 0.0), (10.0, 0.0, 0.0)],
+    hetero=[False, True],
+  )
+  annotations = structure.atom_annotations.copy()
+
+  dataframe = structure.to_dataframe()
+  assert dataframe["mass"].tolist() == pytest.approx([12.011, mass])
+  assert dataframe["element"].tolist() == ["C", element]
+  np.testing.assert_array_equal(structure._atom_masses(np.array([False, True])), np.array([mass], dtype=np.float32))
+  expected_x = mass * 10.0 / (12.011 + mass)
+  assert structure.calculate_center_of_mass() == pytest.approx([expected_x, 0.0, 0.0])
+  np.testing.assert_array_equal(structure.atom_annotations, annotations)
+
+
+def test_chlorinated_ligand_pdb_dataframe_roundtrip(tmp_path):
+  from neurosnap.io.pdb import save_pdb
+
+  path = tmp_path / "chlorinated_ligand.pdb"
+  path.write_text(
+    "HETATM    1  C1  6UB A   1       0.000   0.000   0.000  1.00 20.00           C  \n"
+    "HETATM    2 CL1  6UB A   1       1.800   0.000   0.000  1.00 20.00          CL  \n"
+    "CONECT    1    2\nEND\n"
+  )
+  structure = parse_single_model(path)
+  assert structure.atom_annotations["element"].tolist() == ["C", "CL"]
+  assert structure.to_dataframe()["mass"].tolist() == pytest.approx([12.011, 35.45])
+
+  save_pdb(structure, path)
+  restored = parse_single_model(path)
+  assert restored.to_dataframe()["mass"].tolist() == pytest.approx([12.011, 35.45])
+  np.testing.assert_array_equal(restored.atom_annotations, structure.atom_annotations)
+  np.testing.assert_array_equal(restored.atoms, structure.atoms)
+  np.testing.assert_array_equal(restored.bonds, structure.bonds)
+
+
+@pytest.mark.parametrize("element,label", [("XX", "XX"), ("", "<blank>"), ("  ", "<blank>")])
+def test_dataframe_rejects_unknown_element_masses(element, label):
+  structure = _make_two_atom_structure(
+    elements=["C", element],
+    coords=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+    hetero=[False, True],
+  )
+
+  with pytest.raises(ValueError, match=f"Unknown element mass for atom selection: {label}"):
+    structure.to_dataframe()
+
+
 def test_calculate_center_of_mass_warns_on_unknown_element(caplog):
   structure = _make_two_atom_structure(
     elements=["C", "Xx"],

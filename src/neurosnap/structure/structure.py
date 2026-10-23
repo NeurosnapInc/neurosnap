@@ -841,10 +841,12 @@ class Structure:
 
     for index, atom_index in enumerate(selected_indices):
       element = str(self._annotation_value("element", atom_index)).strip()
-      if element not in ATOMIC_MASSES:
+      # PDB annotations use uppercase symbols; mass-table keys use chemical case.
+      mass_key = element.capitalize()
+      if mass_key not in ATOMIC_MASSES:
         unknown_elements.add(element or "<blank>")
         continue
-      masses[index] = float(ATOMIC_MASSES[element])
+      masses[index] = float(ATOMIC_MASSES[mass_key])
 
     if unknown_elements:
       message = (

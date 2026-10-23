@@ -12,6 +12,7 @@ Neurosnap structures directly in an array-oriented form.
 
 import io
 import pathlib
+from copy import deepcopy
 from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union, Set
 
 import numpy as np
@@ -25,6 +26,15 @@ __all__ = ["parse_mmcif", "save_cif"]
 ReturnType = Literal["ensemble", "stack", "auto"]
 
 _MISSING_VALUES = {"", ".", "?"}
+
+# These categories describe coordinates/topology and are handled by the
+# structure parser/writer rather than replayed as descriptive metadata.
+_STRUCTURE_CATEGORIES = {
+  "_atom_site", "_atom_site_anisotrop", "_struct_conn", "_entity",
+  "_entity_poly", "_entity_poly_seq", "_struct_asym", "_pdbx_poly_seq_scheme",
+  "_pdbx_nonpoly_scheme", "_pdbx_branch_scheme", "_struct_conf",
+  "_struct_conf_type", "_struct_sheet", "_struct_sheet_order", "_struct_sheet_range",
+}
 
 
 def _read_mmcif_text(mmcif: Union[str, pathlib.Path, io.IOBase]) -> str:
@@ -251,6 +261,13 @@ def parse_mmcif(
   Explicit ``_struct_conn`` tables are parsed when present and classified into
   topology-level bonds versus noncovalent interactions.
 
+  Descriptive fields are stored under ``metadata["mmcif_fields"]`` using their
+  original tag names and lists of string values. The block name is stored in
+  ``metadata["mmcif_data_name"]``. Both are available on the container and each
+  model and are reused by :func:`save_cif` (including minimal output).
+  Coordinate/topology categories are excluded. Container metadata takes
+  precedence over model metadata when writing multiple models.
+
   Parameters:
     mmcif: mmCIF filepath or open file handle.
     return_type: Output container type. ``"ensemble"`` always returns a
@@ -266,6 +283,13 @@ def parse_mmcif(
     raise ValueError('return_type must be one of "ensemble", "stack", or "auto".')
 
   mmcif_dict = _parse_mmcif_dict(_read_mmcif_text(mmcif))
+  file_metadata = {
+    "mmcif_data_name": mmcif_dict["data_"],
+    "mmcif_fields": {
+      key: value for key, value in mmcif_dict.items()
+      if key.startswith("_") and key.split(".", 1)[0] not in _STRUCTURE_CATEGORIES
+    },
+  }
   atom_groups = mmcif_dict.get("_atom_site.group_PDB")
   if not atom_groups:
     raise ValueError('No "_atom_site" coordinate records were found in the mmCIF file.')
@@ -469,11 +493,11 @@ def parse_mmcif(
   if not model_order:
     raise ValueError("No models or atoms were found in the mmCIF file.")
 
-  ensemble = StructureEnsemble()
+  ensemble = StructureEnsemble(metadata=deepcopy(file_metadata))
   for model_id in model_order:
     builder = model_builders[model_id]
     structure = Structure(remove_annotations=False)
-    structure.metadata = {"model_id": model_id}
+    structure.metadata = {**deepcopy(file_metadata), "model_id": model_id}
     if model_polymer_residue_types.get(model_id):
       structure.metadata["mmcif_polymer_residue_types"] = dict(model_polymer_residue_types[model_id])
 
@@ -553,7 +577,10 @@ def save_cif(structure: Union[Structure, StructureEnsemble, StructureStack], cif
     raise ValueError("No models are available for mmCIF output.")
 
   chain_metadata = _build_cif_chain_metadata(models)
-  lines = ["data_neurosnap", "#"]
+  metadata = {**models[0][1].metadata, **structure.metadata}
+  data_name = metadata.get("mmcif_data_name", "neurosnap")
+  lines = [f"data_{data_name}", "#"]
+  _append_cif_metadata(lines, metadata.get("mmcif_fields", {}))
 
   if not minimal:
     _append_cif_entity_metadata(lines, chain_metadata)
@@ -1076,12 +1103,37 @@ def _annotation_value_for_cif(model: Structure, name: str, atom_index: int, defa
   return value
 
 
+def _append_cif_metadata(lines: List[str], fields: Dict[str, List[str]]) -> None:
+  """Write descriptive categories as loops, preserving original tag values."""
+  categories: Dict[str, Dict[str, List[str]]] = {}
+  for key, values in fields.items():
+    category = key.split(".", 1)[0]
+    if not key.startswith("_") or category in _STRUCTURE_CATEGORIES:
+      continue
+    categories.setdefault(category, {})[key] = values if isinstance(values, list) else [values]
+  for category, columns in categories.items():
+    lengths = {len(values) for values in columns.values()}
+    if len(lengths) != 1:
+      raise ValueError(f"mmCIF metadata columns in {category} must have the same length.")
+    if lengths == {0}:
+      continue
+    lines.append("loop_")
+    lines.extend(columns)
+    for row in zip(*columns.values()):
+      # One token per line also permits semicolon-delimited multiline values.
+      lines.extend(_format_mmcif_token(value) for value in row)
+    lines.append("#")
+
+
 def _format_mmcif_token(value: object) -> str:
   """Return a safely tokenized mmCIF value."""
   text = "" if value is None else str(value)
-  if not text or text in _MISSING_VALUES:
+  if not text:
     return "?"
-  if any(char.isspace() for char in text) or "'" in text or '"' in text or text.startswith("_") or text.startswith("#") or text.startswith(";"):
+  if "\n" in text or ('"' in text and "'" in text):
+    return f";{text}\n;"
+  if (any(char.isspace() for char in text) or "'" in text or '"' in text or text.startswith(("_", "#", ";"))
+      or text.lower().startswith(("data_", "save_")) or text.lower() in {"loop_", "stop_", "global_"}):
     if '"' not in text:
       return f'"{text}"'
     if "'" not in text:

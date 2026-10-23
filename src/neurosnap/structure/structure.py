@@ -103,7 +103,8 @@ class Structure:
   def __init__(self, *, remove_annotations: bool = True):
     """Initialize an empty single-model structure."""
     # keys are metadata field names / titles and values are the corresponding values
-    # TODO: Read metadata from file and add it as needed
+    # File readers populate format-specific metadata; writers reuse it when
+    # saving in the same format (pdb_records or mmcif_fields).
     self.metadata: Dict[str, Any] = {}
 
     # create dtype for atoms array

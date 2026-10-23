@@ -28,6 +28,14 @@ ConectErrorMode = Literal["strict", "warn", "ignore"]
 AtomKey = Tuple[str, int, str, str, bool, str]
 ResidueKey = Tuple[str, int, str, str, bool]
 AltlocSite = Tuple[int, AtomKey]
+
+# Descriptive records only: coordinates, connectivity, sequence and secondary
+# structure records must not be replayed after the structure has been edited.
+_METADATA_RECORDS = {
+  "HEADER", "OBSLTE", "TITLE", "SPLIT", "CAVEAT", "COMPND", "SOURCE",
+  "KEYWDS", "EXPDTA", "MDLTYP", "AUTHOR", "REVDAT", "SPRSDE",
+  "JRNL", "REMARK",
+}
 ConectRecord = Tuple[int, List[int], int]
 
 
@@ -306,6 +314,11 @@ def parse_pdb(
   the parser keeps only the highest-occupancy conformer for each atom site and
   emits a :func:`logger.warning` so the user knows this happened.
 
+  Descriptive records (including HEADER, TITLE and REMARK) are stored verbatim
+  as a list of lines in ``metadata["pdb_records"]`` on the container and each
+  model. :func:`save_pdb` writes these records before coordinates. Container
+  metadata takes precedence when writing multiple models.
+
   If a residue contains duplicate atom names without altloc identifiers, the
   parser preserves all such atoms by automatically renaming later duplicates to
   unique PDB-style atom names and emits a :func:`logger.warning` describing the
@@ -350,6 +363,11 @@ def parse_pdb(
   altloc_sites: set[AltlocSite] = set()
   ensemble = _parse_pdb_models(lines, altloc_sites, malformed_conect=malformed_conect)
   ensemble.metadata["source_format"] = "pdb"
+  records = [line.rstrip("\r\n") for line in lines if line[:6].strip() in _METADATA_RECORDS]
+  if records:
+    ensemble.metadata["pdb_records"] = list(records)
+    for model in ensemble.models():
+      model.metadata["pdb_records"] = list(records)
 
   if altloc_sites:
     logger.warning(
@@ -388,7 +406,10 @@ def save_pdb(structure: Union[Structure, StructureEnsemble, StructureStack], pdb
     shared_conect_lines = _shared_conect_lines(models)
     shared_explicit_bond_lines = _shared_explicit_bond_lines(models)
 
-  lines: List[str] = []
+  records = structure.metadata.get("pdb_records")
+  if records is None and models:
+    records = models[0][1].metadata.get("pdb_records", [])
+  lines: List[str] = [line for line in (records or []) if line[:6].strip() in _METADATA_RECORDS]
   # SSBOND and LINK records precede the coordinate section per PDB convention.
   # Multi-model outputs can only write them once, so they are emitted only when
   # every model shares the same explicit typed-bond set.

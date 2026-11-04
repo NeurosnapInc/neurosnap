@@ -17,6 +17,7 @@ import numpy as np
 
 from neurosnap._compat import compat_dataclass
 from neurosnap.constants.chemistry import ATOMIC_MASSES
+from neurosnap.constants.sequence import AA_RECORDS_CANONICAL, AA_RECORDS_FORCEFIELD_VARIANTS
 from neurosnap.log import logger
 from neurosnap.constants.chemistry import METAL_ELEMENTS
 from neurosnap.structure.structure import BondType, Structure, StructureEnsemble, StructureStack
@@ -1030,7 +1031,7 @@ def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRe
   if not res_name:
     raise ValueError(f"Missing residue name at line {line_number}.")
   if not element:
-    inferred_element = _infer_element_from_atom_name_field(atom_name_field)
+    inferred_element = _infer_element_from_atom_name_field(atom_name_field, res_name=res_name)
     if inferred_element is None:
       raise ValueError(f"Missing element assignment at line {line_number}.")
     logger.warning('Missing element assignment at line %s; inferred element "%s" from atom name "%s".', line_number, inferred_element, atom_name)
@@ -1061,10 +1062,34 @@ def _parse_atom_record(line: str, record_type: str, line_number: int) -> _AtomRe
   )
 
 
-def _infer_element_from_atom_name_field(atom_name_field: str) -> Optional[str]:
-  """Infer an element symbol from the raw 4-character PDB atom-name field."""
+def _infer_element_from_atom_name_field(atom_name_field: str, *, res_name: str = "") -> Optional[str]:
+  """Infer a missing element from a known protein atom, then PDB alignment.
+
+  Exact residue/atom definitions disambiguate left-aligned protein names
+  such as CA and HG. Unrecognized pairs retain the existing alignment rules.
+  Explicit element fields never reach this function.
+  """
   if not atom_name_field.strip():
     return None
+
+  residue_name = res_name.strip().upper()
+  record = AA_RECORDS_CANONICAL.get_by_abr(residue_name)
+  if record is None:
+    record = AA_RECORDS_FORCEFIELD_VARIANTS.get_by_abr(residue_name)
+    if record is not None:
+      residue_name = record.standard_equiv_abr
+  if record is not None:
+    # Reuse bundled, pure-data residue definitions without loading a repair
+    # engine or fetching CCD entries. Do not map modified canonical residues
+    # (e.g. SEC) onto parents with different elemental composition.
+    from neurosnap.algos._pdb2pqr_vendor.dat.definitions_data import DEFINITION_DATA
+
+    definition = DEFINITION_DATA["aa"].get(residue_name)
+    if definition is not None:
+      atom_name = atom_name_field.strip().upper()
+      atom_name = definition["altnames"].get(atom_name, atom_name)
+      if atom_name in definition["atoms"]:
+        return atom_name[0]
 
   if atom_name_field[0].isdigit():
     candidate = atom_name_field[1:2].strip().title()

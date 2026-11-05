@@ -5,8 +5,10 @@ Provides functions and classes related to processing nucleotide data.
 import gzip
 import random
 import re
+import tempfile
+from contextlib import ExitStack
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Optional, TextIO, Tuple, Union
 
 from neurosnap.log import logger
 
@@ -197,3 +199,100 @@ def split_interleaved_fastq(
   assert read_direction == 1, "Uneven number of reads in both files"
   logger.info(f"Found total of {index:,} syntactically valid reads")
   return left_path, right_path
+
+
+def interleave_fastq(
+  fn_left: Union[str, Path],
+  fn_right: Union[str, Path],
+  output_dir: Union[str, Path],
+  *,
+  preserve_identifier_names: bool = False,
+) -> Path:
+  """Interleave matched R1/R2 FASTQ records into ``interleaved.fq``.
+
+  Streams plain or gzip-compressed ``.fastq.gz``/``.fq.gz`` inputs, validating
+  four-line records, sequence/quality lengths, matching identifiers, and equal
+  nonzero record counts. Inputs must already have mates in the same order.
+  Mate suffixes ``/1``, ``/2``, ``.1``, and ``.2`` are normalized for comparison.
+
+  Args:
+      fn_left: Forward (R1) FASTQ path.
+      fn_right: Reverse (R2) FASTQ path.
+      output_dir: Directory for the uncompressed interleaved FASTQ.
+      preserve_identifier_names: Preserve identifiers with normalized /1 and /2
+          suffixes; otherwise rewrite them as @<index>/1 and @<index>/2.
+
+  Returns:
+      Path to the interleaved FASTQ, with R1 followed by R2 for each pair.
+
+  Raises:
+      ValueError: If records are malformed, empty, unequal in count, or unpaired.
+  """
+  inputs = (Path(fn_left), Path(fn_right))
+  output_dir = Path(output_dir)
+  output_path = output_dir / "interleaved.fq"
+  if output_path.resolve() in {path.resolve() for path in inputs}:
+    raise ValueError("Output file must be different from the input files.")
+  output_dir.mkdir(parents=True, exist_ok=True)
+
+  def read_record(handle: TextIO, path: Path, index: int) -> Optional[Tuple[str, str, str, str]]:
+    header = handle.readline()
+    if not header:
+      return None
+    lines = [header] + [handle.readline() for _ in range(3)]
+    if any(not line for line in lines):
+      raise ValueError(f"Incomplete FASTQ record {index} in {path.name}.")
+    header, sequence, separator, quality = (line.rstrip("\r\n") for line in lines)
+    if not header.startswith("@") or not header[1:].split():
+      raise ValueError(f"Invalid FASTQ header at record {index} in {path.name}.")
+    if not sequence or not re.fullmatch(r"[GUATNC]+", sequence):
+      raise ValueError(f"Invalid FASTQ sequence at record {index} in {path.name}.")
+    if not separator.startswith("+"):
+      raise ValueError(f"Invalid FASTQ separator at record {index} in {path.name}.")
+    if len(sequence) != len(quality):
+      raise ValueError(f"Sequence/quality length mismatch at record {index} in {path.name}.")
+    if any(not 33 <= ord(char) <= 126 for char in quality):
+      raise ValueError(f"Invalid FASTQ quality at record {index} in {path.name}.")
+    return header, sequence, separator, quality
+
+  temporary_path = None
+  try:
+    with ExitStack() as stack:
+      handles = [stack.enter_context((gzip.open if path.name.lower().endswith((".fastq.gz", ".fq.gz")) else open)(path, "rt")) for path in inputs]
+      output = stack.enter_context(tempfile.NamedTemporaryFile(mode="w", dir=output_dir, suffix=".tmp", delete=False))
+      temporary_path = Path(output.name)
+      index = 1
+      while True:
+        records = [read_record(handle, path, index) for handle, path in zip(handles, inputs)]
+        if all(record is None for record in records):
+          if index == 1:
+            raise ValueError("FASTQ inputs must contain at least one read pair.")
+          break
+        if any(record is None for record in records):
+          raise ValueError(f"Unequal number of reads in R1 and R2 at pair {index}.")
+        names = [record[0].split()[0][1:] for record in records]
+        # SRA spot identifiers can end in .1 or .2 in both files. Equal names
+        # identify the same spot; only strip dot suffixes when names differ.
+        identifiers = names if names[0] == names[1] else [re.sub(r"[/.][12]$", "", name) for name in names]
+        if identifiers[0] != identifiers[1]:
+          raise ValueError(f"Read identifiers do not match at pair {index}: {identifiers[0]} and {identifiers[1]}.")
+        for direction, record in enumerate(records, start=1):
+          header, sequence, separator, quality = record
+          parts = header.split(maxsplit=1)
+          suffix_match = re.search(r"[/.]([12])$", parts[0])
+          if suffix_match and ("/" in suffix_match[0] or names[0] != names[1]) and int(suffix_match[1]) != direction:
+            raise ValueError(f"Wrong mate suffix in R{direction} at pair {index}.")
+          if preserve_identifier_names:
+            header = f"@{identifiers[direction - 1]}/{direction}" + (f" {parts[1]}" if len(parts) == 2 else "")
+            if separator != "+":
+              separator = "+" + header[1:]
+          else:
+            header, separator = f"@{index}/{direction}", "+"
+          output.write(f"{header}\n{sequence}\n{separator}\n{quality}\n")
+        index += 1
+    temporary_path.replace(output_path)
+  finally:
+    if temporary_path is not None:
+      temporary_path.unlink(missing_ok=True)
+  logger.info(f"Interleaved {index - 1:,} read pairs")
+  return output_path

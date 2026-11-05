@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from neurosnap.sequence.nucleotide import generate_random_rna_sequence, get_reverse_complement, split_interleaved_fastq
+from neurosnap.sequence.nucleotide import generate_random_rna_sequence, get_reverse_complement, interleave_fastq, split_interleaved_fastq
 
 
 def test_random_rna_length_features_and_composition():
@@ -28,9 +28,7 @@ def test_random_rna_length_features_and_composition():
 
 
 def test_random_rna_short_preset_and_impossible_features():
-  sequence = generate_random_rna_sequence(
-    length=22, add_start_codon=False, add_stop_codon=False, stem_loops=1, rng=random.Random(1)
-  )
+  sequence = generate_random_rna_sequence(length=22, add_start_codon=False, add_stop_codon=False, stem_loops=1, rng=random.Random(1))
   assert len(sequence) == 22
   motif = sequence[:12]
   assert motif[-4:] == motif[:4].translate(str.maketrans("AUGC", "UACG"))[::-1]
@@ -162,3 +160,81 @@ def test_split_interleaved_fastq_gz_support(tmp_path, suffix):
   right_lines = right_path.read_text().splitlines()
   assert left_lines[0] == "@1/1"
   assert right_lines[0] == "@1/2"
+
+
+@pytest.mark.parametrize("suffixes", [(".fastq", ".fq"), (".fastq.gz", ".fq.gz"), (".FASTQ.GZ", ".fastq")])
+@pytest.mark.parametrize("preserve", [False, True])
+def test_interleave_fastq_round_trip(tmp_path, suffixes, preserve):
+  paths = [tmp_path / f"r{direction}{suffix}" for direction, suffix in enumerate(suffixes, 1)]
+  for direction, path in enumerate(paths, 1):
+    opener = gzip.open if path.name.lower().endswith(".gz") else open
+    with opener(path, "wt") as handle:
+      handle.write(f"@readA.{direction} description\nACGT\n+readA.{direction} description\n!!!!\n")
+      handle.write(f"@readB/{direction}\nTGCA\n+\n####\n")
+  output = interleave_fastq(*paths, tmp_path / "out", preserve_identifier_names=preserve)
+  lines = output.read_text().splitlines()
+  expected = ["@readA/1 description", "@readA/2 description", "@readB/1", "@readB/2"] if preserve else ["@1/1", "@1/2", "@2/1", "@2/2"]
+  assert lines[::4] == expected
+  assert lines[1::4] == ["ACGT", "ACGT", "TGCA", "TGCA"]
+  left, right = split_interleaved_fastq(output, tmp_path / "split", preserve_identifier_names=True)
+  assert left.read_text().splitlines()[::4] == expected[::2]
+  assert right.read_text().splitlines()[::4] == expected[1::2]
+
+
+@pytest.mark.parametrize(
+  "left,right,message",
+  [
+    ("", "", "at least one"),
+    ("@read/1\nACGT\n+\n!!!!\n", "", "Unequal"),
+    ("", "@read/2\nACGT\n+\n!!!!\n", "Unequal"),
+    ("@read/1\nACGT\n+\n", "@read/2\nACGT\n+\n!!!!\n", "Incomplete"),
+    ("read/1\nACGT\n+\n!!!!\n", "@read/2\nACGT\n+\n!!!!\n", "header"),
+    ("@read/1\nAXGT\n+\n!!!!\n", "@read/2\nACGT\n+\n!!!!\n", "sequence"),
+    ("@read/1\nACGT\n-\n!!!!\n", "@read/2\nACGT\n+\n!!!!\n", "separator"),
+    ("@read/1\nACGT\n+\n!!!\n", "@read/2\nACGT\n+\n!!!!\n", "length mismatch"),
+    ("@read/1\nACGT\n+\n!!! \n", "@read/2\nACGT\n+\n!!!!\n", "quality"),
+    ("@read/1\nACGT\n+\n!!!!\n", "@other/2\nACGT\n+\n!!!!\n", "identifiers"),
+    ("@read/2\nACGT\n+\n!!!!\n", "@read/1\nACGT\n+\n!!!!\n", "mate suffix"),
+  ],
+)
+def test_interleave_fastq_rejects_bad_pairs(tmp_path, left, right, message):
+  paths = [tmp_path / "r1.fq", tmp_path / "r2.fq"]
+  for path, data in zip(paths, (left, right)):
+    path.write_text(data)
+  with pytest.raises(ValueError, match=message):
+    interleave_fastq(*paths, tmp_path / "out")
+  assert not list((tmp_path / "out").iterdir())
+
+
+def test_interleave_fastq_does_not_overwrite_input(tmp_path):
+  path = tmp_path / "interleaved.fq"
+  path.write_text("input")
+  with pytest.raises(ValueError, match="different"):
+    interleave_fastq(path, path, tmp_path)
+  assert path.read_text() == "input"
+
+
+def test_interleave_fastq_illumina_headers(tmp_path):
+  paths = [tmp_path / "r1.fq", tmp_path / "r2.fq"]
+  for direction, path in enumerate(paths, 1):
+    path.write_text(f"@instrument:read {direction}:N:0:INDEX\nACGT\n+\n!!!!\n")
+  output = interleave_fastq(*paths, tmp_path, preserve_identifier_names=True)
+  assert output.read_text().splitlines()[::4] == ["@instrument:read/1 1:N:0:INDEX", "@instrument:read/2 2:N:0:INDEX"]
+
+
+@pytest.mark.parametrize("spot", ["SRR123.1", "SRR123.2"])
+def test_interleave_fastq_preserves_sra_spot_ids(tmp_path, spot):
+  paths = [tmp_path / "r1.fq", tmp_path / "r2.fq"]
+  for path in paths:
+    path.write_text(f"@{spot}\nACGT\n+\n!!!!\n")
+  output = interleave_fastq(*paths, tmp_path, preserve_identifier_names=True)
+  assert output.read_text().splitlines()[::4] == [f"@{spot}/1", f"@{spot}/2"]
+
+
+def test_interleave_fastq_cleans_up_corrupt_gzip(tmp_path):
+  left, right = tmp_path / "left.fastq.gz", tmp_path / "right.fq"
+  left.write_bytes(b"not gzip")
+  right.write_text("@read/2\nACGT\n+\n!!!!\n")
+  with pytest.raises(gzip.BadGzipFile):
+    interleave_fastq(left, right, tmp_path / "out")
+  assert not list((tmp_path / "out").iterdir())

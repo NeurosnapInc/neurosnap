@@ -1,15 +1,7 @@
 Getting Started
 ===============
 
-This page is a practical quickstart for the Neurosnap SDK.
-
-Why Neurosnap SDK?
-------------------
-
-The Neurosnap SDK gives you a Python-native workflow for structural biology,
-bioinformatics, and cheminformatics tasks. For many common sequence and
-structure workflows, it can act as a reliable, free, and open alternative to
-PyRosetta.
+Install the package, load a structure, and use the analysis modules.
 
 Install
 -------
@@ -154,7 +146,7 @@ helpers.
 Algorithm Highlights
 --------------------
 
-Beyond core modules, the SDK includes production-ready algorithm components.
+Examples using the SDK's algorithm modules.
 
 ClusterProt
 ^^^^^^^^^^^
@@ -179,9 +171,8 @@ and produces 2D/1D projections for analysis.
 EvoEF2
 ^^^^^^
 
-:mod:`neurosnap.algos.evoef2` provides a fast Python implementation of EvoEF2
-for stability and interface scoring. For many scoring-driven workflows, this is
-a powerful free/open alternative to PyRosetta-based setups.
+:mod:`neurosnap.algos.evoef2` provides a Python implementation of EvoEF2
+for stability and interface scoring.
 
 .. code-block:: python
 

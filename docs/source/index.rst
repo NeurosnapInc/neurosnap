@@ -1,97 +1,16 @@
-Neurosnap Documentation
-=======================
+Neurosnap SDK
+=============
 
-Neurosnap combines a production web application for AI-native molecular discovery
-with a Python package for scripting, automation, and custom analysis workflows.
-This documentation covers both.
+Python tools for structure, sequence, and chemistry analysis, plus a client for
+the Neurosnap API.
 
-Neurosnap Platform
-------------------
-
-`Neurosnap.ai <https://neurosnap.ai/>`_ is a browser-based platform for
-computational biology and cheminformatics, with support for structure prediction,
-binder design, docking, screening, and downstream analysis workflows.
-
-Core platform areas:
-
-* `Services <https://neurosnap.ai/services>`_: hosted tools and models for
-  protein and small-molecule workflows.
-* `Use Cases <https://neurosnap.ai/#use-cases>`_: antibody engineering, peptide discovery,
-  enzyme engineering, and small-molecule discovery.
-* `NeuroFold <https://neurosnap.ai/neurofold>`_: structure prediction and
-  design-focused workflows.
-* `API <https://neurosnap.ai/blog/post/full-neurosnap-api-tutorial-the-quick-easy-api-for-bioinformatics/66b00dacec3f2aa9b4be703a>`_: programmatic access for automation and
-  integration into internal pipelines.
-* `Security <https://neurosnap.ai/security>`_: platform security posture and
-  data-handling commitments.
-
-Neurosnap SDK (Python Package)
-------------------------------
-
-`Neurosnap SDK <https://github.com/NeurosnapInc/neurosnap>`_ is the official
-Python package for working with Neurosnap programmatically. It includes:
-
-* A lightweight SDK wrapper for Neurosnap API endpoints.
-* Utility modules for common bioinformatics, structural biology, and cheminformatics tasks.
-* Building blocks for sequence-centric and structure-aware pipeline development.
-
-Use this package when you need reproducible scripts, batch processing, notebook
-workflows, or integration with lab and MLOps infrastructure.
-
-For many practical structure and sequence workflows, the Neurosnap SDK can serve
-as a reliable, free, and open alternative to PyRosetta.
-
-Documentation Map
------------------
-
-**Start here:**
-
-* :doc:`getting_started`
-* :doc:`structure_interactions`
-* :doc:`pssm`
-
-**Core SDK modules:**
-
-* `API client <neurosnap.api.html>`_
-* `Structure utilities <neurosnap.structure.html>`_
-* `Sequence alignment utilities <neurosnap.sequence.align.html>`_
-* `Chemistry utilities <neurosnap.chemistry.html>`_
-* `Conformer generation <neurosnap.chemistry.conformers.html>`_
-* `Nucleotide utilities <neurosnap.sequence.nucleotide.html>`_
-* `Constants and residue metadata <neurosnap.constants.html>`_
-* `Rendering utilities <neurosnap.structure.rendering.html>`_
-* `Logging utilities <neurosnap.log.html>`_
-
-**Algorithm modules:**
-
-* `AlphaFold metrics <neurosnap.algos.alphafold.html>`_
-* `pDockQ scoring <neurosnap.algos.pdockq.html>`_
-* `ipSAE metrics <neurosnap.algos.ipsae.html>`_
-* `LDDT scoring <neurosnap.algos.lddt.html>`_
-* `Electrostatic interface scoring <neurosnap.algos.ec_interface.html>`_
-* `EvoEF2 force field <neurosnap.algos.evoef2.html>`_
-* `ClusterProt clustering <neurosnap.algos.clusterprot.html>`_
-* `Kluster workflow <neurosnap.algos.kluster.html>`_
-* `Amber relax <neurosnap.algos.amber_relax.html>`_
+Guides and reference
+--------------------
 
 .. toctree::
-   :hidden:
-   :maxdepth: 2
+   :maxdepth: 1
 
    getting_started
    structure_interactions
    pssm
    modules
-
-Learning Resources
-------------------
-
-* `Example notebooks <https://github.com/NeurosnapInc/neurosnap/tree/main/example_notebooks>`_
-* `Neurosnap Blog <https://neurosnap.ai/blog>`_
-* `Discord community <https://discord.gg/2yDZX6rTh4>`_
-
-.. Indices and tables
-.. ------------------
-
-.. * :ref:`genindex`
-.. * :ref:`modindex`

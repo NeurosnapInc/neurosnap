@@ -11,10 +11,7 @@ docs-api:
 docs-html:
 	$(MAKE) -C docs html DOCS_SYNC_TARGET="$(DOCS_SYNC_TARGET)"
 	@if [ -n "$(DOCS_SYNC_TARGET)" ]; then \
-		mkdir -p "$(DOCS_SYNC_TARGET)" && \
-		rm -rf "$(DOCS_SYNC_TARGET)"/* && \
-		cp -r docs/build/html/* "$(DOCS_SYNC_TARGET)/" && \
-		echo "Synced docs/build/html -> $(DOCS_SYNC_TARGET)"; \
+		python scripts/publish_docs.py docs/build/html "$(DOCS_SYNC_TARGET)"; \
 	else \
 		echo "DOCS_SYNC_TARGET not set; skipping external docs sync."; \
 	fi

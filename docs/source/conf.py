@@ -1,8 +1,12 @@
 import os
 import sys
+import re
+from pathlib import Path
 from datetime import datetime
 
-sys.path.insert(0, os.path.abspath("../src/neurosnap/"))
+SDK_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(SDK_ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "_ext"))
 
 # this is to make sure docs are built using
 # the expected python executable
@@ -20,12 +24,13 @@ now = datetime.now()
 project = "Neurosnap"
 copyright = f"2022-{now.year}, Neurosnap Inc."
 author = "Keaun Amani"
-release = f"{now.year}.{now.month}.{now.day}"
+release = re.search(r'^version\s*=\s*"([^"]+)"', (SDK_ROOT / "pyproject.toml").read_text(), re.MULTILINE).group(1)
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
+  "neurosnap_reference",
   "sphinx.ext.intersphinx",
   "sphinx.ext.autodoc",
   "sphinx.ext.napoleon",

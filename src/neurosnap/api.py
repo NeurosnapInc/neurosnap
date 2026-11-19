@@ -1,7 +1,6 @@
 import json
 import time
 import urllib.parse
-from datetime import datetime
 from typing import Dict, List, Optional, Union, Any
 from copy import deepcopy
 
@@ -106,7 +105,12 @@ class NeurosnapAPI:
         - None (default): No printing.
 
     Returns:
-      Submitted jobs as a list of dictionaries.
+      Submitted jobs as a list of dictionaries. ``Start`` and ``End`` are
+      integer Unix timestamps in seconds, preserved as returned by the API.
+      Zero means the job has not started or has not ended, respectively.
+      The former formatted ``Runtime`` field is no longer returned; calculate
+      elapsed runtime as ``End - Start``, using the current Unix time for
+      running jobs with a zero ``End``. Pending jobs have no runtime yet.
 
     Raises:
       HTTPError: If the API request fails.
@@ -116,10 +120,6 @@ class NeurosnapAPI:
     self._check_request(r)
 
     jobs = r.json()
-    for job in jobs:
-      if "Submitted" in job:
-        timestamp = job["Submitted"] // 1000  # Convert milliseconds to seconds
-        job["Submitted"] = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
     if isinstance(format, str):
       format = format.lower()
       if format == "table":
@@ -366,7 +366,11 @@ class NeurosnapAPI:
       format_type: The format to print the response: 'table', 'JSON', or None for no output.
 
     Returns:
-      A list of jobs submitted by the team members.
+      A list of jobs submitted by the team members. ``Start`` and ``End``
+      are integer Unix timestamps in seconds, preserved as returned by the API.
+      Zero means the job has not started or has not ended, respectively.
+      Calculate runtime from these fields as described in :meth:`get_jobs`;
+      the former formatted ``Runtime`` field is no longer returned.
 
     Raises:
       HTTPError: If the API request fails.
@@ -376,15 +380,12 @@ class NeurosnapAPI:
     self._check_request(r)
 
     jobs = r.json()
-    for job in jobs:
-      if "Submitted" in job:
-        timestamp = job["Submitted"] / 1000  # Convert milliseconds to seconds
-        job["Submitted"] = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
-    format_type = format_type.lower()
-    if format_type == "table":
-      print(tabulate(jobs, headers="keys"))
-    elif format_type == "json":
-      print(json.dumps(jobs, indent=2))
+    if isinstance(format_type, str):
+      format_type = format_type.lower()
+      if format_type == "table":
+        print(tabulate(jobs, headers="keys"))
+      elif format_type == "json":
+        print(json.dumps(jobs, indent=2))
     return jobs
 
   def get_pipeline(self, pipeline_id: str) -> Dict:
@@ -394,7 +395,9 @@ class NeurosnapAPI:
       pipeline_id: The ID of the pipeline to fetch.
 
     Returns:
-      Pipeline object.
+      A dictionary containing ``pipeline``, ``jobs``, and ``errors``. Job rows
+      preserve the API's ``Start`` and ``End`` Unix timestamps in seconds;
+      calculate runtime from these fields as described in :meth:`get_jobs`.
 
     Raises:
       HTTPError: If the API request fails.

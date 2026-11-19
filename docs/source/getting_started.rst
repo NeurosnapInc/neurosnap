@@ -195,3 +195,53 @@ Next Steps
 * Continue with :doc:`modules` for full API/module reference.
 * Explore additional examples in the
   `example_notebooks directory <https://github.com/NeurosnapInc/neurosnap/tree/main/example_notebooks>`_.
+
+Remote API workflows
+--------------------
+
+:class:`~neurosnap.api.NeurosnapAPI` wraps the public REST research endpoints.
+Use the current service form definitions for exact input titles and formats.
+
+.. code-block:: python
+
+   import os
+   from neurosnap.api import NeurosnapAPI
+
+   api = NeurosnapAPI(os.environ["NEUROSNAP_API_KEY"])
+   jobs = api.get_jobs()
+   projects = api.get_projects(scope="account")
+   pipelines = api.get_pipelines()
+
+Job submissions accept dictionaries, ``MultipartEncoder`` instances, or lists
+of ``(field_title, value)`` pairs. Use a list for repeated file fields. Molecule
+lists use CSV manifests and/or SDF/MOL/MOL2 uploads; structure lists use repeated
+PDB/mmCIF uploads. Serialize sequence lists and grids as JSON text fields.
+``submit_job(..., note=..., project_id=...)`` encodes the note and destination
+project as query parameters. Submitting or copying a job creates a new billable
+run; these operations are never automatically retried by the SDK.
+
+Monitor an existing run with ``wait_job_status(job_id, delay=5, timeout=600)``.
+It stops on completed, failed, cancelled, or deleted status. A monitoring timeout
+does not cancel the job. ``cancel_job(job_id)`` requests cancellation and settles
+credits already incurred; ``copy_job(job_id)`` starts a new billable run.
+``get_job_file`` follows the signed download URL without sending your API key
+to the storage host.
+
+Project helpers cover listing, creation, metadata/access updates, deletion,
+and job assignment. Visibility is ``personal``, ``team``, or ``restricted``;
+member/role grants map IDs to ``viewer``, ``contributor``, or ``manager``.
+Deleting a populated project is rejected. Assignment and access changes are
+subject to the backend's ownership and research-access checks.
+
+Team helpers expose invitations, removal, role configuration, member roles,
+and billing-period credit usage/limits. A limit of zero blocks new spending;
+``None`` means unlimited. Action availability depends on team permissions,
+not just whether the account is the team leader. ``get_team_info()`` returns
+current roles, permission names, capability flags, and remaining compute credits.
+
+Pipeline validation and submission accept builder-compatible multipart fields,
+including JSON text in ``pipeline_graph`` and ``<node_id>_<filename>`` uploads.
+Submission additionally requires ``template`` and ``descriptor``. Validation
+can return ``ok=False`` with HTTP 200; inspect its result before submission.
+Use the exported builder configuration rather than ordinary job form fields.
+Optional ``project_id`` and ``submission_token`` are multipart text fields.

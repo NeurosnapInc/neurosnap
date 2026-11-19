@@ -1,8 +1,8 @@
 import json
+import math
 import time
 import urllib.parse
-from typing import Dict, List, Optional, Union, Any
-from copy import deepcopy
+from typing import Dict, List, Optional, Tuple, Union, Any
 
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
@@ -10,6 +10,9 @@ from tabulate import tabulate
 
 from neurosnap.constants.api import USER_AGENT
 from neurosnap.log import logger
+
+
+MultipartFields = Union[MultipartEncoder, Dict[str, Any], List[Tuple[str, Any]]]
 
 
 class NeurosnapAPI:
@@ -20,6 +23,8 @@ class NeurosnapAPI:
   - submitting jobs and monitoring status
   - retrieving job metadata and output files
   - managing job notes and sharing settings
+  - organizing projects and managing team roles and credit limits
+  - validating, submitting, and inspecting pipelines
 
   Authentication is performed with a Neurosnap API key, and connectivity is
   validated during initialization.
@@ -57,7 +62,20 @@ class NeurosnapAPI:
     if response.status_code != 200:
       msg = f"Expected status code 200, got {response.status_code}. Error: {response.text}"
       logger.error(msg)
-      raise requests.HTTPError(msg)
+      raise requests.HTTPError(msg, response=response)
+
+  def _request(self, method: str, path: str, **kwargs) -> requests.Response:
+    """Send one authenticated request without automatically retrying mutations."""
+    headers = kwargs.pop("headers", self.headers)
+    response = requests.request(method, f"{self.BASE_URL}{path}", headers=headers, **kwargs)
+    self._check_request(response)
+    return response
+
+  def _post_multipart(self, path: str, fields: MultipartFields, params: Optional[Dict] = None) -> Any:
+    """Preserve repeated file-field names and let the encoder supply the boundary."""
+    multipart = fields if isinstance(fields, MultipartEncoder) else MultipartEncoder(fields=fields)
+    headers = {**self.headers, "Content-Type": multipart.content_type}
+    return self._request("POST", path, headers=headers, data=multipart, params=params).json()
 
   def get_services(self, format: Optional[str] = None) -> List[Dict]:
     """Fetches and returns a list of available Neurosnap services. Optionally prints the services.
@@ -82,7 +100,7 @@ class NeurosnapAPI:
     def format_service(service):
       """Helper to format individual service details."""
       title = service.get("title")
-      link = urllib.parse.quote(title)
+      link = urllib.parse.quote(title, safe="")
       link = f"https://neurosnap.ai/service/{link}"
       return {"Title": title, "Beta": service.get("beta"), "Link": link}
 
@@ -128,7 +146,7 @@ class NeurosnapAPI:
         print(json.dumps(jobs, indent=2))
     return jobs
 
-  def submit_job(self, service_name: str, fields: Union[MultipartEncoder, Dict[str, Any]], note: Optional[str] = None) -> str:
+  def submit_job(self, service_name: str, fields: MultipartFields, note: Optional[str] = None, project_id: Optional[str] = None) -> str:
     """
     Submit a job to the Neurosnap platform.
 
@@ -138,10 +156,18 @@ class NeurosnapAPI:
     Parameters:
       - service_name: The name of the Neurosnap service (e.g., "TemStaPro", "NetSolP", "Boltz-1") to submit the job to.
       - fields: Either:
-        - A dictionary mapping field names to values (which will be encoded automatically), or
-        - A `MultipartEncoder` instance if you want full control over encoding.
-        Refer to the API section of the tool's page on https://neurosnap.ai for required field names and formats.
-      note (Optional[str]): An optional note or tag to include in the job submission (e.g., "optimization_run_3").
+        - A dictionary mapping exact field titles to values, or
+        - A list of (title, value) pairs, preserving repeated file fields, or
+        - A ``MultipartEncoder`` for control over encoding.
+        File values are (filename, binary file object, optional MIME type) tuples.
+        Molecule lists accept CSV manifests and/or SDF/MOL/MOL2 uploads;
+        structure lists accept repeated PDB/mmCIF uploads. Serialize sequence
+        lists and grids with ``json.dumps`` as multipart text values. Scalar
+        values, including numbers and booleans, should be strings. Follow the
+        service's API example and ``/api/services`` form definitions.
+      note (Optional[str]): An optional note or tag for the job.
+      project_id (Optional[str]): Destination project ID; access checks apply.
+        Submitting creates a billable run. No automatic submission retry is made.
 
     Returns:
       The job ID assigned to the submitted job.
@@ -149,32 +175,29 @@ class NeurosnapAPI:
     Raises:
       HTTPError: If the API request fails or returns a non-200 status code.
     """
-    # prepare input fields
-    if isinstance(fields, MultipartEncoder):
-      multipart_data = fields
-    else:
-      multipart_data = MultipartEncoder(fields=fields)
-
-    # build URL
-    url = f"{self.BASE_URL}/job/submit/{service_name}"
+    params = {}
     if note is not None:
-      url += f"?note={note}"
-
-    # send post request
-    headers = deepcopy(self.headers)
-    headers["Content-Type"] = multipart_data.content_type
-    r = requests.post(url, headers=headers, data=multipart_data)
-    self._check_request(r)
-
-    job_id = r.json()
+      params["note"] = note
+    if project_id is not None:
+      params["project_id"] = project_id
+    job_id = self._post_multipart(f"/job/submit/{urllib.parse.quote(service_name, safe='')}", fields, params=params)
     logger.info(f"{service_name} job successfully submitted with ID {job_id}.")
-    return r.json()
+    return job_id
 
-  def get_job_status(self, job_id: str) -> str:
+  def copy_job(self, job_id: str) -> str:
+    """Duplicate a job and launch a new billable run. Return the new job ID."""
+    return self._request("POST", f"/job/copy/{urllib.parse.quote(job_id, safe='')}").json()
+
+  def cancel_job(self, job_id: str) -> None:
+    """Request cancellation and settle incurred credits; check status afterwards."""
+    self._request("POST", f"/job/cancel/{urllib.parse.quote(job_id, safe='')}")
+
+  def get_job_status(self, job_id: str, share_id: Optional[str] = None) -> str:
     """Fetches the status of a specified job.
 
     Parameters:
       job_id: The ID of the job.
+      share_id: Optional share token for a shared job.
 
     Returns:
       The status of the job.
@@ -183,32 +206,42 @@ class NeurosnapAPI:
       HTTPError: If the API request fails.
 
     """
-    r = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
+    r = requests.get(
+      f"{self.BASE_URL}/job/status/{urllib.parse.quote(job_id, safe='')}",
+      headers=self.headers, params={"share": share_id} if share_id else None,
+    )
     self._check_request(r)
     return r.json()
 
-  def wait_job_status(self, job_id: str, delay: int = 5) -> str:
-    """Waits for the status of a job to either change to ``completed`` or ``failed``.
+  def wait_job_status(self, job_id: str, delay: float = 5, timeout: Optional[float] = None) -> str:
+    """Poll an existing job until completed, failed, cancelled, or deleted.
 
     Parameters:
-      job_id: The ID of the job.
-      delay: The delay between requests in seconds.
+      job_id: The existing job ID; this method never submits or retries jobs.
+      delay: Seconds between status requests; must be positive.
+      timeout: Optional polling deadline in seconds. A timeout does not cancel
+        the job. The deadline is checked between HTTP requests.
 
     Returns:
-      The status of the job.
+      The terminal status string.
 
     Raises:
-      HTTPError: If the API request fails.
-
+      HTTPError: If a status request fails.
+      TimeoutError: If the polling deadline expires.
+      ValueError: If delay or timeout is not positive.
     """
-    status = ""
-    while status != "completed" and status != "failed":
-      time.sleep(5)
-      r = requests.get(f"{self.BASE_URL}/job/status/{job_id}", headers=self.headers)
-      self._check_request(r)
-      status = r.json()
+    if not math.isfinite(delay) or delay <= 0 or (timeout is not None and (not math.isfinite(timeout) or timeout <= 0)):
+      raise ValueError("delay and timeout must be finite and positive")
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while True:
+      if deadline is not None and time.monotonic() >= deadline:
+        raise TimeoutError(f"Monitoring timed out for job {job_id}; the job has not been cancelled.")
+      status = self.get_job_status(job_id)
       logger.info(f"Waiting for Neurosnap job with ID {job_id} (current status: {status})")
-    return status
+      if status in {"completed", "failed", "cancelled", "deleted"}:
+        return status
+      remaining = delay if deadline is None else min(delay, max(0, deadline - time.monotonic()))
+      time.sleep(remaining)
 
   def get_job_data(self, job_id: str, share_id: str = None) -> Dict[str, Any]:
     """
@@ -227,11 +260,10 @@ class NeurosnapAPI:
     """
     # Construct the URL for the request
     url = f"{self.BASE_URL}/job/data/{job_id}"
-    if share_id:
-      url += f"?share={share_id}"
+    params = {"share": share_id} if share_id else None
 
     # Make the request and check the status
-    r = requests.get(url, headers=self.headers)
+    r = requests.get(url, headers=self.headers, params=params)
     self._check_request(r)
 
     # Parse the response
@@ -250,19 +282,28 @@ class NeurosnapAPI:
       share_id: The share ID, if any.
 
     Returns:
-      Contents of the file fetched as a string or ``None`` if save_path is not provided.
+      File contents as text when ``save_path`` is omitted, or ``None`` after
+      writing the file's binary bytes to ``save_path``. Signed storage downloads
+      do not receive your account API key.
 
     Raises:
       HTTPError: If the API request fails.
 
     """
-    # Construct the URL for the request
-    url = f"{self.BASE_URL}/job/file/{job_id}/{file_type}/{file_name}"
-    if share_id:
-      url += f"?share={share_id}"
-
-    # Make the request and check the status
-    r = requests.get(url, headers=self.headers)
+    if file_type not in {"in", "out"}:
+      raise ValueError("file_type must be 'in' or 'out'")
+    filename = urllib.parse.quote(file_name, safe="")
+    url = f"{self.BASE_URL}/job/file/{urllib.parse.quote(job_id, safe='')}/{file_type}/{filename}"
+    params = {"share": share_id} if share_id else None
+    # Account credentials belong only on the Neurosnap request. Storage gets
+    # the signed URL, never the account's custom X-API-KEY header.
+    r = requests.get(url, headers=self.headers, params=params, allow_redirects=False)
+    if r.status_code == 307:
+      location = r.headers.get("Location", "")
+      parsed = urllib.parse.urlparse(location)
+      if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+        raise requests.HTTPError("Invalid signed download URL returned by Neurosnap", response=r)
+      r = requests.get(location)
     self._check_request(r)
     if save_path is None:
       return r.text
@@ -323,7 +364,9 @@ class NeurosnapAPI:
       format_type: The format to print the response: 'table', 'json', or None for no output.
 
     Returns:
-      The team information.
+      Team information including members, roles, permission names, capability
+      flags, ``computeCreditsRemaining``, and ``seatsMax``. Membership and
+      permissions determine which actions and billing fields are accessible.
 
     Raises:
       HTTPError: If the API request fails.
@@ -333,7 +376,7 @@ class NeurosnapAPI:
     self._check_request(r)
 
     team_info = r.json()
-    format_type = format_type.lower()
+    format_type = format_type.lower() if isinstance(format_type, str) else None
     if format_type == "table":
       # Prepare data for tabulation
       members_table = [
@@ -350,7 +393,7 @@ class NeurosnapAPI:
       # Print the team info in table format
       print(tabulate(members_table, headers=["ID", "Name", "Email", "Last Login", "Email Verified", "Leader"], tablefmt="grid"))
       print(f"\nTeam Name: {team_info.get('name', '')}")
-      print(f"Jobs Count: {team_info.get('jobsCount', 0)}")
+      print(f"Compute Credits Remaining: {team_info.get('computeCreditsRemaining', 0)}")
       print(f"Max Seats: {team_info.get('seatsMax', 0)}")
       print(f"Is Leader: {team_info.get('is_leader', False)}")
     elif format_type == "json":
@@ -406,3 +449,122 @@ class NeurosnapAPI:
     r = requests.get(f"{self.BASE_URL}/pipelines/status/{pipeline_id}", headers=self.headers)
     self._check_request(r)
     return r.json()
+
+  def get_projects(self, scope: Optional[str] = None) -> List[Dict]:
+    """List accessible projects, including access flags and job counts.
+
+    ``scope="account"`` limits platform admins to their account's projects.
+    Project visibility is ``personal``, ``team``, or ``restricted``.
+    """
+    return self._request("GET", "/job-projects", params={"scope": scope} if scope else None).json()
+
+  def create_project(
+    self, name: str, description: str = "", visibility: str = "personal",
+    members: Optional[Dict[str, str]] = None, roles: Optional[Dict[str, str]] = None,
+    allow_public_sharing: bool = False,
+  ) -> Dict:
+    """Create a project with the current visibility/access schema.
+
+    ``members`` and ``roles`` map user/role IDs to ``viewer``, ``contributor``,
+    or ``manager`` grants. Team permissions apply to non-personal projects.
+    """
+    payload = {"name": name, "description": description, "visibility": visibility,
+               "allow_public_sharing": allow_public_sharing}
+    if members is not None:
+      payload["members"] = members
+    if roles is not None:
+      payload["roles"] = roles
+    return self._request("POST", "/job-project/create", json=payload).json()
+
+  def update_project(
+    self, project_id: str, name: str, description: str = "", *,
+    visibility: Optional[str] = None, members: Optional[Dict[str, str]] = None,
+    roles: Optional[Dict[str, str]] = None, allow_public_sharing: Optional[bool] = None,
+  ) -> Dict:
+    """Update project metadata and optional access policy.
+
+    Omitted policy fields are preserved; pass an empty grant map to clear it.
+    ``description`` defaults to empty, so pass the existing value to retain it.
+    The server rejects access changes that would expose restricted research.
+    """
+    payload = {"project_id": project_id, "name": name, "description": description}
+    for key, value in {"visibility": visibility, "members": members, "roles": roles,
+                       "allow_public_sharing": allow_public_sharing}.items():
+      if value is not None:
+        payload[key] = value
+    return self._request("POST", "/job-project/update", json=payload).json()
+
+  def delete_project(self, project_id: str) -> None:
+    """Delete an empty project. The server rejects projects containing research."""
+    self._request("POST", "/job-project/delete", json={"project_id": project_id})
+
+  def assign_jobs_to_project(self, job_ids: List[str], project_id: Optional[str] = None) -> Dict:
+    """Move jobs to a project, or unassign them when project_id is None.
+
+    Ownership, current permissions, and destination access checks still apply.
+    Unassigning a job does not delete or rerun it.
+    """
+    return self._request("POST", "/job-project/assign", json={
+      "job_ids": job_ids, "project_id": project_id if project_id is not None else "000000000000000000000000",
+    }).json()
+
+  def invite_team_member(self, email: str) -> str:
+    """Invite an existing verified account; requires members.invite permission."""
+    return self._request("POST", "/teams/user/invite/", data=email).json()
+
+  def remove_team_member(self, user_id: str) -> str:
+    """Remove a member with POST; requires members.remove permission."""
+    return self._request("POST", f"/teams/user/remove/{urllib.parse.quote(user_id, safe='')}").json()
+
+  def get_team_credit_usage(self, user_id: str) -> Dict:
+    """Read a member's billing-period credit limit, usage, and reservation totals."""
+    return self._request("GET", f"/teams/user/credit-limit/{urllib.parse.quote(user_id, safe='')}").json()
+
+  def set_team_credit_limit(self, user_id: str, limit: Optional[float]) -> Dict:
+    """Set a billing-period limit and return usage. Zero blocks spending; None is unlimited.
+
+    Requires billing.manage permission. Negative/nonfinite values are rejected
+    by the server. This sets an allowance, not a prepaid credit transfer.
+    """
+    return self._request("POST", f"/teams/user/credit-limit/{urllib.parse.quote(user_id, safe='')}", json={"limit": limit}).json()
+
+  def set_team_roles(self, roles: List[Dict], default_role_id: str) -> Dict:
+    """Replace team roles/default role; requires roles.manage permission.
+
+    Each role contains id, name, permissions, and unprojected_access. Read
+    get_team_info() for current definitions and supported permission names.
+    Roles still assigned to members or projects cannot be removed.
+    """
+    return self._request("POST", "/teams/roles", json={"roles": roles, "default_role_id": default_role_id}).json()
+
+  def set_team_member_role(self, user_id: str, role_id: str) -> None:
+    """Assign an existing role to a non-owner member; requires roles.manage."""
+    self._request("POST", "/teams/member-role", json={"user_id": user_id, "role_id": role_id})
+
+  def get_pipelines(self) -> List[Dict]:
+    """List accessible pipeline history, newest first."""
+    return self._request("GET", "/pipelines/list").json()
+
+  def validate_pipeline(self, fields: MultipartFields) -> Dict:
+    """Validate a builder-compatible multipart draft without creating jobs.
+
+    Supply ``pipeline_graph`` as JSON text and manifest/file parts named
+    ``<node_id>_<filename>``. Validation can return HTTP 200 with ``ok=false``;
+    inspect ``ok``, ``errors``, ``estimated_cost``, and ``node_sizes`` before submitting.
+    """
+    return self._post_multipart("/pipelines/validate", fields)
+
+  def submit_pipeline(self, fields: MultipartFields) -> str:
+    """Submit a billable pipeline; return its ID without automatically retrying.
+
+    Supply builder-compatible ``pipeline_graph`` JSON text, ``template``,
+    ``descriptor``, and required ``<node_id>_<filename>`` uploads. Optional
+    ``project_id`` assigns the project; ``submission_token`` supports the
+    backend's duplicate-submission reconciliation. Use the exported builder
+    configuration; pipeline graphs differ from ordinary service fields.
+    """
+    return self._post_multipart("/pipelines/submit", fields)
+
+  def set_pipeline_descriptor(self, pipeline_id: str, descriptor: str) -> str:
+    """Rename an accessible pipeline without rerunning its jobs."""
+    return self._request("POST", "/pipeline/descriptor/set", json={"pipeline_id": pipeline_id, "descriptor": descriptor}).json()
